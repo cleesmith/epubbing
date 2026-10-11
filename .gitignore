@@ -3,6 +3,8 @@ GEMINI.md
 CLAUDE.md
 .claude*
 
+out/
+
 node_modules/
 **/node_modules/
 
