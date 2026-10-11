@@ -1,0 +1,415 @@
+import clsx from 'clsx';
+import React, { useEffect, useState } from 'react';
+
+import { Book } from '@/types/book';
+import { BookMetadata, EXTS } from '@/libs/document';
+import { getLocalBookFilename } from '@/utils/book';
+import { makeSafeFilename } from '@/utils/misc';
+import { useEnv } from '@/context/EnvContext';
+import { useThemeStore } from '@/store/themeStore';
+import { useSettingsStore } from '@/store/settingsStore';
+import { useTranslation } from '@/hooks/useTranslation';
+import { useMetadataEdit } from './useMetadataEdit';
+import { DeleteAction } from '@/types/system';
+import Alert from '@/components/Alert';
+import Dialog from '@/components/Dialog';
+import Spinner from '@/components/Spinner';
+import BookDetailView from './BookDetailView';
+import BookDetailEdit from './BookDetailEdit';
+import { XrayModal } from '@/components/xray';
+import { AudiobookModal } from '@/components/audiobook';
+import {
+  PdfModal,
+  Pdf5x8Modal,
+  PdfSquareModal,
+  PdfOptionsDialog,
+  type PdfContentOptions,
+} from '@/components/pdf';
+import EbookPlusHelp from './EbookPlusHelp';
+import JSZip from 'jszip';
+import { stripEpubForBookseller } from '@/lib/bookseller-strip';
+import { downloadBookAsWebReady } from '@/services/webReadyService';
+
+interface BookDetailModalProps {
+  book: Book;
+  isOpen: boolean;
+  onClose: () => void;
+  handleBookUpload?: (book: Book) => void;
+  handleBookDelete?: (book: Book) => void;
+  handleBookMetadataUpdate?: (book: Book, updatedMetadata: BookMetadata) => void;
+  onReadEpub?: (book: Book) => void;
+}
+
+interface DeleteConfig {
+  title: string;
+  message: string;
+  handler?: (book: Book) => void;
+}
+
+const BookDetailModal: React.FC<BookDetailModalProps> = ({
+  book,
+  isOpen,
+  onClose,
+  handleBookUpload,
+  handleBookDelete,
+  handleBookMetadataUpdate,
+  onReadEpub,
+}) => {
+  const _ = useTranslation();
+  const { safeAreaInsets } = useThemeStore();
+  const [loading, setLoading] = useState(false);
+  const [activeDeleteAction, setActiveDeleteAction] = useState<DeleteAction | null>(null);
+  const [editMode, setEditMode] = useState(false);
+  const [bookMeta, setBookMeta] = useState<BookMetadata | null>(null);
+  const [fileSize, setFileSize] = useState<number | null>(null);
+  const [showXray, setShowXray] = useState(false);
+  const [showAudiobook, setShowAudiobook] = useState(false);
+  const [showPdf5x8, setShowPdf5x8] = useState(false);
+  const [showPdf, setShowPdf] = useState(false);
+  const [showPdfSquare, setShowPdfSquare] = useState(false);
+  const [pdfOptionsFor, setPdfOptionsFor] = useState<'6x9' | '5x8' | null>(null);
+  const [pdfContentOptions, setPdfContentOptions] = useState<PdfContentOptions>({
+    includeToc: false,
+    includeChapterHeadings: false,
+  });
+  const [showHelp, setShowHelp] = useState(false);
+  const { envConfig } = useEnv();
+  const { settings } = useSettingsStore();
+
+  // Initialize metadata edit hook
+  const {
+    editedMeta,
+    fieldSources,
+    lockedFields,
+    fieldErrors,
+    handleFieldChange,
+    handleToggleFieldLock,
+    handleLockAll,
+    handleUnlockAll,
+    resetToOriginal,
+  } = useMetadataEdit(bookMeta);
+
+  const deleteConfigs: Record<DeleteAction, DeleteConfig> = {
+    both: {
+      title: _('Confirm Deletion'),
+      message: _('Are you sure to delete the selected book?'),
+      handler: handleBookDelete,
+    },
+    cloud: {
+      title: _('Confirm Deletion'),
+      message: _('Are you sure to delete the selected book?'),
+      handler: undefined,
+    },
+    local: {
+      title: _('Confirm Deletion'),
+      message: _('Are you sure to delete the selected book?'),
+      handler: undefined,
+    },
+  };
+
+  useEffect(() => {
+    const loadingTimeout = setTimeout(() => setLoading(true), 300);
+    const fetchBookDetails = async () => {
+      const appService = await envConfig.getAppService();
+      try {
+        const details = book.metadata || (await appService.fetchBookDetails(book, settings));
+        // Merge book.importSource into metadata if metadata.importSource is not set
+        if (book.importSource && !details.importSource) {
+          details.importSource = book.importSource;
+        }
+        setBookMeta(details);
+        const size = await appService.getBookFileSize(book);
+        setFileSize(size);
+      } finally {
+        if (loadingTimeout) clearTimeout(loadingTimeout);
+        setLoading(false);
+      }
+    };
+    fetchBookDetails();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [book]);
+
+  const handleClose = () => {
+    setBookMeta(null);
+    setEditMode(false);
+    setActiveDeleteAction(null);
+    setShowXray(false);
+    setShowAudiobook(false);
+    setShowPdf5x8(false);
+    setShowPdf(false);
+    setShowPdfSquare(false);
+    setPdfOptionsFor(null);
+    setShowHelp(false);
+    onClose();
+  };
+
+  const handleEditMetadata = () => {
+    setEditMode(true);
+  };
+
+  const handleCancelEdit = () => {
+    resetToOriginal();
+    setEditMode(false);
+  };
+
+  const handleSaveMetadata = () => {
+    if (editedMeta && handleBookMetadataUpdate) {
+      setBookMeta({ ...editedMeta });
+      handleBookMetadataUpdate(book, editedMeta);
+      setEditMode(false);
+    }
+  };
+
+  const handleDeleteAction = (action: DeleteAction) => {
+    setActiveDeleteAction(action);
+  };
+
+  const confirmDeleteAction = async () => {
+    if (!activeDeleteAction) return;
+
+    const config = deleteConfigs[activeDeleteAction];
+    handleClose();
+
+    if (config.handler) {
+      config.handler(book);
+    }
+  };
+
+  const cancelDeleteAction = () => {
+    setActiveDeleteAction(null);
+  };
+
+  const handleDelete = () => handleDeleteAction('both');
+
+  const handleReupload = async () => {
+    handleClose();
+    if (handleBookUpload) {
+      handleBookUpload(book);
+    }
+  };
+
+  const handleDownloadLocal = async () => {
+    const appService = await envConfig.getAppService();
+    const epubFilename = getLocalBookFilename(book);
+    const epubFile = await appService.openFile(epubFilename, 'Books');
+    const arrayBuffer = await epubFile.arrayBuffer();
+
+    const blob = new Blob([arrayBuffer], { type: 'application/epub+zip' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${makeSafeFilename(book.title)}.${EXTS[book.format]}`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadBookseller = async () => {
+    const appService = await envConfig.getAppService();
+    const epubFilename = getLocalBookFilename(book);
+    const epubFile = await appService.openFile(epubFilename, 'Books');
+    const arrayBuffer = await epubFile.arrayBuffer();
+
+    const zip = await JSZip.loadAsync(arrayBuffer);
+    await stripEpubForBookseller(zip);
+
+    const blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/epub+zip' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${makeSafeFilename(book.title)}-booksellers.epub`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadWebReady = async () => {
+    const { isDarkMode } = useThemeStore.getState();
+    await downloadBookAsWebReady(book, envConfig, isDarkMode);
+  };
+
+  // 6x9 and 5x8 ask for TOC / chapter headings first; square builds directly
+  const handlePdf5x8 = () => {
+    setPdfOptionsFor('5x8');
+  };
+
+  const handleClosePdf5x8 = () => {
+    setShowPdf5x8(false);
+  };
+
+  const handlePdf = () => {
+    setPdfOptionsFor('6x9');
+  };
+
+  const handleCreatePdf = (options: PdfContentOptions) => {
+    setPdfContentOptions(options);
+    if (pdfOptionsFor === '5x8') setShowPdf5x8(true);
+    if (pdfOptionsFor === '6x9') setShowPdf(true);
+    setPdfOptionsFor(null);
+  };
+
+  const handleClosePdf = () => {
+    setShowPdf(false);
+  };
+
+  const handlePdfSquare = () => {
+    setShowPdfSquare(true);
+  };
+
+  const handleClosePdfSquare = () => {
+    setShowPdfSquare(false);
+  };
+
+  const handleXray = () => {
+    setShowXray(true);
+  };
+
+  const handleReadEpub = () => {
+    handleClose();
+    onReadEpub?.(book);
+  };
+
+  const handleCloseXray = () => {
+    setShowXray(false);
+  };
+
+  const handleAudiobook = () => {
+    setShowAudiobook(true);
+  };
+
+  const handleCloseAudiobook = () => {
+    setShowAudiobook(false);
+  };
+
+  const currentDeleteConfig = activeDeleteAction ? deleteConfigs[activeDeleteAction] : null;
+
+  if (!bookMeta)
+    return (
+      loading && (
+        <div className='fixed inset-0 z-50 flex items-center justify-center'>
+          <Spinner loading />
+        </div>
+      )
+    );
+
+  return (
+    <>
+      <div className='fixed inset-0 z-50 flex items-center justify-center'>
+        <Dialog
+          title={editMode ? _('Edit Ebook Metadata') : _('Ebook Plus')}
+          isOpen={isOpen}
+          onClose={handleClose}
+          boxClassName={clsx(
+            editMode ? 'sm:min-w-[600px] sm:max-w-[600px]' : 'sm:min-w-[480px] sm:max-w-[480px]',
+            'sm:h-auto sm:max-h-[90%]',
+          )}
+          contentClassName='!px-6 !py-4'
+        >
+          <div className='flex w-full select-text items-start justify-center'>
+            {editMode ? (
+              <BookDetailEdit
+                book={book}
+                metadata={editedMeta}
+                fieldSources={fieldSources}
+                lockedFields={lockedFields}
+                fieldErrors={fieldErrors}
+                onFieldChange={handleFieldChange}
+                onToggleFieldLock={handleToggleFieldLock}
+                onLockAll={handleLockAll}
+                onUnlockAll={handleUnlockAll}
+                onCancel={handleCancelEdit}
+                onReset={resetToOriginal}
+                onSave={handleSaveMetadata}
+              />
+            ) : (
+              <BookDetailView
+                book={book}
+                metadata={bookMeta}
+                fileSize={fileSize}
+                onEdit={handleBookMetadataUpdate ? handleEditMetadata : undefined}
+                onDelete={handleBookDelete ? handleDelete : undefined}
+                onDownload={undefined}
+                onUpload={handleBookUpload ? handleReupload : undefined}
+                onDownloadLocal={book.hash === '__bookseller_temp__' ? undefined : handleDownloadLocal}
+                onDownloadBookseller={book.hash === '__bookseller_temp__' ? undefined : handleDownloadBookseller}
+                onDownloadWebReady={book.hash === '__bookseller_temp__' ? undefined : handleDownloadWebReady}
+                onDownloadPdf5x8={book.hash === '__bookseller_temp__' ? undefined : handlePdf5x8}
+                onDownloadPdf={book.hash === '__bookseller_temp__' ? undefined : handlePdf}
+                onDownloadPdfSquare={book.hash === '__bookseller_temp__' ? undefined : handlePdfSquare}
+                onXray={book.hash === '__bookseller_temp__' ? undefined : handleXray}
+                onAudiobook={book.hash === '__bookseller_temp__' ? undefined : handleAudiobook}
+                onReadEpub={onReadEpub ? handleReadEpub : undefined}
+                onHelp={() => setShowHelp(true)}
+              />
+            )}
+          </div>
+        </Dialog>
+
+        {activeDeleteAction && currentDeleteConfig && (
+          <div
+            className={clsx('fixed bottom-0 left-0 right-0 z-50 flex justify-center')}
+            style={{
+              paddingBottom: `${(safeAreaInsets?.bottom || 0) + 16}px`,
+            }}
+          >
+            <Alert
+              title={currentDeleteConfig.title}
+              message={currentDeleteConfig.message}
+              onCancel={cancelDeleteAction}
+              onConfirm={confirmDeleteAction}
+            />
+          </div>
+        )}
+      </div>
+
+      <XrayModal
+        book={book}
+        isOpen={showXray}
+        onClose={handleCloseXray}
+      />
+
+      <AudiobookModal
+        book={book}
+        isOpen={showAudiobook}
+        onClose={handleCloseAudiobook}
+      />
+
+      <PdfOptionsDialog
+        isOpen={pdfOptionsFor !== null}
+        formatLabel={pdfOptionsFor === '5x8' ? '5x8 inch PDF (KDP)' : '6x9 inch PDF (KDP)'}
+        onCancel={() => setPdfOptionsFor(null)}
+        onCreate={handleCreatePdf}
+      />
+
+      <Pdf5x8Modal
+        book={book}
+        bookMeta={bookMeta}
+        isOpen={showPdf5x8}
+        onClose={handleClosePdf5x8}
+        includeToc={pdfContentOptions.includeToc}
+        includeChapterHeadings={pdfContentOptions.includeChapterHeadings}
+      />
+
+      <PdfModal
+        book={book}
+        bookMeta={bookMeta}
+        isOpen={showPdf}
+        onClose={handleClosePdf}
+        includeToc={pdfContentOptions.includeToc}
+        includeChapterHeadings={pdfContentOptions.includeChapterHeadings}
+      />
+
+      <PdfSquareModal
+        book={book}
+        bookMeta={bookMeta}
+        isOpen={showPdfSquare}
+        onClose={handleClosePdfSquare}
+      />
+
+      <EbookPlusHelp
+        isOpen={showHelp}
+        onClose={() => setShowHelp(false)}
+      />
+    </>
+  );
+};
+
+export default BookDetailModal;

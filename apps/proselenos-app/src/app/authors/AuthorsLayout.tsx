@@ -1,0 +1,1958 @@
+// app/authors/AuthorsLayout.tsx
+
+'use client';
+
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { ThemeConfig } from '../shared/theme';
+import { showAlert } from '../shared/alerts';
+import Swal from 'sweetalert2';
+import AuthorsHeader from './AuthorsHeader';
+import ChapterSidebar from './ChapterSidebar';
+import EditorPanel, { EditorPanelRef } from './EditorPanel';
+import { ElementType, getDefaultTitle, PROTECTED_SECTION_IDS, PROTECTED_SECTION_COUNT, getSectionNumber, isFloatingType } from './elementTypes';
+
+// Treat 'section', undefined, and floating types as 'chapter' for boundary checks
+// This ensures items that render in the Chapters area behave as chapters
+// Matches sidebar behavior where floating types (section 0) go to Chapters
+function getEffectiveSectionNumber(type: ElementType | undefined): number {
+  if (!type || type === 'section') return 4; // Treat as chapter
+  const num = getSectionNumber(type);
+  return num === 0 ? 4 : num; // Floating types also go to Chapters
+}
+
+// Reorder sections array to match visual grouping (Required, Front Matter, Introductory, Chapters, Back Matter)
+// This ensures array neighbors match visual neighbors for move up/down
+function reorderSectionsByVisualGroup<T extends { type?: ElementType }>(sections: T[]): T[] {
+  const required = sections.slice(0, PROTECTED_SECTION_COUNT);
+  const rest = sections.slice(PROTECTED_SECTION_COUNT);
+
+  const groups = new Map<number, T[]>();
+  for (const s of rest) {
+    const num = getEffectiveSectionNumber(s.type);
+    if (!groups.has(num)) groups.set(num, []);
+    groups.get(num)!.push(s);
+  }
+
+  // Return in visual order: Required, Front Matter (2), Introductory (3), Chapters (4), Back Matter (5), No Matter (6)
+  return [
+    ...required,
+    ...(groups.get(2) || []),
+    ...(groups.get(3) || []),
+    ...(groups.get(4) || []),
+    ...(groups.get(5) || []),
+    ...(groups.get(6) || []),
+  ];
+}
+import TitlePagePanel, { BookMetadata } from './TitlePagePanel';
+import { parseEpub, ParsedEpub } from '@/services/epubService';
+import { parseDocx } from '@/services/docxService';
+import { parsePdf } from '@/lib/pdfToPages';
+import { countWords } from '@/services/htmlExtractor';
+import {
+  loadFullWorkingCopy,
+  saveFullWorkingCopy,
+  deleteSection,
+  saveWorkingCopyMeta,
+  loadWorkingCopyMeta,
+  clearWorkingCopy,
+  saveSection,
+  saveCoverImage,
+  deleteCoverImage,
+  loadCoverImage,
+  loadManuscriptMeta,
+  saveManuscriptMeta,
+  WorkingCopyMeta,
+  WorkingCopySection,
+  saveManuscriptImage,
+  deleteManuscriptImage,
+  getAllManuscriptImages,
+  saveManuscriptAudio,
+  deleteManuscriptAudio,
+  getAllManuscriptAudios,
+  getManuscriptAudio,
+  SceneCraftConfig,
+} from '@/services/manuscriptStorage';
+import { generateEpubFromWorkingCopy } from '@/lib/epub-generator';
+import { exportWorkspaceToDocx } from '@/lib/workspace-to-docx';
+import { exportWorkspaceToFountain } from '@/lib/fountain-generator';
+import { xhtmlToPlainText } from '@/lib/plateXhtml';
+import environmentConfig from '@/services/environment';
+
+// Helper to escape HTML for XHTML storage
+function escapeHtmlForLayout(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+interface AuthorsLayoutProps {
+  theme: ThemeConfig;
+  isDarkMode: boolean;
+  onThemeToggle: () => void;
+  onAboutClick: () => void;
+  onStorageClick: () => void;
+  onFilesClick: () => void;
+  sidebarVisible: boolean;
+  onToggleSidebar: () => void;
+  onEditorClick: () => void;
+  onCoverClick: () => void;
+  onXrayClick?: () => void;
+  onLoadFromLibraryClick: () => void;
+  // Working Copy refresh props
+  refreshKey?: number;
+}
+
+export default function AuthorsLayout({
+  theme,
+  isDarkMode,
+  onThemeToggle,
+  onAboutClick,
+  onStorageClick,
+  onFilesClick,
+  sidebarVisible,
+  onToggleSidebar,
+  onEditorClick,
+  onCoverClick,
+  onXrayClick,
+  onLoadFromLibraryClick,
+  // Working Copy refresh props
+  refreshKey,
+}: AuthorsLayoutProps) {
+  // Epub state
+  const [epub, setEpub] = useState<ParsedEpub | null>(null);
+  const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
+  const [bookMeta, setBookMeta] = useState<WorkingCopyMeta | null>(null);
+
+  // Unsaved changes tracking
+  // XHTML-Native: Now tracks pendingXhtml instead of content/plateValue
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [pendingXhtml, setPendingXhtml] = useState<string>('');
+  const [pendingTitle, setPendingTitle] = useState<string>('');
+  // Removed: pendingSectionSwitch and showUnsavedDialog - now auto-saves on section switch
+
+  // Traffic light: date-based export reminder
+  function getExportTrafficLightStatus(): 'green' | 'yellow' | 'red' {
+    const stored = localStorage.getItem('last_export_date');
+    if (!stored) return 'green'; // New user, no data to export yet
+    const daysSince = (Date.now() - new Date(stored).getTime()) / (1000 * 60 * 60 * 24);
+    if (daysSince < 1) return 'green';
+    if (daysSince < 7) return 'yellow';
+    return 'red';
+  }
+  function getExportTooltip(): string {
+    const stored = localStorage.getItem('last_export_date');
+    if (!stored) return 'Click to Export a backup zip file';
+    const status = getExportTrafficLightStatus();
+    if (status === 'green') return `Exported on: ${new Date(stored).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`;
+    if (status === 'yellow') return 'Export needed';
+    return 'Export now';
+  }
+  const [trafficLightStatus, setTrafficLightStatus] = useState<'green' | 'yellow' | 'red'>(() => {
+    if (typeof window === 'undefined') return 'green';
+    localStorage.removeItem('ee_authors_modified_sections_since_send');
+    return getExportTrafficLightStatus();
+  });
+  const [trafficTooltip, setTrafficTooltip] = useState<string>(() => {
+    if (typeof window === 'undefined') return 'Click to Export a backup zip file';
+    return getExportTooltip();
+  });
+
+  // Re-check traffic light status every minute and on storage events (cross-tab)
+  useEffect(() => {
+    const update = () => {
+      setTrafficLightStatus(getExportTrafficLightStatus());
+      setTrafficTooltip(getExportTooltip());
+    };
+    const interval = setInterval(update, 60_000);
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'last_export_date') update();
+    };
+    window.addEventListener('storage', onStorage);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, []);
+
+  // Editor panel ref (used by full-text search to scroll to matches)
+  const editorPanelRef = useRef<EditorPanelRef>(null);
+
+  // Full-text search state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<{ sectionId: string; sectionTitle: string; matchIndex: number; matchText: string; contextBefore: string; contextAfter: string }[]>([]);
+  const [currentSearchIndex, setCurrentSearchIndex] = useState(0);
+  const [searchActive, setSearchActive] = useState(false);
+  const [sectionsWithMatches, setSectionsWithMatches] = useState<Set<string>>(new Set());
+
+  // Inline images state
+  const [manuscriptImages, setManuscriptImages] = useState<Array<{filename: string, blob: Blob}>>([]);
+  const [imageUrls, setImageUrls] = useState<Array<{filename: string, url: string}>>([]);
+
+  // Audio files state (for Visual Narrative)
+  const [manuscriptAudios, setManuscriptAudios] = useState<Array<{filename: string, blob: Blob}>>([]);
+
+  // (wallpaper-chapter system removed — SceneCraft handles immersive backgrounds)
+
+  // Computed values
+  // XHTML-Native: Extract plain text from XHTML for word counts
+  const selectedSection = epub?.sections.find((s) => s.id === selectedSectionId);
+  const totalWordCount = epub?.sections.reduce((sum, s) => {
+    const plainText = xhtmlToPlainText(s.xhtml || '');
+    return sum + countWords(plainText);
+  }, 0) ?? 0;
+  const sectionWordCount = countWords(xhtmlToPlainText(selectedSection?.xhtml ?? ''));
+
+  // Navigation computed values
+  const currentSectionIndex = epub?.sections.findIndex((s) => s.id === selectedSectionId) ?? -1;
+  const hasPrevSection = currentSectionIndex > 0;
+  const hasNextSection = epub ? currentSectionIndex < epub.sections.length - 1 : false;
+
+  // Check if current section is Title Page
+  const isTitlePage = selectedSection?.id === 'title-page' ||
+    selectedSection?.title?.toLowerCase() === 'title page';
+
+  // Full-text search: perform search across all sections
+  // XHTML-Native: Search in plain text extracted from XHTML
+  const performSearch = useCallback((query: string) => {
+    if (!epub || !query.trim()) {
+      setSearchResults([]);
+      setSearchActive(false);
+      setSectionsWithMatches(new Set());
+      return;
+    }
+
+    const results: typeof searchResults = [];
+    const matchingSections = new Set<string>();
+    const lowerQuery = query.toLowerCase();
+    const maxResults = 100;
+
+    for (const section of epub.sections) {
+      // Skip protected sections (Cover, Title Page, Copyright)
+      if ((PROTECTED_SECTION_IDS as readonly string[]).includes(section.id)) continue;
+
+      // Search in title
+      const titleLower = section.title.toLowerCase();
+      let titleIndex = titleLower.indexOf(lowerQuery);
+      while (titleIndex !== -1 && results.length < maxResults) {
+        matchingSections.add(section.id);
+        results.push({
+          sectionId: section.id,
+          sectionTitle: section.title,
+          matchIndex: titleIndex,
+          matchText: section.title.substring(titleIndex, titleIndex + query.length),
+          contextBefore: '[Title] ' + section.title.substring(Math.max(0, titleIndex - 20), titleIndex),
+          contextAfter: section.title.substring(titleIndex + query.length, titleIndex + query.length + 20),
+        });
+        titleIndex = titleLower.indexOf(lowerQuery, titleIndex + 1);
+      }
+
+      // XHTML-Native: Search in plain text extracted from XHTML
+      const plainContent = xhtmlToPlainText(section.xhtml || '');
+      const contentLower = plainContent.toLowerCase();
+      let contentIndex = contentLower.indexOf(lowerQuery);
+      while (contentIndex !== -1 && results.length < maxResults) {
+        matchingSections.add(section.id);
+        const contextStart = Math.max(0, contentIndex - 50);
+        const contextEnd = Math.min(plainContent.length, contentIndex + query.length + 50);
+        results.push({
+          sectionId: section.id,
+          sectionTitle: section.title,
+          matchIndex: contentIndex,
+          matchText: plainContent.substring(contentIndex, contentIndex + query.length),
+          contextBefore: plainContent.substring(contextStart, contentIndex).replace(/\n/g, ' '),
+          contextAfter: plainContent.substring(contentIndex + query.length, contextEnd).replace(/\n/g, ' '),
+        });
+        contentIndex = contentLower.indexOf(lowerQuery, contentIndex + 1);
+      }
+
+      if (results.length >= maxResults) break;
+    }
+
+    setSearchResults(results);
+    setCurrentSearchIndex(0);
+    setSearchActive(results.length > 0);
+    setSectionsWithMatches(matchingSections);
+  }, [epub]);
+
+  // Search handlers
+  const handleSearchSubmit = useCallback(() => {
+    performSearch(searchQuery);
+  }, [searchQuery, performSearch]);
+
+  const handleSearchClose = useCallback(() => {
+    setSearchQuery('');
+    setSearchResults([]);
+    setSearchActive(false);
+    setCurrentSearchIndex(0);
+    setSectionsWithMatches(new Set());
+  }, []);
+
+  const handleSearchPrev = useCallback(() => {
+    if (currentSearchIndex > 0) {
+      setCurrentSearchIndex(currentSearchIndex - 1);
+    }
+  }, [currentSearchIndex]);
+
+  const handleSearchNext = useCallback(() => {
+    if (currentSearchIndex < searchResults.length - 1) {
+      setCurrentSearchIndex(currentSearchIndex + 1);
+    }
+  }, [currentSearchIndex, searchResults.length]);
+
+  const handleSearchNavigate = useCallback((result: typeof searchResults[0], index: number) => {
+    setCurrentSearchIndex(index);
+    setSelectedSectionId(result.sectionId);
+
+    // Use longer delay for section changes, retry if needed
+    const attemptScroll = (attempt: number) => {
+      if (attempt > 3) return; // Max 3 attempts
+
+      setTimeout(() => {
+        if (editorPanelRef.current) {
+          const success = editorPanelRef.current.scrollToPassage(result.matchText, result.matchIndex);
+          if (!success && attempt < 3) {
+            attemptScroll(attempt + 1); // Retry
+          }
+        }
+      }, attempt === 1 ? 150 : 300); // 150ms first, 300ms retries
+    };
+
+    attemptScroll(1);
+  }, []);
+
+  // Auto-navigate to search result when search is performed or index changes
+  useEffect(() => {
+    if (searchActive && searchResults.length > 0) {
+      const result = searchResults[currentSearchIndex];
+      if (result) {
+        setSelectedSectionId(result.sectionId);
+
+        // Use longer delay for section changes, retry if needed
+        const attemptScroll = (attempt: number) => {
+          if (attempt > 3) return; // Max 3 attempts
+
+          setTimeout(() => {
+            if (editorPanelRef.current) {
+              const success = editorPanelRef.current.scrollToPassage(result.matchText, result.matchIndex);
+              if (!success && attempt < 3) {
+                attemptScroll(attempt + 1); // Retry
+              }
+            }
+          }, attempt === 1 ? 150 : 300); // 150ms first, 300ms retries
+        };
+
+        attemptScroll(1);
+      }
+    }
+  }, [searchActive, searchResults, currentSearchIndex]);
+
+  // Auto-load working copy from IndexedDB on mount
+  // XHTML-Native: Sections now contain xhtml instead of content/plateValue
+  useEffect(() => {
+    const loadData = async () => {
+      const saved = await loadFullWorkingCopy();
+      if (saved) {
+        // Convert FullWorkingCopy to ParsedEpub format for UI
+        // XHTML-Native: Use xhtml field directly
+        // Filter out cover sections - cover is now handled via Menu > Cover, not as a section
+        const epub: ParsedEpub = {
+          title: saved.title,
+          author: saved.author,
+          language: saved.language,
+          coverImage: saved.coverImage,
+          sections: reorderSectionsByVisualGroup(
+            saved.sections
+              .filter((s) => s.type !== 'cover')
+              .map((s) => ({
+                id: s.id,
+                title: s.title,
+                href: `${s.id}.xhtml`,
+                xhtml: s.xhtml,
+                type: s.type,
+
+                sceneCraftConfig: s.sceneCraftConfig,
+              }))
+          ),
+        };
+        setEpub(epub);
+        setSelectedSectionId(epub.sections[0]?.id ?? null);
+      } else {
+        // No existing book - auto-create a new blank manuscript
+        // First 2 sections (Title Page, Copyright) are protected - cannot be deleted or moved
+        // Note: Cover is handled via Menu > Cover, not as a section
+        await clearWorkingCopy();
+        const year = new Date().getFullYear();
+        // XHTML-Native: Use xhtml for content
+        const blank = {
+          title: 'Untitled',
+          author: 'Anonymous',
+          language: 'en',
+          coverImage: null,
+          sections: [
+            { id: 'title-page', title: 'Title Page', xhtml: '<h1>Untitled</h1>\n<p>by Anonymous</p>', type: 'title-page' as const },
+            { id: 'copyright', title: 'Copyright', xhtml: `<p>Copyright © ${year} by Anonymous</p>\n<p>All rights reserved.</p>\n<p>No part of this book may be reproduced in any form or by any electronic or mechanical means, including information storage and retrieval systems, without written permission from the author, except for the use of brief quotations in a book review.</p>`, type: 'copyright' as const },
+            { id: 'chapter-1', title: 'Chapter 1', xhtml: '<p></p>', type: 'chapter' as const },
+          ],
+        };
+        await saveFullWorkingCopy(blank);
+        // Reload from IndexedDB to get normalized IDs
+        const newSaved = await loadFullWorkingCopy();
+        if (newSaved) {
+          const newEpub: ParsedEpub = {
+            title: newSaved.title,
+            author: newSaved.author,
+            language: newSaved.language,
+            coverImage: newSaved.coverImage,
+            sections: newSaved.sections.map((s) => ({
+              id: s.id,
+              title: s.title,
+              href: `${s.id}.xhtml`,
+              xhtml: s.xhtml,
+              type: s.type,
+
+              sceneCraftConfig: s.sceneCraftConfig,
+            })),
+          };
+          setEpub(newEpub);
+          setSelectedSectionId(newEpub.sections[0]?.id ?? null);
+        }
+        const newMeta = await loadWorkingCopyMeta();
+        if (newMeta) {
+          setBookMeta(newMeta);
+        }
+        return;
+      }
+      // Also load full metadata for Title Page form
+      const meta = await loadWorkingCopyMeta();
+      if (meta) {
+        setBookMeta(meta);
+      }
+    };
+    loadData();
+  }, []);
+
+  // Reload Working Copy when refreshKey changes (e.g., after Chapter Writer adds a chapter)
+  // XHTML-Native: Use xhtml field
+  useEffect(() => {
+    if (refreshKey === undefined || refreshKey === 0) return;
+
+    const reloadData = async () => {
+      const saved = await loadFullWorkingCopy();
+      if (saved) {
+        // Filter out cover sections - cover is handled via Menu > Cover, not as a section
+        const newEpub: ParsedEpub = {
+          title: saved.title,
+          author: saved.author,
+          language: saved.language,
+          coverImage: saved.coverImage,
+          sections: reorderSectionsByVisualGroup(
+            saved.sections
+              .filter((s) => s.type !== 'cover')
+              .map((s) => ({
+                id: s.id,
+                title: s.title,
+                href: `${s.id}.xhtml`,
+                xhtml: s.xhtml,
+                type: s.type,
+
+                sceneCraftConfig: s.sceneCraftConfig,
+              }))
+          ),
+        };
+        setEpub(newEpub);
+      }
+      // Also reload metadata
+      const meta = await loadWorkingCopyMeta();
+      if (meta) {
+        setBookMeta(meta);
+      }
+    };
+    reloadData();
+  }, [refreshKey]);
+
+  // Load manuscript images on mount and when bookMeta changes
+  useEffect(() => {
+    const loadImages = async () => {
+      const images = await getAllManuscriptImages();
+      setManuscriptImages(images);
+
+      // Create object URLs for display (revoke old ones first)
+      imageUrls.forEach(img => URL.revokeObjectURL(img.url));
+      const urls = images.map(img => ({
+        filename: img.filename,
+        url: URL.createObjectURL(img.blob)
+      }));
+      setImageUrls(urls);
+    };
+    loadImages();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookMeta]);
+
+  // Load audio files on mount and when bookMeta changes
+  useEffect(() => {
+    const loadAudios = async () => {
+      const audios = await getAllManuscriptAudios();
+      setManuscriptAudios(audios);
+    };
+    loadAudios();
+  }, [bookMeta]);
+
+  // Cleanup object URLs on unmount
+  useEffect(() => {
+    return () => {
+      imageUrls.forEach(img => URL.revokeObjectURL(img.url));
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Image upload handler
+  const handleImageUpload = useCallback(async (file: File) => {
+    // Generate unique filename if needed
+    let filename = file.name;
+    const existingNames = manuscriptImages.map(i => i.filename);
+    if (existingNames.includes(filename)) {
+      const ext = filename.split('.').pop();
+      const base = filename.slice(0, -(ext?.length || 0) - 1);
+      let counter = 1;
+      while (existingNames.includes(`${base}-${counter}.${ext}`)) {
+        counter++;
+      }
+      filename = `${base}-${counter}.${ext}`;
+    }
+
+    // Save to IndexedDB
+    await saveManuscriptImage(filename, file);
+
+    // Update meta with new imageId
+    if (bookMeta) {
+      const newImageIds = [...(bookMeta.imageIds || []), filename];
+      const updatedMeta = { ...bookMeta, imageIds: newImageIds };
+      await saveWorkingCopyMeta(updatedMeta);
+      setBookMeta(updatedMeta);
+    }
+
+    // Reload images to update UI
+    const images = await getAllManuscriptImages();
+    setManuscriptImages(images);
+    imageUrls.forEach(img => URL.revokeObjectURL(img.url));
+    const urls = images.map(img => ({
+      filename: img.filename,
+      url: URL.createObjectURL(img.blob)
+    }));
+    setImageUrls(urls);
+  }, [manuscriptImages, bookMeta, imageUrls]);
+
+  // Image delete handler
+  const handleImageDelete = useCallback(async (filename: string) => {
+    // Delete from IndexedDB
+    await deleteManuscriptImage(filename);
+
+    // Update meta
+    if (bookMeta) {
+      const newImageIds = (bookMeta.imageIds || []).filter(id => id !== filename);
+      const updatedMeta = { ...bookMeta, imageIds: newImageIds };
+      await saveWorkingCopyMeta(updatedMeta);
+      setBookMeta(updatedMeta);
+    }
+
+    // Reload images
+    const images = await getAllManuscriptImages();
+    setManuscriptImages(images);
+    imageUrls.forEach(img => URL.revokeObjectURL(img.url));
+    const urls = images.map(img => ({
+      filename: img.filename,
+      url: URL.createObjectURL(img.blob)
+    }));
+    setImageUrls(urls);
+  }, [bookMeta, imageUrls]);
+
+  // Audio upload handler
+  const handleAudioUpload = useCallback(async (file: File) => {
+    const filename = file.name;
+    await saveManuscriptAudio(filename, file);
+    const audios = await getAllManuscriptAudios();
+    setManuscriptAudios(audios);
+  }, []);
+
+  // Audio delete handler
+  const handleAudioDelete = useCallback(async (filename: string) => {
+    await deleteManuscriptAudio(filename);
+    const audios = await getAllManuscriptAudios();
+    setManuscriptAudios(audios);
+  }, []);
+
+  // SceneCraft handlers
+  const getAudioUrl = useCallback(async (filename: string): Promise<string | null> => {
+    const blob = await getManuscriptAudio(filename);
+    if (!blob) return null;
+    return URL.createObjectURL(blob);
+  }, []);
+
+  const getImageUrlForSceneCraft = useCallback((filename: string): string | null => {
+    const img = imageUrls.find(i => i.filename === filename);
+    return img?.url ?? null;
+  }, [imageUrls]);
+
+  const handleSceneCraftConfigChange = useCallback(async (config: SceneCraftConfig) => {
+    if (!epub || !selectedSectionId) return;
+    // Update in-memory epub sections
+    const updatedSections = epub.sections.map(s =>
+      s.id === selectedSectionId ? { ...s, sceneCraftConfig: config } : s
+    );
+    setEpub({ ...epub, sections: updatedSections });
+    // Persist to meta.json
+    const meta = await loadManuscriptMeta();
+    if (meta) {
+      const idx = meta.sections.findIndex(s => s.id === selectedSectionId);
+      if (idx >= 0) {
+        const existing = meta.sections[idx];
+        if (existing) {
+          meta.sections[idx] = { ...existing, sceneCraftConfig: config };
+          await saveManuscriptMeta(meta);
+        }
+      }
+    }
+  }, [epub, selectedSectionId]);
+
+  // (wallpaper handler removed — SceneCraft handles immersive backgrounds)
+
+  // Handle opening an epub file
+  // XHTML-Native: Uses xhtml field from parsed sections
+  const handleOpenEpub = async () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.epub';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file) {
+        try {
+          const parsed = await parseEpub(file);
+          // Clear any existing working copy first
+          await clearWorkingCopy();
+
+          // Save extracted inline images to IndexedDB
+          const imageIds: string[] = [];
+          if (parsed.images && parsed.images.length > 0) {
+            for (const img of parsed.images) {
+              await saveManuscriptImage(img.filename, img.blob);
+              imageIds.push(img.filename);
+            }
+          }
+
+          // Save extracted audio files to IndexedDB
+          if (parsed.audios && parsed.audios.length > 0) {
+            for (const aud of parsed.audios) {
+              await saveManuscriptAudio(aud.filename, aud.blob);
+            }
+          }
+
+          // Save to IndexedDB with normalization (section-001, section-002, etc.)
+          // Filter out table-of-contents - it gets auto-generated on "Publish"
+          // XHTML-Native: Use xhtml field directly from parsed sections
+          await saveFullWorkingCopy({
+            title: parsed.title,
+            author: parsed.author,
+            language: parsed.language,
+            coverImage: parsed.coverImage,
+            sections: parsed.sections
+              .filter((s) => s.type !== 'table-of-contents')
+              .map((s) => ({
+                id: s.id,
+                title: s.title,
+                xhtml: s.xhtml,
+                type: s.type,
+                sceneCraftConfig: s.sceneCraftConfig,
+              })),
+          });
+
+          // Update metadata with imageIds
+          const existingMeta = await loadWorkingCopyMeta();
+          if (existingMeta) {
+            await saveWorkingCopyMeta({ ...existingMeta, imageIds });
+          }
+
+          // Reload from IndexedDB to get normalized IDs
+          // Filter out cover sections - cover is handled via Menu > Cover, not as a section
+          const saved = await loadFullWorkingCopy();
+          if (saved) {
+            const epub: ParsedEpub = {
+              title: saved.title,
+              author: saved.author,
+              language: saved.language,
+              coverImage: saved.coverImage,
+              sections: saved.sections
+                .filter((s) => s.type !== 'cover')
+                .map((s) => ({
+                  id: s.id,
+                  title: s.title,
+                  href: `${s.id}.xhtml`,
+                  xhtml: s.xhtml,
+                  type: s.type,
+  
+                  sceneCraftConfig: s.sceneCraftConfig,
+                })),
+              images: parsed.images, // Pass through for immediate access
+            };
+            setEpub(epub);
+            setSelectedSectionId(epub.sections[0]?.id ?? null);
+          }
+          // Load metadata for Title Page form
+          const meta = await loadWorkingCopyMeta();
+          if (meta) {
+            setBookMeta(meta);
+          }
+        } catch (error) {
+          console.error('Error parsing epub:', error);
+          alert('Error parsing epub file. Please try a different file.');
+        }
+      }
+    };
+    input.click();
+  };
+
+  // Handle opening a docx file
+  // XHTML-Native: DOCX content is plain text, convert to XHTML paragraphs
+  const handleOpenDocx = async () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.docx';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file) {
+        try {
+          const parsed = await parseDocx(file);
+          // Clear any existing working copy first
+          await clearWorkingCopy();
+          // Save to IndexedDB
+          // Filter out table-of-contents - it gets auto-generated on "Publish"
+          // XHTML-Native: Convert plain text content to XHTML paragraphs
+          await saveFullWorkingCopy({
+            title: parsed.title,
+            author: parsed.author,
+            language: parsed.language,
+            coverImage: parsed.coverImage,
+            sections: parsed.sections
+              .filter((s) => s.type !== 'table-of-contents')
+              .map((s) => ({
+                id: s.id,
+                title: s.title,
+                // Convert plain text to XHTML paragraphs
+                xhtml: s.content
+                  .split(/\n\s*\n/)
+                  .filter((p: string) => p.trim())
+                  .map((p: string) => `<p>${escapeHtmlForLayout(p.replace(/\n/g, ' ').trim())}</p>`)
+                  .join('\n') || '<p></p>',
+              })),
+          });
+          // Reload from IndexedDB to get normalized IDs
+          // Filter out cover sections - cover is handled via Menu > Cover, not as a section
+          const saved = await loadFullWorkingCopy();
+          if (saved) {
+            const loadedEpub: ParsedEpub = {
+              title: saved.title,
+              author: saved.author,
+              language: saved.language,
+              coverImage: saved.coverImage,
+              sections: saved.sections
+                .filter((s) => s.type !== 'cover')
+                .map((s) => ({
+                  id: s.id,
+                  title: s.title,
+                  href: `${s.id}.xhtml`,
+                  xhtml: s.xhtml,
+                  type: s.type,
+  
+                  sceneCraftConfig: s.sceneCraftConfig,
+                })),
+            };
+            setEpub(loadedEpub);
+            setSelectedSectionId(loadedEpub.sections[0]?.id ?? null);
+          }
+          // Load metadata for Title Page form
+          const meta = await loadWorkingCopyMeta();
+          if (meta) {
+            setBookMeta(meta);
+          }
+          showAlert(`Loaded "${parsed.title}" with ${parsed.sections.length} sections`, 'success', undefined, isDarkMode);
+        } catch (error) {
+          console.error('Error parsing docx:', error);
+          showAlert('Error parsing DOCX file. Please try a different file.', 'error', undefined, isDarkMode);
+        }
+      }
+    };
+    input.click();
+  };
+
+  const handleOpenPdf = async () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.pdf';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file) {
+        try {
+          const parsed = await parsePdf(file);
+          await clearWorkingCopy();
+          await saveFullWorkingCopy({
+            title: parsed.title,
+            author: parsed.author,
+            language: parsed.language,
+            coverImage: parsed.coverImage,
+            sections: parsed.sections.map((s) => ({
+              id: s.id,
+              title: s.title,
+              xhtml: s.content
+                .split(/\n\s*\n/)
+                .filter((p: string) => p.trim())
+                .map((p: string) => `<p>${escapeHtmlForLayout(p.replace(/\n/g, ' ').trim())}</p>`)
+                .join('\n') || '<p></p>',
+            })),
+          });
+          const saved = await loadFullWorkingCopy();
+          if (saved) {
+            const loadedEpub: ParsedEpub = {
+              title: saved.title,
+              author: saved.author,
+              language: saved.language,
+              coverImage: saved.coverImage,
+              sections: saved.sections
+                .filter((s) => s.type !== 'cover')
+                .map((s) => ({
+                  id: s.id,
+                  title: s.title,
+                  href: `${s.id}.xhtml`,
+                  xhtml: s.xhtml,
+                  type: s.type,
+
+                  sceneCraftConfig: s.sceneCraftConfig,
+                })),
+            };
+            setEpub(loadedEpub);
+            setSelectedSectionId(loadedEpub.sections[0]?.id ?? null);
+          }
+          const meta = await loadWorkingCopyMeta();
+          if (meta) {
+            setBookMeta(meta);
+          }
+          showAlert(`Loaded "${parsed.title}" with ${parsed.sections.length} sections`, 'success', undefined, isDarkMode);
+        } catch (error) {
+          console.error('Error parsing pdf:', error);
+          const message = error instanceof Error ? error.message : 'Error parsing PDF file. Please try a different file.';
+          showAlert(message, 'error', undefined, isDarkMode);
+        }
+      }
+    };
+    input.click();
+  };
+
+  // Handle opening a Fountain screenplay file
+  // Parses .fountain tokens, splits on scene_heading, converts to XHTML sections
+  // Preserves token types via data-fountain attributes for round-trip export
+  const handleOpenFountain = async () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.fountain';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file) {
+        try {
+          const text = await file.text();
+          const { Fountain } = await import('fountain-js');
+          const fountain = new Fountain();
+          const result = fountain.parse(text, true);
+          const tokens = result.tokens || [];
+
+          // Strip any HTML tags that fountain-js may inject into token text
+          const stripHtml = (s: string): string => s.replace(/<[^>]*>/g, '');
+
+          // Extract title and author from title page tokens, and capture ALL title page fields
+          // fountain-js splits "Title: Foo" into token.type="title", token.text="Foo"
+          let title = file.name.replace(/\.fountain$/i, '');
+          let author = '';
+          const fountainTitlePage: Record<string, string> = {};
+          for (const token of tokens) {
+            if (token.is_title && token.text) {
+              const cleanText = stripHtml(token.text).trim();
+              if (token.type === 'title') {
+                title = cleanText;
+                fountainTitlePage['Title'] = cleanText;
+              } else if (token.type === 'author' || token.type === 'authors') {
+                author = cleanText;
+                fountainTitlePage['Author'] = cleanText;
+              } else if (token.type === 'credit') {
+                fountainTitlePage['Credit'] = cleanText;
+              } else if (token.type === 'source') {
+                fountainTitlePage['Source'] = cleanText;
+              } else if (token.type === 'notes') {
+                fountainTitlePage['Notes'] = cleanText;
+              } else if (token.type === 'draft_date') {
+                fountainTitlePage['Draft date'] = cleanText;
+              } else if (token.type === 'contact') {
+                fountainTitlePage['Contact'] = cleanText;
+              } else if (token.type === 'copyright') {
+                fountainTitlePage['Copyright'] = cleanText;
+              } else if (token.type === 'revision') {
+                fountainTitlePage['Revision'] = cleanText;
+              } else if (token.type) {
+                // Catch any other title page fields
+                const key = token.type.charAt(0).toUpperCase() + token.type.slice(1).replace(/_/g, ' ');
+                fountainTitlePage[key] = cleanText;
+              }
+            }
+          }
+
+          // Types to skip entirely (grouping markers with no text content)
+          const skipTypes = new Set(['spaces']);
+
+          // Paragraph type: carries fountain type info through to XHTML generation
+          interface FountainParagraph {
+            text: string;
+            fountainType: string;
+            depth?: number;
+            dual?: string;  // 'left' or 'right' for dual dialogue
+          }
+
+          // Detect natural Fountain scene headings (INT/EXT/EST/I./E. patterns)
+          // Forced headings (prefixed with . in source) need the . restored for round-trip
+          const isNaturalSceneHeading = /^(?:(?:int|i)\.?\/(?:ext|e)|int|ext|est)[. ]/i;
+
+          // Split tokens into chapters on scene_heading boundaries
+          const chapters: { title: string; paragraphs: FountainParagraph[] }[] = [];
+          let currentChapter: { title: string; paragraphs: FountainParagraph[] } | null = null;
+
+          // Track dual dialogue state
+          let inDualDialogue = false;
+          let dualSide: 'left' | 'right' = 'left';
+
+          for (const token of tokens) {
+            if (token.is_title) continue; // Skip title page tokens
+            if (skipTypes.has(token.type)) continue;
+
+            // Track dual dialogue grouping
+            if (token.type === 'dual_dialogue_begin') {
+              inDualDialogue = true;
+              dualSide = 'left';
+              continue;
+            }
+            if (token.type === 'dual_dialogue_end') {
+              inDualDialogue = false;
+              continue;
+            }
+            // dialogue_begin/dialogue_end: track which side of dual dialogue
+            if (token.type === 'dialogue_begin') {
+              if (inDualDialogue && dualSide === 'left') {
+                // After first dialogue block ends, next one is right
+              }
+              continue;
+            }
+            if (token.type === 'dialogue_end') {
+              if (inDualDialogue) {
+                dualSide = 'right';
+              }
+              continue;
+            }
+
+            if (token.type === 'scene_heading') {
+              // Start a new chapter
+              const headingText = stripHtml(token.text || 'Untitled Scene');
+              currentChapter = { title: headingText, paragraphs: [] };
+              chapters.push(currentChapter);
+              // Restore . prefix for forced scene headings so they round-trip correctly
+              const prefix = isNaturalSceneHeading.test(headingText) ? '' : '.';
+              currentChapter.paragraphs.push({
+                text: prefix + headingText,
+                fountainType: 'scene_heading',
+              });
+            } else if (token.text !== undefined && token.text !== null) {
+              const cleaned = stripHtml(token.text).trim();
+              if (!cleaned) continue;
+              if (!currentChapter) {
+                // Content before first scene heading → "Preamble"
+                currentChapter = { title: 'Preamble', paragraphs: [] };
+                chapters.push(currentChapter);
+              }
+
+              // Build paragraph with fountain type info
+              const para: FountainParagraph = {
+                text: cleaned,
+                fountainType: token.type || 'action',
+              };
+
+              // Carry section depth if available
+              if (token.type === 'section' && token.depth) {
+                para.depth = token.depth;
+              }
+
+              // Mark dual dialogue characters
+              if (inDualDialogue && token.type === 'character') {
+                para.dual = dualSide;
+              }
+
+              currentChapter.paragraphs.push(para);
+            }
+          }
+
+          // If no chapters were created (no scene headings at all), make one from all content
+          if (chapters.length === 0) {
+            const allParas: FountainParagraph[] = [];
+            for (const t of tokens) {
+              if (t.is_title || skipTypes.has(t.type)) continue;
+              if (['dialogue_begin', 'dialogue_end', 'dual_dialogue_begin', 'dual_dialogue_end'].includes(t.type)) continue;
+              if (t.text) {
+                const cleaned = stripHtml(t.text).trim();
+                if (cleaned) {
+                  allParas.push({ text: cleaned, fountainType: t.type || 'action' });
+                }
+              }
+            }
+            if (allParas.length > 0) {
+              chapters.push({ title: 'Chapter 1', paragraphs: allParas });
+            }
+          }
+
+          // Helper to generate a <p> tag with data-fountain attributes
+          const fountainParagraphToXhtml = (para: FountainParagraph): string => {
+            let attrs = `data-fountain="${escapeHtmlForLayout(para.fountainType)}"`;
+            if (para.depth !== undefined) {
+              attrs += ` data-fountain-depth="${para.depth}"`;
+            }
+            if (para.dual) {
+              attrs += ` data-fountain-dual="${para.dual}"`;
+            }
+            return `<p ${attrs}>${escapeHtmlForLayout(para.text)}</p>`;
+          };
+
+          // Use pre-heading content (Preamble) as copyright if present
+          let copyrightXhtml: string;
+          if (chapters.length > 0 && chapters[0]?.title === 'Preamble') {
+            const preamble = chapters.shift()!;
+            copyrightXhtml = preamble.paragraphs
+              .map(p => fountainParagraphToXhtml(p))
+              .join('\n') || '<p></p>';
+          } else {
+            // No pre-heading content; generate default copyright
+            copyrightXhtml = `<p>Copyright &copy; ${new Date().getFullYear()} ${escapeHtmlForLayout(author || title)}</p>\n<p>All rights reserved.</p>`;
+          }
+
+          // Build sections array: Title Page + Copyright + content chapters
+          const sections = [
+            {
+              id: 'title-page',
+              title: 'Title Page',
+              xhtml: `<p>${escapeHtmlForLayout(title)}</p>\n<p>${escapeHtmlForLayout(author)}</p>`,
+            },
+            {
+              id: 'copyright',
+              title: 'Copyright',
+              xhtml: copyrightXhtml,
+            },
+            ...chapters.map((ch, i) => ({
+              id: `chapter-${i + 1}`,
+              title: ch.title,
+              xhtml: ch.paragraphs
+                .map(p => fountainParagraphToXhtml(p))
+                .join('\n') || '<p></p>',
+            })),
+          ];
+
+          // Clear and save
+          await clearWorkingCopy();
+          await saveFullWorkingCopy({
+            title,
+            author,
+            language: 'en',
+            coverImage: null,
+            sections,
+          });
+
+          // Save fountain title page fields to ManuscriptMeta
+          if (Object.keys(fountainTitlePage).length > 0) {
+            const manuscriptMeta = await loadManuscriptMeta();
+            if (manuscriptMeta) {
+              manuscriptMeta.fountainTitlePage = fountainTitlePage;
+              await saveManuscriptMeta(manuscriptMeta);
+            }
+          }
+
+          // Reload from IndexedDB to get normalized IDs
+          const saved = await loadFullWorkingCopy();
+          if (saved) {
+            const loadedEpub: ParsedEpub = {
+              title: saved.title,
+              author: saved.author,
+              language: saved.language,
+              coverImage: saved.coverImage,
+              sections: saved.sections
+                .filter((s) => s.type !== 'cover')
+                .map((s) => ({
+                  id: s.id,
+                  title: s.title,
+                  href: `${s.id}.xhtml`,
+                  xhtml: s.xhtml,
+                  type: s.type,
+  
+                  sceneCraftConfig: s.sceneCraftConfig,
+                })),
+            };
+            setEpub(loadedEpub);
+            setSelectedSectionId(loadedEpub.sections[0]?.id ?? null);
+          }
+
+          // Load metadata for Title Page form
+          const meta = await loadWorkingCopyMeta();
+          if (meta) {
+            setBookMeta(meta);
+          }
+
+          showAlert(`Loaded "${title}" with ${chapters.length} scenes from Fountain screenplay`, 'success', undefined, isDarkMode);
+        } catch (error) {
+          console.error('Error parsing Fountain file:', error);
+          showAlert('Error parsing Fountain file. Please try a different file.', 'error', undefined, isDarkMode);
+        }
+      }
+    };
+    input.click();
+  };
+
+  // Handle removing a section/chapter
+  const handleRemoveSection = async (sectionId: string) => {
+    if (!epub) return;
+    // Don't allow deletion of protected sections (Cover, Title Page, Copyright)
+    if ((PROTECTED_SECTION_IDS as readonly string[]).includes(sectionId)) return;
+
+    // Find the section to delete
+    const sectionToDelete = epub.sections.find(s => s.id === sectionId);
+    if (!sectionToDelete) return;
+
+    const idx = epub.sections.findIndex((s) => s.id === sectionId);
+    const newSections = epub.sections.filter((s) => s.id !== sectionId);
+
+    const updatedEpub = { ...epub, sections: newSections };
+    setEpub(updatedEpub);
+    // Select next section, or previous, but never a protected section
+    if (newSections.length > PROTECTED_SECTION_COUNT) {
+      // There are still non-protected sections — select the next one at same index,
+      // or the last non-protected section if we deleted the final one
+      const newIdx = Math.min(idx, newSections.length - 1);
+      const clampedIdx = Math.max(newIdx, PROTECTED_SECTION_COUNT);
+      const nextSection = newSections[clampedIdx];
+      setSelectedSectionId(nextSection?.id ?? null);
+    } else {
+      // Only protected sections remain — select nothing
+      setSelectedSectionId(null);
+    }
+    // Delete section from IndexedDB
+    await deleteSection(sectionId);
+    // Update meta with new section order
+    const meta = await loadWorkingCopyMeta();
+    if (meta) {
+      meta.sectionIds = meta.sectionIds.filter((id) => id !== sectionId);
+      await saveWorkingCopyMeta(meta);
+    }
+  };
+
+  // Handle creating a new blank manuscript
+  // XHTML-Native: Use xhtml for content
+  const handleNew = async () => {
+    // Clear existing working copy
+    await clearWorkingCopy();
+    const year = new Date().getFullYear();
+    // Create blank manuscript with typed sections
+    // First 2 sections (Title Page, Copyright) are protected - cannot be deleted or moved
+    // Note: Cover is handled via Menu > Cover, not as a section
+    // XHTML-Native: Use xhtml for content
+    const blank = {
+      title: 'Untitled',
+      author: 'Anonymous',
+      language: 'en',
+      coverImage: null,
+      sections: [
+        { id: 'title-page', title: 'Title Page', xhtml: '<h1>Untitled</h1>\n<p>by Anonymous</p>', type: 'title-page' as const },
+        { id: 'copyright', title: 'Copyright', xhtml: `<p>Copyright © ${year} by Anonymous</p>\n<p>All rights reserved.</p>\n<p>No part of this book may be reproduced in any form or by any electronic or mechanical means, including information storage and retrieval systems, without written permission from the author, except for the use of brief quotations in a book review.</p>`, type: 'copyright' as const },
+        { id: 'chapter-1', title: 'Chapter 1', xhtml: '<p></p>', type: 'chapter' as const },
+      ],
+    };
+    await saveFullWorkingCopy(blank);
+    // Reload from IndexedDB to get normalized IDs
+    const saved = await loadFullWorkingCopy();
+    if (saved) {
+      const newEpub: ParsedEpub = {
+        title: saved.title,
+        author: saved.author,
+        language: saved.language,
+        coverImage: saved.coverImage,
+        sections: saved.sections.map((s) => ({
+          id: s.id,
+          title: s.title,
+          href: `${s.id}.xhtml`,
+          xhtml: s.xhtml,
+          type: s.type,
+
+          sceneCraftConfig: s.sceneCraftConfig,
+        })),
+      };
+      setEpub(newEpub);
+      setSelectedSectionId(newEpub.sections[0]?.id ?? null);
+    }
+    // Load metadata for Title Page form
+    const meta = await loadWorkingCopyMeta();
+    if (meta) {
+      setBookMeta(meta);
+    }
+  };
+
+  // Helper to find the correct insertion index for a section type
+  const findSectionInsertIndex = (sections: Array<{ id: string; type?: ElementType }>, targetSection: number): number => {
+    // Find the last element of this section, or the correct insertion point
+    let lastIndexOfSection = -1;
+    let firstIndexAfterSection = sections.length;
+
+    for (let i = PROTECTED_SECTION_COUNT; i < sections.length; i++) {
+      const section = sections[i];
+      if (!section) continue;
+      const sectionType = section.type || 'section';
+      const sec = getSectionNumber(sectionType);
+      if (sec === targetSection) {
+        lastIndexOfSection = i;
+      } else if (sec > targetSection && !isFloatingType(sectionType)) {
+        firstIndexAfterSection = i;
+        break;
+      }
+    }
+
+    if (lastIndexOfSection >= 0) {
+      return lastIndexOfSection + 1; // After last element of section
+    }
+    return firstIndexAfterSection; // Before first element of next section
+  };
+
+  // Handle adding a new element (smart insertion based on element type)
+  const handleAddElement = async (elementType: ElementType) => {
+    if (!epub) return;
+
+    const meta = await loadWorkingCopyMeta();
+    if (!meta) return;
+
+    // Find next section number for ID - check ALL sources to avoid duplicates
+    // WorkingCopyMeta.sectionIds can become stale, so also check ManuscriptMeta and in-memory epub
+    const numbersFromMeta = meta.sectionIds.map(id => parseInt(id.split('-')[1] || '0') || 0);
+    const manuscriptMetaForId = await loadManuscriptMeta();
+    const numbersFromManuscript = manuscriptMetaForId
+      ? manuscriptMetaForId.sections.map(s => parseInt(s.id.split('-')[1] || '0') || 0)
+      : [];
+    const numbersFromEpub = epub.sections.map(s => parseInt(s.id.split('-')[1] || '0') || 0);
+    const nextNum = Math.max(0, ...numbersFromMeta, ...numbersFromManuscript, ...numbersFromEpub) + 1;
+    const newId = `section-${String(nextNum).padStart(3, '0')}`;
+
+    // Get default title for this element type
+    const defaultTitle = getDefaultTitle(elementType);
+
+    // Find insert position based on element type
+    let insertIndex: number;
+    let actualType = elementType;
+    const sectionNum = getSectionNumber(elementType);
+
+    if (sectionNum === 0) {
+      // Floating type (e.g., 'uncategorized'): insert after current selection
+      // and adopt the type of that area so it groups correctly
+      const currentIndex = selectedSectionId
+        ? epub.sections.findIndex(s => s.id === selectedSectionId)
+        : epub.sections.length - 1;
+      insertIndex = Math.max(currentIndex + 1, PROTECTED_SECTION_COUNT);
+
+      // Determine which area the current selection is in and adopt that type
+      const currentSection = epub.sections[Math.min(currentIndex, epub.sections.length - 1)];
+      const currentArea = currentSection ? getEffectiveSectionNumber(currentSection.type) : 4;
+      const areaTypeMap: Record<number, ElementType> = {
+        2: 'dedication',    // Front Matter
+        3: 'introduction',  // Introductory
+        4: 'chapter',       // Chapters
+        5: 'afterword',     // Back Matter
+        6: 'no-matter',     // No Matter
+      };
+      actualType = areaTypeMap[currentArea] || 'chapter';
+    } else {
+      // Section-specific type: insert at end of its section
+      insertIndex = findSectionInsertIndex(epub.sections, sectionNum);
+    }
+
+    // Create new element with appropriate defaults
+    // XHTML-Native: Use xhtml for content
+    const newSection = {
+      id: newId,
+      title: defaultTitle,
+      href: `${newId}.xhtml`,
+      xhtml: '<p></p>',
+      type: actualType,
+    };
+
+    // Save to IndexedDB
+    // XHTML-Native: Use xhtml for content
+    await saveSection({ id: newId, title: newSection.title, xhtml: '<p></p>', type: actualType });
+
+    // Insert into sectionIds at correct position
+    meta.sectionIds.splice(insertIndex, 0, newId);
+    await saveWorkingCopyMeta(meta);
+
+    // Update UI state - insert at correct position then reorder to match visual grouping
+    const newSections = [...epub.sections];
+    newSections.splice(insertIndex, 0, newSection);
+    const reorderedSections = reorderSectionsByVisualGroup(newSections);
+
+    // Update meta.sectionIds to match reordered sections
+    meta.sectionIds = reorderedSections.map(s => s.id);
+    await saveWorkingCopyMeta(meta);
+
+    // Sync ManuscriptMeta.sections order to persist across reloads
+    const manuscriptMeta = await loadManuscriptMeta();
+    if (manuscriptMeta) {
+      manuscriptMeta.sections = reorderedSections.map(s => ({
+        id: s.id,
+        title: s.title,
+        type: (s.type || 'chapter') as ElementType,
+
+        sceneCraftConfig: s.sceneCraftConfig,
+      }));
+      await saveManuscriptMeta(manuscriptMeta);
+    }
+
+    setEpub({
+      ...epub,
+      sections: reorderedSections,
+    });
+    setSelectedSectionId(newId);
+    setHasUnsavedChanges(false);
+    setPendingXhtml('');
+  };
+
+  // Handle moving a section up (swap with previous)
+  const handleMoveUp = async (sectionId: string) => {
+    if (!epub) return;
+    const idx = epub.sections.findIndex(s => s.id === sectionId);
+    if (idx <= 0) return; // Can't move up if first or not found
+    // Can't move if in protected zone or would enter protected zone
+    if (idx <= PROTECTED_SECTION_COUNT) return;
+
+    const currentSection = epub.sections[idx];
+    if (!currentSection) return;
+    const targetIdx = idx - 1;
+
+    // Can't move into Required area (indices 0, 1, 2)
+    if (targetIdx < PROTECTED_SECTION_COUNT) return;
+
+    // Section boundary check using effective section numbers
+    // This treats 'section' and undefined as 'chapter' so they can move together
+    const currentEffectiveSection = getEffectiveSectionNumber(currentSection.type);
+    const targetSection = epub.sections[targetIdx];
+    if (!targetSection) return;
+    const targetEffectiveSection = getEffectiveSectionNumber(targetSection.type);
+
+    // Block move if crossing into a different effective section
+    if (currentEffectiveSection !== targetEffectiveSection) {
+      return; // Can't cross section boundary
+    }
+
+    // Swap in sections array using splice (removes and returns element, then inserts)
+    const newSections = [...epub.sections];
+    const removed = newSections.splice(idx, 1)[0];
+    if (!removed) return;
+    newSections.splice(idx - 1, 0, removed);
+
+    // Update UI state
+    setEpub({ ...epub, sections: newSections });
+
+    // Persist to IndexedDB (working_copy_meta.json)
+    const meta = await loadWorkingCopyMeta();
+    if (meta) {
+      const metaIdx = meta.sectionIds.indexOf(sectionId);
+      if (metaIdx > 0) {
+        const removedId = meta.sectionIds.splice(metaIdx, 1)[0];
+        if (removedId) {
+          meta.sectionIds.splice(metaIdx - 1, 0, removedId);
+          await saveWorkingCopyMeta(meta);
+        }
+      }
+    }
+
+    // Also sync ManuscriptMeta.sections order (meta.json) so loadFullWorkingCopy() gets correct order
+    const manuscriptMeta = await loadManuscriptMeta();
+    if (manuscriptMeta) {
+      const mIdx = manuscriptMeta.sections.findIndex(s => s.id === sectionId);
+      if (mIdx > 0) {
+        const removedMeta = manuscriptMeta.sections.splice(mIdx, 1)[0];
+        if (removedMeta) {
+          manuscriptMeta.sections.splice(mIdx - 1, 0, removedMeta);
+          await saveManuscriptMeta(manuscriptMeta);
+        }
+      }
+    }
+  };
+
+  // Handle moving a section down (swap with next)
+  const handleMoveDown = async (sectionId: string) => {
+    if (!epub) return;
+    const idx = epub.sections.findIndex(s => s.id === sectionId);
+    if (idx < 0 || idx >= epub.sections.length - 1) return; // Can't move down if last or not found
+    // Can't move if in protected zone
+    if (idx < PROTECTED_SECTION_COUNT) return;
+
+    const currentSection = epub.sections[idx];
+    if (!currentSection) return;
+    const targetIdx = idx + 1;
+
+    // Section boundary check using effective section numbers
+    // This treats 'section' and undefined as 'chapter' so they can move together
+    const currentEffectiveSection = getEffectiveSectionNumber(currentSection.type);
+    const targetSection = epub.sections[targetIdx];
+    if (!targetSection) return;
+    const targetEffectiveSection = getEffectiveSectionNumber(targetSection.type);
+
+    // Block move if crossing into a different effective section
+    if (currentEffectiveSection !== targetEffectiveSection) {
+      return; // Can't cross section boundary
+    }
+
+    // Swap in sections array using splice (removes and returns element, then inserts)
+    const newSections = [...epub.sections];
+    const removed = newSections.splice(idx, 1)[0];
+    if (!removed) return;
+    newSections.splice(idx + 1, 0, removed);
+
+    // Update UI state
+    setEpub({ ...epub, sections: newSections });
+
+    // Persist to IndexedDB (working_copy_meta.json)
+    const meta = await loadWorkingCopyMeta();
+    if (meta) {
+      const metaIdx = meta.sectionIds.indexOf(sectionId);
+      if (metaIdx >= 0 && metaIdx < meta.sectionIds.length - 1) {
+        const removedId = meta.sectionIds.splice(metaIdx, 1)[0];
+        if (removedId) {
+          meta.sectionIds.splice(metaIdx + 1, 0, removedId);
+          await saveWorkingCopyMeta(meta);
+        }
+      }
+    }
+
+    // Also sync ManuscriptMeta.sections order (meta.json) so loadFullWorkingCopy() gets correct order
+    const manuscriptMeta = await loadManuscriptMeta();
+    if (manuscriptMeta) {
+      const mIdx = manuscriptMeta.sections.findIndex(s => s.id === sectionId);
+      if (mIdx >= 0 && mIdx < manuscriptMeta.sections.length - 1) {
+        const removedMeta = manuscriptMeta.sections.splice(mIdx, 1)[0];
+        if (removedMeta) {
+          manuscriptMeta.sections.splice(mIdx + 1, 0, removedMeta);
+          await saveManuscriptMeta(manuscriptMeta);
+        }
+      }
+    }
+  };
+
+  // Handle moving a section to a different area (Front Matter, Introductory, Chapters, Back Matter)
+  const handleMoveToArea = async (sectionId: string, area: number) => {
+    if (!epub) return;
+    const idx = epub.sections.findIndex(s => s.id === sectionId);
+    if (idx < 0) return;
+
+    // Can't move protected sections (first 3)
+    if (idx < PROTECTED_SECTION_COUNT) return;
+
+    // Map area number to type
+    const areaTypeMap: Record<number, ElementType> = {
+      2: 'dedication',    // Front Matter
+      3: 'introduction',  // Introductory
+      4: 'chapter',       // Chapters
+      5: 'afterword',     // Back Matter
+      6: 'no-matter',     // No Matter
+    };
+
+    const newType = areaTypeMap[area];
+    if (!newType) return;
+
+    // Update section type (keep original title)
+    const section = epub.sections[idx];
+    if (!section) return;
+    const updatedSection = { ...section, type: newType };
+
+    // Update in epub state and reorder to match visual grouping
+    const newSections = [...epub.sections];
+    newSections[idx] = updatedSection;
+    const reorderedSections = reorderSectionsByVisualGroup(newSections);
+    setEpub({ ...epub, sections: reorderedSections });
+
+    // Persist section type to IndexedDB (preserve xhtml)
+    await saveSection({
+      id: sectionId,
+      title: updatedSection.title,
+      xhtml: updatedSection.xhtml || '<p></p>',
+      type: newType,
+    });
+
+    // Update meta.sectionIds to match reordered sections
+    const meta = await loadWorkingCopyMeta();
+    if (meta) {
+      meta.sectionIds = reorderedSections.map(s => s.id);
+      await saveWorkingCopyMeta(meta);
+    }
+
+    // Sync ManuscriptMeta.sections order to persist across reloads
+    const manuscriptMeta = await loadManuscriptMeta();
+    if (manuscriptMeta) {
+      manuscriptMeta.sections = reorderedSections.map(s => ({
+        id: s.id,
+        title: s.title,
+        type: (s.type || 'chapter') as ElementType,
+
+        sceneCraftConfig: s.sceneCraftConfig,
+      }));
+      await saveManuscriptMeta(manuscriptMeta);
+    }
+  };
+
+  // Handle cover image click - open file picker to change cover
+  const handleCoverClick = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file) {
+        try {
+          // Normalize filename to cover.{ext}
+          const ext = file.name.split('.').pop() || 'png';
+          const coverFilename = `cover.${ext}`;
+          // Delete old cover first
+          await deleteCoverImage();
+          // Save new cover to IndexedDB with normalized name
+          await saveCoverImage(file, coverFilename);
+          // Update metadata with new coverImageId
+          const meta = await loadWorkingCopyMeta();
+          if (meta) {
+            meta.coverImageId = coverFilename;
+            await saveWorkingCopyMeta(meta);
+          }
+          // Also update meta.json so loadCoverImage() finds the correct file
+          const newMeta = await loadManuscriptMeta();
+          if (newMeta) {
+            newMeta.coverImageId = coverFilename;
+            await saveManuscriptMeta(newMeta);
+          }
+          // Update in-memory epub state
+          if (epub) {
+            setEpub({ ...epub, coverImage: file });
+          }
+        } catch (error) {
+          console.error('Error saving cover image:', error);
+          alert('Error saving cover image. Please try again.');
+        }
+      }
+    };
+    input.click();
+  };
+
+  // Handle content changes from EditorPanel
+  // XHTML-Native: Now receives XHTML directly
+  const handleContentChange = (hasChanges: boolean, xhtml: string) => {
+    setHasUnsavedChanges(hasChanges);
+    setPendingXhtml(xhtml);
+  };
+
+  // Handle title changes from EditorPanel
+  const handleTitleChange = (newTitle: string) => {
+    setPendingTitle(newTitle);
+    setHasUnsavedChanges(true);
+  };
+
+  // Handle book metadata save from TitlePagePanel
+  const handleSaveBookMetadata = async (metadata: BookMetadata) => {
+    if (!epub) return;
+
+    // Update epub state (title/author for sidebar display)
+    setEpub({
+      ...epub,
+      title: metadata.title,
+      author: metadata.author,
+    });
+
+    // Save to IndexedDB and update local bookMeta state
+    const meta = await loadWorkingCopyMeta();
+    if (meta) {
+      const updatedMeta = {
+        ...meta,
+        title: metadata.title,
+        author: metadata.author,
+        subtitle: metadata.subtitle,
+        publisher: metadata.publisher,
+      };
+      await saveWorkingCopyMeta(updatedMeta);
+      setBookMeta(updatedMeta);
+    }
+
+    // Also update meta.json to keep both files in sync
+    // This prevents stale data when loadFullWorkingCopy() reads from meta.json
+    const manuscriptMeta = await loadManuscriptMeta();
+    if (manuscriptMeta) {
+      manuscriptMeta.title = metadata.title;
+      manuscriptMeta.author = metadata.author;
+      manuscriptMeta.subtitle = metadata.subtitle;
+      manuscriptMeta.publisher = metadata.publisher;
+      await saveManuscriptMeta(manuscriptMeta);
+    }
+  };
+
+  // Handle Save button - generate EPUB and add to library
+  const handleSave = async () => {
+    // 1. Save any pending editor changes first
+    if (hasUnsavedChanges && selectedSection && selectedSectionId) {
+      await saveCurrentSection();
+    }
+
+    // 2. Load full working copy (now includes any just-saved changes)
+    const workingCopy = await loadFullWorkingCopy();
+    if (!workingCopy) {
+      showAlert('No manuscript to save. Please create or load a manuscript first.', 'warning', undefined, isDarkMode);
+      return;
+    }
+
+    // 3. Load metadata
+    const meta = await loadWorkingCopyMeta();
+    if (!meta) {
+      showAlert('Could not load manuscript metadata.', 'error', undefined, isDarkMode);
+      return;
+    }
+
+    // 4. Load cover image (may be null)
+    const coverBlob = await loadCoverImage();
+
+    // 5. Use in-memory epub.sections order (the sidebar order) to reorder loaded sections
+    // This ensures EPUB matches exactly what the user sees, regardless of meta.json order
+    const sectionOrder = epub!.sections.map(s => s.id);
+    const orderedSections = sectionOrder
+      .map(id => workingCopy.sections.find(s => s.id === id))
+      .filter((s): s is WorkingCopySection => s !== undefined);
+
+    try {
+      // 6. Fetch images fresh from IndexedDB to ensure we have any newly uploaded images
+      const freshImages = await getAllManuscriptImages();
+
+      // 7. Generate EPUB (include inline images and audio files)
+      const freshAudios = await getAllManuscriptAudios();
+      const epubData = await generateEpubFromWorkingCopy(
+        meta,
+        orderedSections,
+        coverBlob,
+        freshImages,
+        freshAudios
+      );
+
+      // 6. Create File object
+      const safeTitle = (meta.title || 'manuscript').replace(/[^a-zA-Z0-9\s-]/g, '').trim();
+      const filename = `${safeTitle}.epub`;
+      const blob = new Blob([epubData as BlobPart], { type: 'application/epub+zip' });
+      const file = new File([blob], filename, { type: 'application/epub+zip' });
+
+      // 7. Import to e-reader library (replace existing, don't duplicate)
+      const appService = await environmentConfig.getAppService();
+      const books = await appService.loadLibraryBooks();
+
+      // Delete existing working copy book if we saved before
+      if (meta.libraryBookHash) {
+        const existingBook = books.find(b => b.hash === meta.libraryBookHash);
+        if (existingBook) {
+          await appService.deleteBook(existingBook, 'local');
+          // Remove from books array
+          const idx = books.indexOf(existingBook);
+          if (idx > -1) books.splice(idx, 1);
+        }
+      }
+
+      // Import new version
+      const book = await appService.importBook(file, books);
+      if (book) {
+        // Store new hash in meta for next save
+        meta.libraryBookHash = book.hash;
+        await saveWorkingCopyMeta(meta);
+        await appService.saveLibraryBooks(books);
+
+        // Tell Library tab to reload (if open)
+        const channel = new BroadcastChannel('everythingebooks-library');
+        channel.postMessage('reload');
+        channel.close();
+
+        await Swal.fire({
+          title: 'Saved!',
+          html: `"${meta.title}" saved to Library.<br>You can read it in the Library.`,
+          icon: 'success',
+          confirmButtonText: 'OK',
+          confirmButtonColor: '#28a745',
+          background: isDarkMode ? '#222' : '#fff',
+          color: isDarkMode ? '#fff' : '#333',
+          customClass: {
+            container: 'swal-above-modal'
+          }
+        });
+      } else {
+        showAlert('EPUB was generated but could not be added to library.', 'error', undefined, isDarkMode);
+      }
+    } catch (error) {
+      console.error('Error saving manuscript:', error);
+      showAlert(`Error saving manuscript: ${(error as Error).message}`, 'error', undefined, isDarkMode);
+    }
+  };
+
+
+  // Handle DOCX export - download manuscript for Vellum/Atticus import
+  const handleDocxExport = async () => {
+    // Save pending changes first
+    if (hasUnsavedChanges && selectedSection && selectedSectionId) {
+      await saveCurrentSection();
+    }
+
+    try {
+      const blob = await exportWorkspaceToDocx();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${epub?.title || 'manuscript'}.docx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showAlert('Downloaded DOCX!', 'success', undefined, isDarkMode);
+    } catch (error) {
+      console.error('DOCX export failed:', error);
+      showAlert('DOCX export failed', 'error', undefined, isDarkMode);
+    }
+  };
+
+  // Handle Fountain export - download screenplay format
+  const handleFountainExport = async () => {
+    // Save pending changes first
+    if (hasUnsavedChanges && selectedSection && selectedSectionId) {
+      await saveCurrentSection();
+    }
+
+    try {
+      const blob = await exportWorkspaceToFountain();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${epub?.title || 'screenplay'}.fountain`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showAlert('Downloaded Fountain!\nThe .fountain file downloaded will need clean up and editing in a proper screenplay editor.', 'success', undefined, isDarkMode);
+    } catch (error) {
+      console.error('Fountain export failed:', error);
+      showAlert('Fountain export failed', 'error', undefined, isDarkMode);
+    }
+  };
+
+  // Handle section selection - user must explicitly Save before switching
+  const handleSelectSection = async (sectionId: string) => {
+    if (sectionId === selectedSectionId) return; // Same section, no action needed
+
+    // Reset state for new section
+    setHasUnsavedChanges(false);
+    setPendingXhtml('');
+    setPendingTitle('');
+    setSelectedSectionId(sectionId);
+  };
+
+  // Navigate to previous section (reuses handleSelectSection for unsaved changes check)
+  const handlePrevSection = () => {
+    if (!epub || currentSectionIndex <= 0) return;
+    const prevSection = epub.sections[currentSectionIndex - 1];
+    if (prevSection) handleSelectSection(prevSection.id);
+  };
+
+  // Navigate to next section (reuses handleSelectSection for unsaved changes check)
+  const handleNextSection = () => {
+    if (!epub || currentSectionIndex >= epub.sections.length - 1) return;
+    const nextSection = epub.sections[currentSectionIndex + 1];
+    if (nextSection) handleSelectSection(nextSection.id);
+  };
+
+  // Save current section to IndexedDB
+  // XHTML-Native: Now saves xhtml directly
+  const saveCurrentSection = async () => {
+    if (!selectedSection || !selectedSectionId) return;
+
+    // Use pending title if changed, otherwise original
+    const titleToSave = pendingTitle || selectedSection.title;
+    // XHTML-Native: Use pending xhtml if set, otherwise original
+    const xhtmlToSave = pendingXhtml || selectedSection.xhtml;
+
+    // Save to IndexedDB (XHTML is single source of truth)
+    await saveSection({
+      id: selectedSectionId,
+      title: titleToSave,
+      xhtml: xhtmlToSave,
+      type: selectedSection.type || 'section',
+    });
+
+    // Update in-memory epub state so sidebar and subsequent comparisons work
+    if (epub) {
+      const updatedSections = epub.sections.map((s) =>
+        s.id === selectedSectionId
+          ? { ...s, title: titleToSave, xhtml: xhtmlToSave }
+          : s
+      );
+      setEpub({ ...epub, sections: updatedSections });
+    }
+
+    // Reset unsaved state
+    setHasUnsavedChanges(false);
+    setPendingXhtml('');
+    setPendingTitle('');
+  };
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100vh',
+        backgroundColor: theme.bg,
+        color: theme.text,
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+      }}
+    >
+      {/* Header */}
+      <AuthorsHeader
+        theme={theme}
+        isDarkMode={isDarkMode}
+        onThemeToggle={onThemeToggle}
+        onAboutClick={onAboutClick}
+        onStorageClick={onStorageClick}
+        onFilesClick={onFilesClick}
+        onEditorClick={onEditorClick}
+        onNewClick={handleNew}
+        onOpenClick={handleOpenEpub}
+        onOpenDocxClick={handleOpenDocx}
+        onOpenPdfClick={handleOpenPdf}
+        onOpenFountainClick={handleOpenFountain}
+        onLoadFromLibraryClick={onLoadFromLibraryClick}
+        onSaveClick={handleSave}
+        onSearchClose={handleSearchClose}
+        onCoverClick={onCoverClick}
+        onDocxExportClick={handleDocxExport}
+        onFountainExportClick={handleFountainExport}
+        onXrayClick={onXrayClick}
+        hasUnsavedChanges={hasUnsavedChanges}
+        trafficLightStatus={trafficLightStatus}
+        trafficTooltip={trafficTooltip}
+      />
+
+      {/* Main content: 2-panel layout */}
+      <div
+        style={{
+          display: 'flex',
+          flex: 1,
+          overflow: 'hidden',
+        }}
+      >
+        {/* Left sidebar - Chapter navigation (collapsible) */}
+        {sidebarVisible && (
+          <ChapterSidebar
+            theme={theme}
+            isDarkMode={isDarkMode}
+            bookTitle={epub?.title ?? 'No Book Loaded'}
+            authorName={epub?.author ?? ''}
+            coverImage={epub?.coverImage ?? null}
+            sections={epub?.sections.map((s) => ({ id: s.id, title: s.title, type: s.type })) ?? []}
+            selectedSectionId={selectedSectionId}
+            totalWordCount={totalWordCount}
+            onSelectSection={handleSelectSection}
+            onRemoveSection={handleRemoveSection}
+            onCoverClick={handleCoverClick}
+            onAddElement={handleAddElement}
+            onMoveUp={handleMoveUp}
+            onMoveDown={handleMoveDown}
+            onMoveToArea={handleMoveToArea}
+            isLastChapter={(() => {
+              if (!selectedSectionId || !epub) return false;
+              const selectedIdx = epub.sections.findIndex(s => s.id === selectedSectionId);
+              if (selectedIdx < PROTECTED_SECTION_COUNT) return false;
+              const selectedSection = epub.sections[selectedIdx];
+              // Check if selected is effectively a chapter (section 4)
+              if (getEffectiveSectionNumber(selectedSection?.type) !== 4) return false;
+              // Count all items in the Chapters area
+              const chapterCount = epub.sections.filter((s, index) =>
+                index >= PROTECTED_SECTION_COUNT && getEffectiveSectionNumber(s.type) === 4
+              ).length;
+              return chapterCount <= 1;
+            })()}
+            existingTypes={epub?.sections.map(s => s.type).filter((t): t is ElementType => !!t) ?? []}
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            onSearchSubmit={handleSearchSubmit}
+            onSearchClose={handleSearchClose}
+            searchResultCount={searchResults.length}
+            sectionsWithMatches={sectionsWithMatches}
+          />
+        )}
+
+        {/* Right panel - Editor or Title Page Form */}
+        {isTitlePage ? (
+          <TitlePagePanel
+            theme={theme}
+            isDarkMode={isDarkMode}
+            onToggleSidebar={onToggleSidebar}
+            initialMetadata={{
+              title: bookMeta?.title ?? epub?.title ?? '',
+              subtitle: bookMeta?.subtitle ?? '',
+              author: bookMeta?.author ?? epub?.author ?? '',
+              publisher: bookMeta?.publisher ?? '',
+            }}
+            onSave={handleSaveBookMetadata}
+          />
+        ) : (
+          <EditorPanel
+            ref={editorPanelRef}
+            theme={theme}
+            isDarkMode={isDarkMode}
+            onToggleSidebar={onToggleSidebar}
+            onSave={saveCurrentSection}
+            sectionId={selectedSectionId || undefined}
+            sectionTitle={selectedSection?.title ?? ''}
+            sectionXhtml={selectedSection?.xhtml ?? '<p></p>'}
+            sectionType={selectedSection?.type}
+            sectionWordCount={sectionWordCount}
+            onContentChange={handleContentChange}
+            onTitleChange={handleTitleChange}
+            onPrevSection={handlePrevSection}
+            onNextSection={handleNextSection}
+            hasPrevSection={hasPrevSection}
+            hasNextSection={hasNextSection}
+            // Search panel props
+            searchActive={searchActive}
+            searchResults={searchResults}
+            currentSearchIndex={currentSearchIndex}
+            searchQuery={searchQuery}
+            onSearchNavigate={handleSearchNavigate}
+            onSearchPrev={handleSearchPrev}
+            onSearchNext={handleSearchNext}
+            onSearchClose={handleSearchClose}
+            // Image picker props
+            images={imageUrls}
+            onImageUpload={handleImageUpload}
+            onImageDelete={handleImageDelete}
+            // Audio picker props
+            audios={manuscriptAudios.map(a => ({ filename: a.filename, size: a.blob.size }))}
+            onAudioUpload={handleAudioUpload}
+            onAudioDelete={handleAudioDelete}
+            // SceneCraft props
+            sceneCraftConfig={selectedSection?.sceneCraftConfig}
+            onSceneCraftConfigChange={handleSceneCraftConfigChange}
+            getImageUrl={getImageUrlForSceneCraft}
+            getAudioUrl={getAudioUrl}
+          />
+        )}
+
+      </div>
+    </div>
+  );
+}

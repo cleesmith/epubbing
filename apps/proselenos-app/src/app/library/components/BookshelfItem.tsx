@@ -1,0 +1,422 @@
+import clsx from 'clsx';
+import { useCallback, useRef, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { navigateToLibrary } from '@/utils/nav';
+import { useEnv } from '@/context/EnvContext';
+import { useLibraryStore } from '@/store/libraryStore';
+import { useSettingsStore } from '@/store/settingsStore';
+import { useThemeStore } from '@/store/themeStore';
+import { parseEpub } from '@/services/epubService';
+import { saveLibraryManuscript } from '@/services/libraryManuscriptService';
+import Swal from 'sweetalert2';
+import JSZip from 'jszip';
+import { getLocalBookFilename } from '@/utils/book';
+import { stripEpubForBookseller } from '@/lib/bookseller-strip';
+import { useTranslation } from '@/hooks/useTranslation';
+import { useLongPress } from '@/hooks/useLongPress';
+import { Menu, MenuItem, revealItemInDir } from '@/utils/desktop-stubs';
+import { eventDispatcher } from '@/utils/event';
+import { getOSPlatform } from '@/utils/misc';
+import { throttle } from '@/utils/throttle';
+import { LibraryCoverFitType, LibraryViewModeType } from '@/types/settings';
+import { BOOK_UNGROUPED_ID, BOOK_UNGROUPED_NAME } from '@/services/constants';
+import { FILE_REVEAL_LABELS, FILE_REVEAL_PLATFORMS } from '@/utils/os';
+import { Book, BooksGroup } from '@/types/book';
+import BookItem from './BookItem';
+import GroupItem from './GroupItem';
+
+export type BookshelfItem = Book | BooksGroup;
+
+const BOOKSELLER_TEMP_HASH = '__bookseller_temp__';
+
+export const generateBookshelfItems = (books: Book[]): (Book | BooksGroup)[] => {
+  const groups: BooksGroup[] = books.reduce((acc: BooksGroup[], book: Book) => {
+    if (book.deletedAt) return acc;
+    if (book.hash === BOOKSELLER_TEMP_HASH) return acc;
+    book.groupId = book.groupId || BOOK_UNGROUPED_ID;
+    book.groupName = book.groupName || BOOK_UNGROUPED_NAME;
+    const groupIndex = acc.findIndex((group) => group.id === book.groupId);
+    const booksGroup = acc[acc.findIndex((group) => group.id === book.groupId)];
+    if (booksGroup) {
+      booksGroup.books.push(book);
+      booksGroup.updatedAt = Math.max(acc[groupIndex]!.updatedAt, book.updatedAt);
+    } else {
+      acc.push({
+        id: book.groupId,
+        name: book.groupName,
+        books: [book],
+        updatedAt: book.updatedAt,
+      });
+    }
+    return acc;
+  }, []);
+  groups.forEach((group) => {
+    group.books.sort((a, b) => b.updatedAt - a.updatedAt);
+  });
+  const ungroupedBooks: Book[] =
+    groups.find((group) => group.name === BOOK_UNGROUPED_NAME)?.books || [];
+  const groupedBooks: BooksGroup[] = groups.filter((group) => group.name !== BOOK_UNGROUPED_NAME);
+  return [...ungroupedBooks, ...groupedBooks].sort((a, b) => b.updatedAt - a.updatedAt);
+};
+
+interface BookshelfItemProps {
+  mode: LibraryViewModeType;
+  item: BookshelfItem;
+  coverFit: LibraryCoverFitType;
+  isSelectMode: boolean;
+  itemSelected: boolean;
+  transferProgress: number | null;
+  setLoading: React.Dispatch<React.SetStateAction<boolean>>;
+  toggleSelection: (hash: string) => void;
+  handleBookDownload: (book: Book) => Promise<boolean>;
+  handleBookDelete: (book: Book, syncBooks?: boolean) => Promise<boolean>;
+  handleSetSelectMode: (selectMode: boolean) => void;
+  handleShowDetailsBook: (book: Book) => void;
+  onOpenReader?: (bookHash: string) => void;
+}
+
+const BookshelfItem: React.FC<BookshelfItemProps> = ({
+  mode,
+  item,
+  coverFit,
+  isSelectMode,
+  itemSelected,
+  transferProgress,
+  setLoading,
+  toggleSelection,
+  handleBookDownload,
+  handleSetSelectMode,
+  handleShowDetailsBook,
+  onOpenReader,
+}) => {
+  const _ = useTranslation();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { envConfig, appService } = useEnv();
+  const { settings } = useSettingsStore();
+  const { updateBook } = useLibraryStore();
+  const { isDarkMode } = useThemeStore();
+
+  const isOpening = useRef(false);
+  const [opening, setOpening] = useState(false);
+
+  const showBookDetailsModal = useCallback(async (book: Book) => {
+    if (await makeBookAvailable(book)) {
+      handleShowDetailsBook(book);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleReadBookseller = useCallback(async (book: Book) => {
+    if (!onOpenReader) return;
+    try {
+      const appService = await envConfig.getAppService();
+      const epubFile = await appService.openFile(getLocalBookFilename(book), 'Books');
+      const arrayBuffer = await epubFile.arrayBuffer();
+
+      const zip = await JSZip.loadAsync(arrayBuffer);
+      await stripEpubForBookseller(zip);
+
+      const blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/epub+zip' });
+      const tempFilePath = `${BOOKSELLER_TEMP_HASH}/bookseller.epub`;
+
+      // Write modified epub to IndexedDB
+      await appService.writeFile(tempFilePath, 'Books', new File([blob], 'bookseller.epub'));
+
+      // Upsert temp book in library store (in-memory only, not persisted)
+      const { library } = useLibraryStore.getState();
+      const tempBook: Book = {
+        hash: BOOKSELLER_TEMP_HASH,
+        format: 'EPUB',
+        title: `${book.title} (Bookseller)`,
+        sourceTitle: 'bookseller',
+        author: book.author,
+        coverImageUrl: book.coverImageUrl,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      const filtered = library.filter(b => b.hash !== BOOKSELLER_TEMP_HASH);
+      useLibraryStore.setState({ library: [...filtered, tempBook] });
+
+      onOpenReader(BOOKSELLER_TEMP_HASH);
+    } catch (error) {
+      console.error('Failed to open bookseller epub:', error);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [envConfig, onOpenReader]);
+
+  const makeBookAvailable = async (book: Book) => {
+    if (book.uploadedAt && !book.downloadedAt) {
+      if (await appService?.isBookAvailable(book)) {
+        if (!book.downloadedAt || !book.coverDownloadedAt) {
+          book.downloadedAt = Date.now();
+          book.coverDownloadedAt = Date.now();
+          await updateBook(envConfig, book);
+        }
+        return true;
+      }
+      let available = false;
+      const loadingTimeout = setTimeout(() => setLoading(true), 200);
+      try {
+        available = await handleBookDownload(book);
+        await updateBook(envConfig, book);
+      } finally {
+        if (loadingTimeout) clearTimeout(loadingTimeout);
+        setLoading(false);
+        return available;
+      }
+    }
+    return true;
+  };
+
+  const handleBookClick = useCallback(
+    async (book: Book) => {
+      if (isSelectMode) {
+        toggleSelection(book.hash);
+      } else {
+        if (isOpening.current) return;
+        const available = await makeBookAvailable(book);
+        if (!available) return;
+        isOpening.current = true;
+        setOpening(true);
+        try {
+          // Extract manuscript for enhanced reading (overwrite any previous)
+          const appService = await envConfig.getAppService();
+          const epubFile = await appService.openFile(getLocalBookFilename(book), 'Books');
+
+          // Show blocking "please wait" spinner during EPUB processing
+          Swal.fire({
+            title: 'Processing...',
+            text: 'Preparing enhanced HTML reading...',
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            showConfirmButton: false,
+            background: isDarkMode ? '#222' : '#fff',
+            color: isDarkMode ? '#fff' : '#333',
+            didOpen: () => { Swal.showLoading(); },
+          });
+
+          const parsed = await parseEpub(epubFile);
+          await saveLibraryManuscript(parsed);
+
+          Swal.close();
+          window.open('/reader/view/', '_blank');
+        } catch (error) {
+          console.error('Failed to open book as HTML:', error);
+          alert(`Failed to open book: ${(error as Error).message || 'Unknown error'}`);
+        } finally {
+          isOpening.current = false;
+          setOpening(false);
+        }
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [isSelectMode, envConfig, isDarkMode],
+  );
+
+  const handleGroupClick = useCallback(
+    (group: BooksGroup) => {
+      if (isSelectMode) {
+        toggleSelection(group.id);
+      } else {
+        const params = new URLSearchParams(searchParams?.toString());
+        params.set('group', group.id);
+        setTimeout(() => {
+          navigateToLibrary(router, `${params.toString()}`);
+        }, 0);
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [isSelectMode, searchParams],
+  );
+
+  const bookContextMenuHandler = async (book: Book) => {
+    if (!appService?.hasContextMenu) return;
+    const osPlatform = getOSPlatform();
+    const fileRevealLabel =
+      FILE_REVEAL_LABELS[osPlatform as FILE_REVEAL_PLATFORMS] || FILE_REVEAL_LABELS.default;
+    const selectBookMenuItem = await MenuItem.new({
+      text: itemSelected ? _('Deselect Book') : _('Select Book'),
+      action: async () => {
+        if (!isSelectMode) handleSetSelectMode(true);
+        toggleSelection(book.hash);
+      },
+    });
+    const showBookInFinderMenuItem = await MenuItem.new({
+      text: _(fileRevealLabel),
+      action: async () => {
+        const folder = `${settings.localBooksDir}/${book.hash}`;
+        revealItemInDir(folder);
+      },
+    });
+    const showBookDetailsMenuItem = await MenuItem.new({
+      text: _('Show Ebook Plus'),
+      action: async () => {
+        showBookDetailsModal(book);
+      },
+    });
+    const downloadBookMenuItem = await MenuItem.new({
+      text: _('Download Book'),
+      action: async () => {
+        handleBookDownload(book);
+      },
+    });
+    const deleteBookMenuItem = await MenuItem.new({
+      text: _('Delete'),
+      action: async () => {
+        eventDispatcher.dispatch('delete-books', { ids: [book.hash] });
+      },
+    });
+    const menu = await Menu.new();
+    menu.append(selectBookMenuItem);
+    menu.append(showBookDetailsMenuItem);
+    menu.append(showBookInFinderMenuItem);
+    if (book.uploadedAt && !book.downloadedAt) {
+      menu.append(downloadBookMenuItem);
+    }
+    menu.append(deleteBookMenuItem);
+    menu.popup();
+  };
+
+  const groupContextMenuHandler = async (group: BooksGroup) => {
+    if (!appService?.hasContextMenu) return;
+    const selectGroupMenuItem = await MenuItem.new({
+      text: itemSelected ? _('Deselect Group') : _('Select Group'),
+      action: async () => {
+        if (!isSelectMode) handleSetSelectMode(true);
+        toggleSelection(group.id);
+      },
+    });
+    const deleteGroupMenuItem = await MenuItem.new({
+      text: _('Delete'),
+      action: async () => {
+        eventDispatcher.dispatch('delete-books', { ids: [group.id] });
+      },
+    });
+    const menu = await Menu.new();
+    menu.append(selectGroupMenuItem);
+    menu.append(deleteGroupMenuItem);
+    menu.popup();
+  };
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const handleSelectItem = useCallback(
+    throttle(() => {
+      if (!isSelectMode) {
+        handleSetSelectMode(true);
+      }
+      if ('format' in item) {
+        toggleSelection((item as Book).hash);
+      } else {
+        toggleSelection((item as BooksGroup).id);
+      }
+    }, 100),
+    [isSelectMode, item],
+  );
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const handleOpenItem = useCallback(
+    throttle(() => {
+      if (isSelectMode) {
+        handleSelectItem();
+        return;
+      }
+      if ('format' in item) {
+        handleBookClick(item as Book);
+      } else {
+        handleGroupClick(item as BooksGroup);
+      }
+    }, 100),
+    [handleSelectItem, handleBookClick, handleGroupClick, item],
+  );
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const handleContextMenu = useCallback(
+    throttle(() => {
+      if ('format' in item) {
+        bookContextMenuHandler(item as Book);
+      } else {
+        groupContextMenuHandler(item as BooksGroup);
+      }
+    }, 100),
+    [itemSelected, settings.localBooksDir, item],
+  );
+
+  const { pressing, handlers } = useLongPress(
+    {
+      onLongPress: undefined, // disabled: was handleSelectItem
+
+      onTap: () => {
+        handleOpenItem();
+      },
+      onContextMenu: () => {
+        if (appService?.hasContextMenu) {
+          handleContextMenu();
+        } else if (appService?.isAndroidApp) {
+          // disabled: was handleSelectItem();
+        }
+      },
+    },
+    [isSelectMode, handleSelectItem, handleOpenItem, handleContextMenu],
+  );
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      handleOpenItem();
+    }
+    if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+      e.preventDefault();
+      handleContextMenu();
+    }
+  };
+
+  return (
+    <div className={clsx(mode === 'list' && 'sm:hover:bg-base-300/50 px-4 sm:px-6')}>
+      <div
+        className={clsx(
+          'visible-focus-inset-2 group',
+          mode === 'grid' && 'sm:hover:bg-base-300/50 flex h-full flex-col px-0 py-4 sm:px-4',
+          mode === 'list' && 'border-base-300 flex flex-col border-b py-2',
+          appService?.isMobileApp && 'no-context-menu',
+          pressing && mode === 'grid' ? 'scale-95' : 'scale-100',
+          opening && 'pointer-events-none cursor-wait opacity-60',
+        )}
+        role='button'
+        title={'format' in item ? 'Read enhanced HTML' : item.name}
+        tabIndex={0}
+        aria-label={'format' in item ? item.title : item.name}
+        style={{
+          transition: 'transform 0.2s',
+        }}
+        onKeyDown={handleKeyDown}
+        {...handlers}
+      >
+        <div className='flex h-full flex-col justify-end'>
+          {'format' in item ? (
+            <BookItem
+              mode={mode}
+              book={item}
+              coverFit={coverFit}
+              isSelectMode={isSelectMode}
+              bookSelected={itemSelected}
+              transferProgress={transferProgress}
+              showBookDetailsModal={showBookDetailsModal}
+              onReadBook={onOpenReader ? (book: Book) => onOpenReader(book.hash) : undefined}
+              onReadBookseller={onOpenReader ? handleReadBookseller : undefined}
+            />
+          ) : (
+            <GroupItem
+              mode={mode}
+              group={item}
+              isSelectMode={isSelectMode}
+              groupSelected={itemSelected}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default BookshelfItem;

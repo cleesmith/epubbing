@@ -1,0 +1,234 @@
+EPUBBING: TEST A STATIC BUILD LOCALLY
+
+These instructions use your cloned repository folder named epubbing.
+The internal app folder is still apps/proselenos-app.
+
+The goal is to build the files GitHub Pages would host, then test them
+on your Mac using a small static file server.
+
+You already removed .next and node_modules. That is fine: installing
+dependencies recreates node_modules, and building recreates .next.
+KEEP pnpm-lock.yaml so the existing dependency versions are retained.
+
+Run the Terminal commands below one step at a time.
+
+
+1. ENTER THE CLONED REPOSITORY AND RESTORE DEPENDENCIES
+
+Starting in the folder containing epubbing, run:
+
+cd epubbing
+
+If you are already inside the epubbing repository root, skip that command.
+This is the folder containing pnpm-lock.yaml, apps, and packages.
+
+Install the dependencies:
+
+pnpm install --frozen-lockfile
+
+If installation fails, stop and copy the error. Keep the lockfile.
+
+
+2. ENTER THE APP FOLDER AND BACK UP ITS CONFIGURATION
+
+From the epubbing repository root, run:
+
+cd apps/proselenos-app
+
+You are now in:
+
+epubbing/apps/proselenos-app
+
+Back up the configuration:
+
+cp -n next.config.mjs next.config.mjs.before-static-test
+
+The -n option preserves an existing backup if you already made one.
+
+
+3. ENABLE STATIC EXPORT
+
+Open the configuration in TextEdit:
+
+open -e next.config.mjs
+
+Find this line:
+
+const nextConfig = {
+
+Immediately below it, add:
+
+  output: 'export',
+  trailingSlash: true,
+  images: { unoptimized: true },
+
+The beginning of the configuration should now look like this:
+
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  output: 'export',
+  trailingSlash: true,
+  images: { unoptimized: true },
+  reactStrictMode: true,
+
+That is just the beginning of the file. Keep the rest of your existing
+configuration, including its webpack settings and export statement.
+If you already added these settings, do not add them a second time.
+If an output setting already says 'standalone', change it to 'export'.
+
+Save with Command+S.
+
+What the settings do:
+
+- output: 'export' creates the static HTML, CSS, JavaScript, and assets.
+- trailingSlash: true creates paths such as library/index.html, which
+  ordinary static hosting can serve directly.
+- images: { unoptimized: true } disables Next.js's server-based image
+  optimization so images can work on static hosting.
+
+
+4. BUILD THE APPLICATION
+
+Still inside epubbing/apps/proselenos-app, run:
+
+pnpm build
+
+A successful static build should create:
+
+epubbing/apps/proselenos-app/out/
+
+Check its contents and total size:
+
+ls out
+du -sh out
+
+If the build fails, stop here and paste the first substantive error,
+including the file or route it names. This will show what needs adapting
+for static export. Do not continue by serving an old out folder.
+
+
+5. SERVE THE EXPORTED FILES
+
+Still inside epubbing/apps/proselenos-app, run:
+
+pnpm dlx http-server out -a 127.0.0.1 -p 4174 -c-1
+
+The first run downloads the small test-server package. Internet access
+is needed for that download.
+
+This command serves the contents of out. The -c-1 option disables the
+server's HTTP caching; your app's service worker can still cache files.
+
+For this static test, use this command in place of pnpm start.
+Leave its Terminal window running while testing.
+
+Open this address in your browser:
+
+http://127.0.0.1:4174/
+
+
+6. TEST THE APP WHILE THE SERVER IS RUNNING
+
+Use your normal browser and a sample book or backup for testing.
+This local address has separate browser storage from your hosted app,
+so an initially empty library is expected.
+
+Try your normal workflow:
+
+- Import an EPUB and read it.
+- Open Authors, edit something, and save.
+- Reload and confirm the saved changes are present.
+- Export an EPUB and open it to check the result.
+- Export a DOCX and check it.
+- Export each of the three print PDF sizes: 5 x 8, 6 x 9, and 8.5 x 8.5.
+- Test Scenecraft, audio, and audiobook generation if you use them.
+- Directly open and refresh these routes:
+
+  http://127.0.0.1:4174/library/
+  http://127.0.0.1:4174/authors/
+
+Let loading finish, then reload once while the server is still running
+so the test includes a page controlled by the service worker.
+
+
+7. TEST OFFLINE REOPENING
+
+After visiting the relevant screens and allowing their loading to finish:
+
+1. Turn off Wi-Fi.
+2. In the server's Terminal window, press Ctrl+C to stop the server.
+3. Return to the browser and reload normally with Command+R.
+4. Close the tab.
+5. Open a new tab and enter the same address:
+
+   http://127.0.0.1:4174/
+
+6. Try Library, Authors, and the features you need offline.
+
+Stopping the local server matters. Turning off Wi-Fi alone still leaves
+127.0.0.1 accessible while the server is running.
+
+If the static app works with the server running but fails when reopening
+offline, investigate service-worker caching separately. Some files may
+only have been cached when their features were first used. Online-only
+services, such as external lookups, still need internet access.
+
+
+8. RESTART THE SAME TEST
+
+To resume serving the same build, run this again from the app folder:
+
+pnpm dlx http-server out -a 127.0.0.1 -p 4174 -c-1
+
+Return to:
+
+http://127.0.0.1:4174/
+
+Using the same browser profile, hostname, and port preserves access to
+that test's IndexedDB data.
+
+
+9. TEST A NEW BUILD AFTER CHANGES
+
+Stop the current server with Ctrl+C if it is running.
+Turn Wi-Fi back on if the build or package download needs internet.
+
+From epubbing/apps/proselenos-app, run:
+
+pnpm build
+
+After a successful build, use a fresh test port:
+
+pnpm dlx http-server out -a 127.0.0.1 -p 4175 -c-1
+
+Open:
+
+http://127.0.0.1:4175/
+
+Using a fresh port avoids the previous service worker's cached app.
+It also gives you separate, initially empty test storage.
+For subsequent fresh tests, use 4176, 4177, and so on, updating the URL
+to match. A fresh-port test does not test updates to an existing offline
+installation; that remains a separate check before deployment.
+
+You do not need to reinstall dependencies for every build unless your
+project's dependencies have changed.
+
+
+WHAT THIS TEST ESTABLISHES
+
+A successful build plus successful local feature tests provides evidence
+that the app can run from static files. Offline reopening additionally
+tests the service worker's cached version.
+
+An actual GitHub Pages test deployment is still needed before replacing
+your working Vercel deployment.
+
+
+REFERENCE DOCUMENTATION
+
+Next.js 15 static exports:
+https://nextjs.org/docs/15/app/guides/static-exports
+
+Static test server:
+https://github.com/http-party/http-server
