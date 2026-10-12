@@ -1,8 +1,15 @@
-// app/page.tsx
-// Root page - redirects to library (ereader) as the public landing page
+'use client';
 
-import { redirect } from 'next/navigation';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { appPath } from '@/utils/app-path';
 
 export default function HomePage() {
-  redirect('/library');
+  const router = useRouter();
+
+  useEffect(() => {
+    router.replace('/library/');
+  }, [router]);
+
+  return <a href={appPath('/library/')}>Open library</a>;
 }

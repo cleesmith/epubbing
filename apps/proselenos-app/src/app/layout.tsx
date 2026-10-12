@@ -1,3 +1,4 @@
+import { appPath } from '@/utils/app-path';
 // apps/proselenos-app/src/app/layout.tsx
 
 import * as React from 'react';
@@ -44,9 +45,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           name='viewport'
           content='minimum-scale=1, initial-scale=1, width=device-width, shrink-to-fit=no, user-scalable=no, viewport-fit=cover'
         />
-        <link rel='icon' href='/favicon.ico' />
-        <link rel="preload" href="/fonts/EBGaramond-Regular.ttf" as="font" type="font/ttf" crossOrigin="anonymous" />
-        <link rel="preload" href="/fonts/EBGaramond-Bold.ttf" as="font" type="font/ttf" crossOrigin="anonymous" />
+        <link rel='icon' href={appPath('/favicon.ico')} />
+        <link rel="preload" href={appPath('/fonts/EBGaramond-Regular.ttf')} as="font" type="font/ttf" crossOrigin="anonymous" />
+        <link rel="preload" href={appPath('/fonts/EBGaramond-Bold.ttf')} as="font" type="font/ttf" crossOrigin="anonymous" />
         <meta name='description' content={description} />
         <meta property='og:url' content={url} />
         <meta property='og:type' content='website' />

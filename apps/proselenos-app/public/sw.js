@@ -1,15 +1,19 @@
 // Auto-generated at build time - do not edit manually
-// Version: 1a12b870332
-const CACHE_VERSION = '1a12b870332';
-const CACHE_NAME = `everythingebooks-${CACHE_VERSION}`;
+// Version: 1a12c9f053f
+const CACHE_VERSION = '1a12c9f053f';
+const APP_ROOT = new URL('./', self.location.href);
+const CACHE_PREFIX = 'epubbing-' + encodeURIComponent(APP_ROOT.pathname) + '-';
+const CACHE_NAME = CACHE_PREFIX + CACHE_VERSION;
 
 const PRECACHE_URLS = [
-  '/library/',
-  '/authors/',
-  '/reader/view/',
-  '/ffmpeg/ffmpeg-core.js',
-  '/ffmpeg/ffmpeg-core.wasm',
-];
+  './',
+  'library/',
+  'reader/',
+  'authors/',
+  'reader/view/',
+  'ffmpeg/ffmpeg-core.js',
+  'ffmpeg/ffmpeg-core.wasm',
+].map((url) => new URL(url, APP_ROOT).href);
 
 // Install: pre-cache critical pages
 self.addEventListener('install', (event) => {
@@ -41,7 +45,7 @@ self.addEventListener('activate', (event) => {
       .then((cacheNames) => {
         return Promise.all(
           cacheNames
-            .filter((name) => name.startsWith('everythingebooks-') && name !== CACHE_NAME)
+            .filter((name) => name.startsWith(CACHE_PREFIX) && name !== CACHE_NAME)
             .map((name) => caches.delete(name))
         );
       })
@@ -55,7 +59,7 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
 
   // Only handle same-origin requests
-  if (url.origin !== self.location.origin) {
+  if (url.origin !== self.location.origin || !url.pathname.startsWith(APP_ROOT.pathname)) {
     return;
   }
 
@@ -65,7 +69,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Never cache the service worker script itself (defensive)
-  if (url.pathname === '/sw.js') {
+  if (url.href === self.location.href) {
     return;
   }
 
@@ -85,7 +89,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Static assets (/_next/static/*) - cache-first (hashed, safe to cache)
-  if (url.pathname.startsWith('/_next/static/')) {
+  if (url.pathname.startsWith(new URL('_next/static/', APP_ROOT).pathname)) {
     event.respondWith(
       caches.match(request).then((cached) => {
         if (cached) return cached;

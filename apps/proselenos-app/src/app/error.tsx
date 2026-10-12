@@ -1,5 +1,7 @@
 'use client';
 
+import { appPath } from '@/utils/app-path';
+
 import { useEffect, useState } from 'react';
 import { useEnv } from '@/context/EnvContext';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -25,7 +27,7 @@ export default function Error({ error, reset }: ErrorPageProps) {
   }, [appService, error]);
 
   const handleGoHome = () => {
-    window.location.href = '/library';
+    window.location.href = appPath('/library/');
   };
 
   const handleGoBack = () => {

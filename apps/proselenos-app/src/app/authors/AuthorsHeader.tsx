@@ -2,6 +2,8 @@
 
 'use client';
 
+import { appPath } from '@/utils/app-path';
+
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { PiFolderOpen, PiNotePencil, PiDatabase, PiInfo, PiFileDoc, /* PiFileText, */ PiImage, PiArrowRight } from 'react-icons/pi';
@@ -110,7 +112,7 @@ export default function AuthorsHeader({
       libraryWindowRef.current.focus();
     } else {
       // Open new Library tab and save reference (Authors can control tabs it opens)
-      libraryWindowRef.current = window.open('/library', '_blank');
+      libraryWindowRef.current = window.open(appPath('/library/'), '_blank');
     }
   };
 

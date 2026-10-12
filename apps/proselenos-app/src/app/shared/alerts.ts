@@ -1,3 +1,4 @@
+import { appPath } from '@/utils/app-path';
 // app/shared/alerts.ts
 
 // Shared alert utilities
@@ -253,6 +254,6 @@ export const showStickyErrorWithLogout = (
     document.head.removeChild(style);
     // Force logout route navigation
     // window.location.href = '/api/auth/signout?callbackUrl=/';
-    window.location.href = '/';
+    window.location.href = appPath('/');
   });
 };

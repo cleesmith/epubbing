@@ -1,5 +1,7 @@
 'use client';
 
+import { appPath } from '@/utils/app-path';
+
 import { useEffect } from 'react';
 
 export function ServiceWorkerRegistration() {
@@ -8,10 +10,10 @@ export function ServiceWorkerRegistration() {
     if (!('serviceWorker' in navigator)) return;
 
     navigator.serviceWorker
-      .register('/sw.js')
+      .register(appPath('/sw.js'))
       .then((registration) => {
         // Fetch sw.js to extract version from comment
-        fetch('/sw.js')
+        fetch(appPath('/sw.js'))
           .then((res) => res.text())
           .then((text) => {
             const match = text.match(/Version: ([a-f0-9]+)/);

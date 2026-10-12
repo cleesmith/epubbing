@@ -1,3 +1,4 @@
+import { appPath } from '@/utils/app-path';
 // apps/proselenos-app/src/lib/html-generator.ts
 
 // Generates a single-page readable HTML file from manuscript sections
@@ -1723,5 +1724,5 @@ export async function openHtmlInNewTab(html: string): Promise<void> {
     tx.onerror = () => reject(tx.error);
   });
   db.close();
-  window.open('/reader/view', '_blank');
+  window.open(appPath('/reader/view/'), '_blank');
 }

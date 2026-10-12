@@ -1,3 +1,4 @@
+import { appPath } from '@/utils/app-path';
 // apps/proselenos-app/src/lib/makeCoverSvg.ts
 
 // Uses fonts from /public/fonts/
@@ -132,8 +133,8 @@ export async function makeCoverSvg({
 }): Promise<string> {
   // Fetch fonts from /public/fonts/
   const [regBuf, boldBuf] = await Promise.all([
-    fetch("/fonts/EBGaramond-Regular.ttf").then((r) => r.arrayBuffer()),
-    fetch("/fonts/EBGaramond-Bold.ttf").then((r) => r.arrayBuffer()),
+    fetch(appPath("/fonts/EBGaramond-Regular.ttf")).then((r) => r.arrayBuffer()),
+    fetch(appPath("/fonts/EBGaramond-Bold.ttf")).then((r) => r.arrayBuffer()),
   ]);
 
   const regB64 = bytesToBase64(new Uint8Array(regBuf));
@@ -334,8 +335,8 @@ export async function makeTypographySvg({
 }): Promise<string> {
   // Fetch fonts from /public/fonts/
   const [regBuf, boldBuf] = await Promise.all([
-    fetch("/fonts/EBGaramond-Regular.ttf").then((r) => r.arrayBuffer()),
-    fetch("/fonts/EBGaramond-Bold.ttf").then((r) => r.arrayBuffer()),
+    fetch(appPath("/fonts/EBGaramond-Regular.ttf")).then((r) => r.arrayBuffer()),
+    fetch(appPath("/fonts/EBGaramond-Bold.ttf")).then((r) => r.arrayBuffer()),
   ]);
 
   const regB64 = bytesToBase64(new Uint8Array(regBuf));

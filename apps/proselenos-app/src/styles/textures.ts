@@ -1,3 +1,4 @@
+import { appPath } from '@/utils/app-path';
 import { getFilename } from '@/utils/path';
 import { md5Fingerprint } from '@/utils/md5';
 
@@ -22,14 +23,14 @@ export type CustomTextureInfo = Partial<BackgroundTexture> &
 
 export const PREDEFINED_TEXTURES: BackgroundTexture[] = [
   { id: 'none', name: 'None', url: '', loaded: true },
-  { id: 'concrete', name: 'Concrete', url: '/images/concrete-texture.png', loaded: true },
-  { id: 'paper', name: 'Paper', url: '/images/paper-texture.png', loaded: true },
-  { id: 'sand', name: 'Sand', url: '/images/sand-texture.jpg', loaded: true },
-  { id: 'parchment', name: 'Parchment', url: '/images/parchment-paper.jpg', loaded: true },
-  { id: 'scrapbook', name: 'Scrapbook', url: '/images/scrapbook-texture.jpg', loaded: true },
-  { id: 'leaves', name: 'Leaves', url: '/images/leaves-pattern.jpg', loaded: true },
-  { id: 'moon', name: 'Moon Sky', url: '/images/moon-sky.jpg', loaded: true },
-  { id: 'night-sky', name: 'Night Sky', url: '/images/night-sky.jpg', loaded: true },
+  { id: 'concrete', name: 'Concrete', url: appPath('/images/concrete-texture.png'), loaded: true },
+  { id: 'paper', name: 'Paper', url: appPath('/images/paper-texture.png'), loaded: true },
+  { id: 'sand', name: 'Sand', url: appPath('/images/sand-texture.jpg'), loaded: true },
+  { id: 'parchment', name: 'Parchment', url: appPath('/images/parchment-paper.jpg'), loaded: true },
+  { id: 'scrapbook', name: 'Scrapbook', url: appPath('/images/scrapbook-texture.jpg'), loaded: true },
+  { id: 'leaves', name: 'Leaves', url: appPath('/images/leaves-pattern.jpg'), loaded: true },
+  { id: 'moon', name: 'Moon Sky', url: appPath('/images/moon-sky.jpg'), loaded: true },
+  { id: 'night-sky', name: 'Night Sky', url: appPath('/images/night-sky.jpg'), loaded: true },
 ];
 
 export function getTextureName(path: string): string {

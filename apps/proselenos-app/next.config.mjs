@@ -1,5 +1,9 @@
 /** @type {import('next').NextConfig} */
+const basePath = process.env.EPUBBING_BASE_PATH ?? '';
+
 const nextConfig = {
+  basePath,
+  env: { NEXT_PUBLIC_BASE_PATH: basePath },
   output: 'export',
   trailingSlash: true,
   images: { unoptimized: true },

@@ -1,3 +1,4 @@
+import { appPath } from '@/utils/app-path';
 import clsx from 'clsx';
 import { useCallback, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -200,7 +201,7 @@ const BookshelfItem: React.FC<BookshelfItemProps> = ({
           await saveLibraryManuscript(parsed);
 
           Swal.close();
-          window.open('/reader/view/', '_blank');
+          window.open(appPath('/reader/view/'), '_blank');
         } catch (error) {
           console.error('Failed to open book as HTML:', error);
           alert(`Failed to open book: ${(error as Error).message || 'Unknown error'}`);

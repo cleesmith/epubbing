@@ -1,3 +1,4 @@
+import { appPath } from '@/utils/app-path';
 // apps/proselenos-app/src/components/audiobook/audiobookService.ts
 
 /**
@@ -318,8 +319,8 @@ export async function buildM4B(
 
   // Load single-thread core from local files (no SharedArrayBuffer, no COOP/COEP)
   await ffmpeg.load({
-    coreURL: '/ffmpeg/ffmpeg-core.js',
-    wasmURL: '/ffmpeg/ffmpeg-core.wasm',
+    coreURL: appPath('/ffmpeg/ffmpeg-core.js'),
+    wasmURL: appPath('/ffmpeg/ffmpeg-core.wasm'),
   });
 
   onProgress({ message: 'Writing audio files...', percent: 15 });

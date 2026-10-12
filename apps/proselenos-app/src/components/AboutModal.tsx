@@ -6,6 +6,8 @@
 
 'use client';
 
+import { appPath } from '@/utils/app-path';
+
 import { FaDiscord } from 'react-icons/fa';
 import { ThemeConfig } from '../app/shared/theme';
 import StyledSmallButton from '@/components/StyledSmallButton';
@@ -109,9 +111,9 @@ export default function AboutModal({
           <div style={{ marginBottom: '24px' }}>
             <p style={{ margin: '0 0 16px 0', color: isDarkMode ? '#9ca3af' : '#6b7280', fontSize: '14px' }}>
               For more information, see our
-              <a href="/privacy.html" target="_blank" rel="noopener noreferrer" style={{ color: '#4299e1' }}> Privacy Policy</a>
+              <a href={appPath('/privacy.html')} target="_blank" rel="noopener noreferrer" style={{ color: '#4299e1' }}> Privacy Policy</a>
               &nbsp;and&nbsp;
-              <a href="/terms.html" target="_blank" rel="noopener noreferrer" style={{ color: '#4299e1' }}> Terms of Service</a>.
+              <a href={appPath('/terms.html')} target="_blank" rel="noopener noreferrer" style={{ color: '#4299e1' }}> Terms of Service</a>.
             </p>
             <div style={{ borderTop: `1px solid ${isDarkMode ? '#333' : '#e5e7eb'}`, marginTop: '16px' }} />
           </div>
