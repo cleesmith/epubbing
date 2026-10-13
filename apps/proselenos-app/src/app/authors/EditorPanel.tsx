@@ -512,7 +512,7 @@ const EditorPanel = forwardRef<EditorPanelRef, EditorPanelProps>(function Editor
             Save
           </button>
           <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => changeWritingMode(false)} title="Return to the full editor (Esc)">
-            Full editor
+            Full editor (Esc)
           </button>
         </div>
       )}
