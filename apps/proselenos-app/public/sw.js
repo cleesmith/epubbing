@@ -1,6 +1,6 @@
 // Auto-generated at build time - do not edit manually
-// Version: 1a130049e30
-const CACHE_VERSION = '1a130049e30';
+// Version: 1a13510c20d
+const CACHE_VERSION = '1a13510c20d';
 const APP_ROOT = new URL('./', self.location.href);
 const CACHE_PREFIX = 'epubbing-' + encodeURIComponent(APP_ROOT.pathname) + '-';
 const CACHE_NAME = CACHE_PREFIX + CACHE_VERSION;

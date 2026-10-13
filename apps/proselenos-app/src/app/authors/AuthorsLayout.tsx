@@ -123,6 +123,12 @@ export default function AuthorsLayout({
   const [epub, setEpub] = useState<ParsedEpub | null>(null);
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
   const [bookMeta, setBookMeta] = useState<WorkingCopyMeta | null>(null);
+  const [writingMode, setWritingMode] = useState(false);
+
+  // A newly selected/reloaded chapter always opens with the full controls.
+  useEffect(() => {
+    setWritingMode(false);
+  }, [selectedSectionId, refreshKey]);
 
   // Unsaved changes tracking
   // XHTML-Native: Now tracks pendingXhtml instead of content/plateValue
@@ -1821,7 +1827,7 @@ export default function AuthorsLayout({
       }}
     >
       {/* Header */}
-      <AuthorsHeader
+      {!writingMode && <AuthorsHeader
         theme={theme}
         isDarkMode={isDarkMode}
         onThemeToggle={onThemeToggle}
@@ -1844,7 +1850,7 @@ export default function AuthorsLayout({
         hasUnsavedChanges={hasUnsavedChanges}
         trafficLightStatus={trafficLightStatus}
         trafficTooltip={trafficTooltip}
-      />
+      />}
 
       {/* Main content: 2-panel layout */}
       <div
@@ -1855,7 +1861,7 @@ export default function AuthorsLayout({
         }}
       >
         {/* Left sidebar - Chapter navigation (collapsible) */}
-        {sidebarVisible && (
+        {sidebarVisible && !writingMode && (
           <ChapterSidebar
             theme={theme}
             isDarkMode={isDarkMode}
@@ -1912,6 +1918,8 @@ export default function AuthorsLayout({
         ) : (
           <EditorPanel
             ref={editorPanelRef}
+            writingMode={writingMode}
+            onWritingModeChange={setWritingMode}
             theme={theme}
             isDarkMode={isDarkMode}
             onToggleSidebar={onToggleSidebar}

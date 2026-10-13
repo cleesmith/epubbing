@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { PlateElement, type PlateElementProps, useEditorRef } from 'platejs/react';
 import { useImageLibrary } from '@/contexts/ImageLibraryContext';
+import { useWritingMode } from '@/contexts/WritingModeContext';
 
 import { cn } from '@/lib/utils';
 
@@ -31,6 +32,7 @@ export function BlockquoteElement(props: PlateElementProps) {
 }
 
 function DialogueElement(props: PlateElementProps) {
+  const writingMode = useWritingMode();
   const element = props.element as any;
   const editor = useEditorRef();
   const speaker = (element.speaker || '') as string;
@@ -53,6 +55,9 @@ function DialogueElement(props: PlateElementProps) {
       className={cn('my-2 border-l-2 pl-4')}
     >
       <input
+        data-writing-label="speaker"
+        readOnly={writingMode}
+        tabIndex={writingMode ? -1 : undefined}
         type="text"
         value={localSpeaker}
         onChange={(e) => setLocalSpeaker(e.target.value)}
@@ -80,6 +85,7 @@ function DialogueElement(props: PlateElementProps) {
 }
 
 function StickyImageElement(props: PlateElementProps) {
+  const writingMode = useWritingMode();
   const element = props.element as any;
   const editor = useEditorRef();
   const ctx = useImageLibrary();
@@ -118,7 +124,7 @@ function StickyImageElement(props: PlateElementProps) {
   return (
     <PlateElement
       {...props}
-      className={cn('my-2 border border-dashed border-gray-400 rounded p-2')}
+      className={cn('rounded border', writingMode ? 'my-5 border-transparent p-0' : 'my-2 border-dashed border-gray-400 p-2')}
     >
       {/* CSS Grid ensures exactly 2 columns regardless of DOM changes */}
       <div
@@ -143,6 +149,9 @@ function StickyImageElement(props: PlateElementProps) {
           }}
         >
           <button
+            data-writing-image-picker="true"
+            disabled={writingMode}
+            tabIndex={writingMode ? -1 : undefined}
             type="button"
             onClick={handlePickImage}
             onMouseDown={(e) => e.stopPropagation()}
@@ -156,15 +165,19 @@ function StickyImageElement(props: PlateElementProps) {
               background: thumbnailUrl ? `url(${thumbnailUrl}) center/contain no-repeat` : '#f0f0f0',
               position: 'relative',
             }}
-            title="Click to choose image from library"
+            title={writingMode ? imageAlt : 'Click to choose image from library'}
+            aria-label={writingMode ? imageAlt || 'Chapter image' : 'Choose image from library'}
           >
             {!thumbnailUrl && (
               <span style={{ color: '#999', fontSize: '12px' }}>
-                Click to select image
+                {writingMode ? 'Image not selected' : 'Click to select image'}
               </span>
             )}
           </button>
           <input
+            data-writing-label="caption"
+            readOnly={writingMode}
+            tabIndex={writingMode ? -1 : undefined}
             type="text"
             value={localAlt}
             onChange={(e) => setLocalAlt(e.target.value)}

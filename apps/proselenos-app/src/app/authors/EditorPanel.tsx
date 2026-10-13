@@ -21,7 +21,12 @@ import { EditorContainer, Editor } from '@/components/plate-ui/editor';
 import { createEmptyValue, xhtmlToPlate, plateToXhtml } from '@/lib/plateXhtml';
 import type { Value } from 'platejs';
 import { FindReplacePlugin } from '@platejs/find-replace';
+import { MentionPlugin } from '@platejs/mention/react';
+import { EmojiPlugin } from '@platejs/emoji/react';
 import { cn } from '@/lib/utils';
+import { WritingModeContext } from '@/contexts/WritingModeContext';
+import { hasAudioMarkup, hasAudioNodes, hasSceneCraftAudio } from './writingMode';
+import writingStyles from './WritingMode.module.css';
 
 interface ImageInfo {
   filename: string;
@@ -34,6 +39,8 @@ interface AudioInfo {
 }
 
 interface EditorPanelProps {
+  writingMode?: boolean;
+  onWritingModeChange?: (active: boolean) => void;
   theme: ThemeConfig;
   isDarkMode: boolean;
   onToggleSidebar: () => void;
@@ -83,6 +90,8 @@ export interface EditorPanelRef {
 }
 
 const EditorPanel = forwardRef<EditorPanelRef, EditorPanelProps>(function EditorPanel({
+  writingMode = false,
+  onWritingModeChange,
   theme,
   isDarkMode,
   onToggleSidebar,
@@ -151,6 +160,8 @@ const EditorPanel = forwardRef<EditorPanelRef, EditorPanelProps>(function Editor
   // Save button state
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  const [hasEmbeddedAudio, setHasEmbeddedAudio] = useState(() => hasAudioMarkup(sectionXhtml));
+  const [saveError, setSaveError] = useState('');
 
   // Create initial value - use plateValue if available, otherwise create empty
   const initialValue = useMemo(() => {
@@ -162,6 +173,50 @@ const EditorPanel = forwardRef<EditorPanelRef, EditorPanelProps>(function Editor
     plugins: EditorKit,
     value: initialValue,
   });
+
+  const writingBlockedReason = !sectionId
+    ? 'Select a chapter to use Writing mode.'
+    : hasEmbeddedAudio || hasSceneCraftAudio(sceneCraftConfig)
+      ? 'Writing mode is unavailable because this chapter has associated audio.'
+      : '';
+
+  const changeWritingMode = useCallback((active: boolean) => {
+    if (active && (!sectionId || hasAudioNodes(editor.children) || hasSceneCraftAudio(sceneCraftConfig))) return;
+    // Changing presentation never resets, serializes, or replaces the editor value.
+    onWritingModeChange?.(active);
+    requestAnimationFrame(() => editor.tf.focus());
+  }, [editor, onWritingModeChange, sceneCraftConfig, sectionId]);
+
+  useEffect(() => {
+    if (writingMode && writingBlockedReason) onWritingModeChange?.(false);
+  }, [writingMode, writingBlockedReason, onWritingModeChange]);
+
+  // Keep @ and : as ordinary typing while the suggestion menus are hidden.
+  // Restore each plugin's original trigger rule when returning to the full editor.
+  useEffect(() => {
+    if (!writingMode) return;
+    const mentionQuery = editor.getOptions(MentionPlugin).triggerQuery;
+    const emojiQuery = editor.getOptions(EmojiPlugin).triggerQuery;
+    editor.setOptions(MentionPlugin, { triggerQuery: () => false });
+    editor.setOptions(EmojiPlugin, { triggerQuery: () => false });
+    return () => {
+      editor.setOptions(MentionPlugin, { triggerQuery: mentionQuery });
+      editor.setOptions(EmojiPlugin, { triggerQuery: emojiQuery });
+    };
+  }, [editor, writingMode]);
+
+  useEffect(() => {
+    if (!writingMode) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.isComposing || event.defaultPrevented) return;
+      event.preventDefault();
+      event.stopPropagation();
+      changeWritingMode(false);
+    };
+    // Plate handles Escape itself, so the mode exit must run in capture phase.
+    window.addEventListener('keydown', handleEscape, true);
+    return () => window.removeEventListener('keydown', handleEscape, true);
+  }, [writingMode, changeWritingMode]);
 
   // XHTML-Native: Update editor content when section changes
   // Convert XHTML to PlateJS on load
@@ -199,18 +254,20 @@ const EditorPanel = forwardRef<EditorPanelRef, EditorPanelProps>(function Editor
     // between the raw sectionXhtml prop and what plateToXhtml(editor.children) produces.
     setOriginalXhtml(plateToXhtml(editor.children as Value));
     setHasChanges(false);  // Reset unsaved indicator when section changes
+    setHasEmbeddedAudio(hasAudioMarkup(sectionXhtml) || hasAudioNodes(editor.children));
+    setSaveError('');
     setIsEditorReady(true);
   }, [sectionXhtml, editor]);
 
   // Set/clear find-replace highlighting based on active search
   useEffect(() => {
     if (!editor) return;
-    if (searchActive && searchQuery) {
+    if (!writingMode && searchActive && searchQuery) {
       editor.setOptions(FindReplacePlugin, { search: searchQuery });
     } else {
       editor.setOptions(FindReplacePlugin, { search: '' });
     }
-  }, [editor, searchActive, searchQuery]);
+  }, [editor, searchActive, searchQuery, writingMode]);
 
   // XHTML-Native: Handle editor changes
   // Convert PlateJS to XHTML on change
@@ -219,6 +276,8 @@ const EditorPanel = forwardRef<EditorPanelRef, EditorPanelProps>(function Editor
 
     // Get the current PlateJS value
     const plateValue = editor.children as Value;
+    // A pasted/inserted audio block also makes the current chapter ineligible.
+    setHasEmbeddedAudio(hasAudioNodes(plateValue));
 
     // Convert to XHTML (single source of truth)
     const xhtml = plateToXhtml(plateValue);
@@ -235,6 +294,7 @@ const EditorPanel = forwardRef<EditorPanelRef, EditorPanelProps>(function Editor
   const handleSaveClick = useCallback(async () => {
     if (!onSave || isSaving) return;
     setIsSaving(true);
+    setSaveError('');
     try {
       await onSave();
       // Sync originalXhtml to what the editor actually contains,
@@ -242,6 +302,9 @@ const EditorPanel = forwardRef<EditorPanelRef, EditorPanelProps>(function Editor
       const plateValue = editor.children as Value;
       setOriginalXhtml(plateToXhtml(plateValue));
       setHasChanges(false);  // Reset unsaved indicator after successful save
+    } catch (error) {
+      console.error('Unable to save chapter:', error);
+      setSaveError('Could not save this chapter. Your edits are still open; please try Save again.');
     } finally {
       // Brief delay to show "Saved" state
       setTimeout(() => setIsSaving(false), 500);
@@ -411,8 +474,10 @@ const EditorPanel = forwardRef<EditorPanelRef, EditorPanelProps>(function Editor
   };
 
   return (
+    <WritingModeContext.Provider value={writingMode}>
     <ImageLibraryProvider value={{
       openImageLibrary: (callback) => {
+        if (writingMode) return;
         if (callback) {
           pendingImageCallbackRef.current = callback;
         }
@@ -421,12 +486,15 @@ const EditorPanel = forwardRef<EditorPanelRef, EditorPanelProps>(function Editor
       images: images ?? [],
     }}>
     <AudioLibraryProvider value={{
-      openAudioLibrary: () => setShowAudioPicker(true),
+      openAudioLibrary: () => { if (!writingMode) setShowAudioPicker(true); },
       uploadAudioToLibrary: async (file: File) => {
         await onAudioUpload?.(file);
       },
     }}>
     <main
+      className={writingMode ? writingStyles.writingMode : undefined}
+      data-writing-mode={writingMode ? 'true' : 'false'}
+      data-dark={isDarkMode ? 'true' : 'false'}
       style={{
         flex: 1,
         backgroundColor: theme.bg,
@@ -435,8 +503,23 @@ const EditorPanel = forwardRef<EditorPanelRef, EditorPanelProps>(function Editor
         overflow: 'hidden',
       }}
     >
+      {writingMode && (
+        <div className={writingStyles.modeBar} aria-label="Writing mode controls">
+          <span className={writingStyles.saveStatus} aria-live="polite">
+            {isSaving ? 'Saving…' : hasChanges ? 'Unsaved changes' : 'Saved'}
+          </span>
+          <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={handleSaveClick} disabled={isSaving}>
+            Save
+          </button>
+          <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => changeWritingMode(false)} title="Return to the full editor (Esc)">
+            Full editor
+          </button>
+        </div>
+      )}
+      {saveError && <div className={writingStyles.saveError} role="alert">{saveError}</div>}
       {/* Chapter header */}
       <div
+        className={writingStyles.normalControls}
         style={{
           padding: '4px 8px',
           borderBottom: `1px solid ${borderColor}`,
@@ -502,6 +585,7 @@ const EditorPanel = forwardRef<EditorPanelRef, EditorPanelProps>(function Editor
 
       {/* Toolbar */}
       <div
+        className={writingStyles.normalControls}
         style={{
           padding: '4px 8px',
           borderBottom: `1px solid ${borderColor}`,
@@ -532,6 +616,18 @@ const EditorPanel = forwardRef<EditorPanelRef, EditorPanelProps>(function Editor
           {isSaving ? 'Saved' : 'Save'}
         </StyledSmallButton>
 
+        <span title={writingBlockedReason || 'Write with the surrounding controls hidden. Press Esc to return.'}>
+          <StyledSmallButton
+            theme={theme}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => changeWritingMode(true)}
+            disabled={!!writingBlockedReason || !isEditorReady}
+            title={writingBlockedReason || 'Writing mode'}
+          >
+            Writing mode
+          </StyledSmallButton>
+        </span>
+
         {/* SceneCraft button */}
         <StyledSmallButton
           theme={theme}
@@ -549,6 +645,7 @@ const EditorPanel = forwardRef<EditorPanelRef, EditorPanelProps>(function Editor
 
       {/* Editor content area - PlateJS editor (always visible; preview is now a full-screen overlay) */}
       <div
+        className={writingStyles.editorArea}
         style={{
           flex: 1,
           overflow: 'hidden',
@@ -561,6 +658,7 @@ const EditorPanel = forwardRef<EditorPanelRef, EditorPanelProps>(function Editor
         >
           <EditorContainer
             className={cn(
+              writingStyles.paperScroll,
               'h-full rounded border',
               isDarkMode ? 'bg-[#343a40] border-gray-600' : 'bg-[#f8f9fa] border-gray-300'
             )}
@@ -575,6 +673,7 @@ const EditorPanel = forwardRef<EditorPanelRef, EditorPanelProps>(function Editor
               variant="default"
               placeholder="Type here..."
               className={cn(
+                writingStyles.page,
                 'min-h-full',
                 isDarkMode && 'placeholder:text-gray-500'
               )}
@@ -584,7 +683,7 @@ const EditorPanel = forwardRef<EditorPanelRef, EditorPanelProps>(function Editor
       </div>
 
       {/* Search results panel */}
-      {searchActive && searchResults && searchResults.length > 0 && (
+      {!writingMode && searchActive && searchResults && searchResults.length > 0 && (
         <SearchResultsPanel
           theme={theme}
           isDarkMode={isDarkMode}
@@ -653,6 +752,7 @@ const EditorPanel = forwardRef<EditorPanelRef, EditorPanelProps>(function Editor
     </main>
     </AudioLibraryProvider>
     </ImageLibraryProvider>
+    </WritingModeContext.Provider>
   );
 });
 

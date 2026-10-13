@@ -1,5 +1,7 @@
 'use client';
 
+import { useWritingMode } from '@/contexts/WritingModeContext';
+
 import { useDraggable, useDropLine } from '@platejs/dnd';
 import {
   BlockSelectionPlugin,
@@ -150,6 +152,7 @@ function TableFloatingToolbar({
   children,
   ...props
 }: React.ComponentProps<typeof PopoverContent>) {
+  const writingMode = useWritingMode();
   const { tf } = useEditorPlugin(TablePlugin);
   const selected = useSelected();
   const element = useElement<TTableElement>();
@@ -165,7 +168,7 @@ function TableFloatingToolbar({
   return (
     <Popover
       modal={false}
-      open={isFocusedLast && (canMerge || canSplit || collapsedInside)}
+      open={!writingMode && isFocusedLast && (canMerge || canSplit || collapsedInside)}
     >
       <PopoverAnchor asChild>{children}</PopoverAnchor>
       <PopoverContent

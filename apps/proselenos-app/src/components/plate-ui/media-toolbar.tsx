@@ -19,6 +19,7 @@ import {
   useSelected,
 } from 'platejs/react';
 import * as React from 'react';
+import { useWritingMode } from '@/contexts/WritingModeContext';
 
 import { Button, buttonVariants } from '@/components/plate-ui/button';
 import {
@@ -42,6 +43,7 @@ export function MediaToolbar({
   plugin: WithRequiredKey;
 }) {
   const editor = useEditorRef();
+  const writingMode = useWritingMode();
   const readOnly = useReadOnly();
   const selected = useSelected();
   const isFocusedLast = useFocusedLast();
@@ -51,6 +53,7 @@ export function MediaToolbar({
   );
   const isImagePreviewOpen = useImagePreviewValue('isOpen', editor.id);
   const open =
+    !writingMode &&
     isFocusedLast &&
     !readOnly &&
     selected &&

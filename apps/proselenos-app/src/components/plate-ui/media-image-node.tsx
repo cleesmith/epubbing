@@ -10,6 +10,7 @@ import { PlateElement, withHOC } from 'platejs/react';
 
 import { cn } from '@/lib/utils';
 import { useResolvedImageUrl } from '@/hooks/use-resolved-image-url';
+import { useWritingMode } from '@/contexts/WritingModeContext';
 
 import { Caption, CaptionTextarea } from './caption';
 import { MediaToolbar } from './media-toolbar';
@@ -22,6 +23,7 @@ import {
 export const ImageElement = withHOC(
   ResizableProvider,
   function ImageElement(props: PlateElementProps<TImageElement>) {
+    const writingMode = useWritingMode();
     const { align = 'center', focused, readOnly, selected } = useMediaState();
     const width = useResizableValue('width');
 
@@ -36,12 +38,18 @@ export const ImageElement = withHOC(
     return (
       <MediaToolbar plugin={ImagePlugin}>
         <PlateElement {...props} className="py-2.5">
-          <figure className="group relative m-0" contentEditable={false}>
+          <figure
+            className="group relative m-0"
+            contentEditable={false}
+            onDoubleClickCapture={(event) => {
+              if (writingMode) { event.preventDefault(); event.stopPropagation(); }
+            }}
+          >
             <Resizable
               align={align}
               options={{
                 align,
-                readOnly,
+                readOnly: readOnly || writingMode,
               }}
             >
               <ResizeHandle
@@ -76,13 +84,13 @@ export const ImageElement = withHOC(
               {/* Image display */}
               {!isLoading && !error && resolvedUrl && (
                 <img
-                  ref={handleRef as React.LegacyRef<HTMLImageElement>}
+                  ref={writingMode ? undefined : handleRef as React.LegacyRef<HTMLImageElement>}
                   src={resolvedUrl}
                   alt={(props.element.alt as string) || ''}
                   className={cn(
                     'block w-full max-w-full cursor-pointer object-cover px-0',
                     'rounded-sm',
-                    focused && selected && 'ring-2 ring-ring ring-offset-2',
+                    !writingMode && focused && selected && 'ring-2 ring-ring ring-offset-2',
                     isDragging && 'opacity-50'
                   )}
                   draggable={false}
@@ -102,8 +110,9 @@ export const ImageElement = withHOC(
                 onFocus={(e) => {
                   e.preventDefault();
                 }}
-                placeholder="Write a caption..."
-                readOnly={readOnly}
+                placeholder={writingMode ? '' : 'Write a caption...'}
+                readOnly={readOnly || writingMode}
+                tabIndex={writingMode ? -1 : undefined}
               />
             </Caption>
           </figure>

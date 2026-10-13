@@ -25,6 +25,7 @@ import {
   usePluginOption,
 } from 'platejs/react';
 import * as React from 'react';
+import { useWritingMode } from '@/contexts/WritingModeContext';
 
 import { buttonVariants } from '@/components/plate-ui/button';
 import { Separator } from '@/components/plate-ui/separator';
@@ -42,6 +43,7 @@ export function LinkFloatingToolbar({
 }: {
   state?: LinkFloatingToolbarState;
 }) {
+  const writingMode = useWritingMode();
   const activeCommentId = usePluginOption({ key: KEYS.comment }, 'activeId');
   const activeSuggestionId = usePluginOption(
     { key: KEYS.suggestion },
@@ -94,7 +96,7 @@ export function LinkFloatingToolbar({
     preventDefaultOnEnterKeydown: true,
   });
 
-  if (hidden) return null;
+  if (hidden || writingMode) return null;
 
   const input = (
     <div className="flex w-[330px] flex-col" {...inputProps}>
