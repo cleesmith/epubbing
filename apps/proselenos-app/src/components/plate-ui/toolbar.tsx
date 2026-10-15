@@ -329,7 +329,6 @@ function withTooltip<T extends React.ElementType>(Component: T) {
 }
 
 // Tooltips disabled - return null to hide all toolbar hover text
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function TooltipContent(_props: React.ComponentProps<typeof TooltipPrimitive.Content>) {
   return null;
 }

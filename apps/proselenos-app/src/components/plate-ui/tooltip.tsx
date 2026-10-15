@@ -32,7 +32,6 @@ function TooltipTrigger({
   return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function TooltipContent(_props: React.ComponentProps<typeof TooltipPrimitive.Content>) {
   // Tooltips disabled - return null to hide all hover text
   return null;

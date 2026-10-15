@@ -57,7 +57,6 @@ export function CaptionTextarea(
   );
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const CaptionButton: any = createPrimitiveComponent(Button)({
   propsHook: useCaptionButton,
   stateHook: useCaptionButtonState,

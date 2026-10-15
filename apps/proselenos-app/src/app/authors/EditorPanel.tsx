@@ -2,7 +2,7 @@
 
 'use client';
 
-import { useState, useRef, useEffect, useCallback, useImperativeHandle, forwardRef, useMemo } from 'react';
+import { useState, useRef, useEffect, useCallback, useImperativeHandle, forwardRef, useMemo, useId } from 'react';
 import { ThemeConfig } from '../shared/theme';
 import StyledSmallButton from '@/components/StyledSmallButton';
 import SearchResultsPanel, { SearchResult } from './SearchResultsPanel';
@@ -174,10 +174,11 @@ const EditorPanel = forwardRef<EditorPanelRef, EditorPanelProps>(function Editor
     value: initialValue,
   });
 
+  const writingModeReasonId = useId();
   const writingBlockedReason = !sectionId
     ? 'Select a chapter to use Writing mode.'
     : hasEmbeddedAudio || hasSceneCraftAudio(sceneCraftConfig)
-      ? 'Writing mode is unavailable because this chapter has associated audio.'
+      ? 'Audio is attached to the text.'
       : '';
 
   const changeWritingMode = useCallback((active: boolean) => {
@@ -616,16 +617,26 @@ const EditorPanel = forwardRef<EditorPanelRef, EditorPanelProps>(function Editor
           {isSaving ? 'Saved' : 'Save'}
         </StyledSmallButton>
 
-        <span title={writingBlockedReason || 'Write with the surrounding controls hidden. Press Esc to return.'}>
+        <span
+          title={writingBlockedReason || 'distraction free writing, ESC to exit'}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}
+        >
           <StyledSmallButton
             theme={theme}
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => changeWritingMode(true)}
             disabled={!!writingBlockedReason || !isEditorReady}
-            title={writingBlockedReason || 'Writing mode'}
+            aria-describedby={writingBlockedReason ? writingModeReasonId : undefined}
+            styleOverrides={writingBlockedReason ? { pointerEvents: 'none' } : undefined}
+            title={writingBlockedReason || 'distraction free writing, ESC to exit'}
           >
             Writing mode
           </StyledSmallButton>
+          {writingBlockedReason && (
+            <span id={writingModeReasonId} style={{ color: theme.textSecondary, fontSize: '11px' }}>
+              {writingBlockedReason}
+            </span>
+          )}
         </span>
 
         {/* SceneCraft button */}

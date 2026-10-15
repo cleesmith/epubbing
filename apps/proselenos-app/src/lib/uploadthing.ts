@@ -6,7 +6,6 @@ import { createUploadthing, type FileRouter } from 'uploadthing/next';
 const f = createUploadthing();
 
 // File router for the editor uploader
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const ourFileRouter: FileRouter = {
   editorUploader: f({
     image: { maxFileSize: '4MB', maxFileCount: 1 },

@@ -37,7 +37,6 @@ import { TocKit } from '@/components/plate-editor/plugins/toc-kit';
 import { ToggleKit } from '@/components/plate-editor/plugins/toggle-kit';
 import { DisableShortcutsKit } from '@/components/plate-editor/plugins/disable-shortcuts-kit';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const EditorKit: any[] = [
   // MUST be first to intercept keyboard events before other plugins
   ...DisableShortcutsKit,
@@ -89,8 +88,6 @@ export const EditorKit: any[] = [
   ...FixedToolbarKit,
 ];
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type MyEditor = any;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const useEditor = (): any => useEditorRef();

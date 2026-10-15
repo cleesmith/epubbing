@@ -17,6 +17,21 @@ const eslintConfig = defineConfig([
       'react-hooks/set-state-in-effect': 'off',
     },
   },
+  {
+    // These previews/editor nodes intentionally display EPUB images and local
+    // blob/data URLs without an image optimization server.
+    files: [
+      'src/app/authors/CoverModal.tsx',
+      'src/app/publishing-assistant/EpubModal.tsx',
+      'src/components/plate-ui/media-image-node-static.tsx',
+      'src/components/plate-ui/media-image-node.tsx',
+      'src/components/plate-ui/media-placeholder-node.tsx',
+      'src/components/xray/XrayContentViewer.tsx',
+    ],
+    rules: {
+      '@next/next/no-img-element': 'off',
+    },
+  },
   globalIgnores([
     'node_modules/**',
     '.next/**',

@@ -143,7 +143,6 @@ const BookshelfItem: React.FC<BookshelfItemProps> = ({
     } catch (error) {
       console.error('Failed to open bookseller epub:', error);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [envConfig, onOpenReader]);
 
   const makeBookAvailable = async (book: Book) => {

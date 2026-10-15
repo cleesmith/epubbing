@@ -2,7 +2,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useLayoutEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { getTheme } from '../shared/theme';
 import AuthorsLayout from './AuthorsLayout';
@@ -30,6 +30,36 @@ export default function AuthorsClient() {
     }
     return true;
   });
+
+  // Plate's toolbar and its body-portaled menus use the DaisyUI palette.
+  // Apply Authors' independent preference before paint, without changing the
+  // saved Library/Reader theme. A body scope also survives root-theme updates.
+  useLayoutEffect(() => {
+    const body = document.body;
+    const previousTheme = body.getAttribute('data-theme');
+    const previousColorScheme = body.style.getPropertyValue('color-scheme');
+    const previousPriority = body.style.getPropertyPriority('color-scheme');
+    const colorScheme = isDarkMode ? 'dark' : 'light';
+    const authorsTheme = `default-${colorScheme}`;
+
+    body.setAttribute('data-theme', authorsTheme);
+    body.style.setProperty('color-scheme', colorScheme);
+
+    return () => {
+      // Release only the values this effect owns when leaving Authors.
+      if (body.getAttribute('data-theme') === authorsTheme) {
+        if (previousTheme === null) body.removeAttribute('data-theme');
+        else body.setAttribute('data-theme', previousTheme);
+      }
+      if (body.style.getPropertyValue('color-scheme') === colorScheme) {
+        if (previousColorScheme) {
+          body.style.setProperty('color-scheme', previousColorScheme, previousPriority);
+        } else {
+          body.style.removeProperty('color-scheme');
+        }
+      }
+    };
+  }, [isDarkMode]);
 
   // About modal state
   const [showAboutModal, setShowAboutModal] = useState(false);

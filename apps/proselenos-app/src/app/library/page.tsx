@@ -45,6 +45,24 @@ import DropIndicator from '@/components/DropIndicator';
 import SettingsDialog from '@/components/settings/SettingsDialog';
 import Dialog from '@/components/Dialog';
 
+// Traffic light: date-based export reminder
+function getExportTrafficLightStatus(): 'green' | 'yellow' | 'red' {
+  const stored = localStorage.getItem('last_export_date');
+  if (!stored) return 'green'; // New user, no data to export yet
+  const daysSince = (Date.now() - new Date(stored).getTime()) / (1000 * 60 * 60 * 24);
+  if (daysSince < 1) return 'green';
+  if (daysSince < 7) return 'yellow';
+  return 'red';
+}
+function getExportTooltip(): string {
+  const stored = localStorage.getItem('last_export_date');
+  if (!stored) return 'Click to Export a backup zip file';
+  const status = getExportTrafficLightStatus();
+  if (status === 'green') return `Exported on: ${new Date(stored).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`;
+  if (status === 'yellow') return 'Export needed';
+  return 'Export now';
+}
+
 const LibraryPageWithSearchParams = () => {
   const searchParams = useSearchParams();
   return <LibraryPageContent searchParams={searchParams} />;
@@ -79,23 +97,6 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
   const [searchQuery, setSearchQuery] = useState('');
   const isInitiating = useRef(false);
 
-  // Traffic light: date-based export reminder
-  function getExportTrafficLightStatus(): 'green' | 'yellow' | 'red' {
-    const stored = localStorage.getItem('last_export_date');
-    if (!stored) return 'green'; // New user, no data to export yet
-    const daysSince = (Date.now() - new Date(stored).getTime()) / (1000 * 60 * 60 * 24);
-    if (daysSince < 1) return 'green';
-    if (daysSince < 7) return 'yellow';
-    return 'red';
-  }
-  function getExportTooltip(): string {
-    const stored = localStorage.getItem('last_export_date');
-    if (!stored) return 'Click to Export a backup zip file';
-    const status = getExportTrafficLightStatus();
-    if (status === 'green') return `Exported on: ${new Date(stored).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`;
-    if (status === 'yellow') return 'Export needed';
-    return 'Export now';
-  }
   const [trafficLightStatus, setTrafficLightStatus] = useState<'green' | 'yellow' | 'red'>(() => {
     if (typeof window === 'undefined') return 'green';
     localStorage.removeItem('ee_library_books_added_since_export');

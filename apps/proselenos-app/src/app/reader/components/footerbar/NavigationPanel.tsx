@@ -37,7 +37,6 @@ export const NavigationPanel: React.FC<NavigationPanelProps> = ({
 
   useEffect(() => {
     if (progressValid) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setProgressValue(progressFraction * 100);
     }
   }, [progressValid, progressFraction]);

@@ -1047,7 +1047,6 @@ export default function FullBookView({
       paraFadeObj.current = killAudio(paraFadeObj.current);
       paraFadeOut.current = killAudio(paraFadeOut.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Multi-section animation loop ──────────────────────────
@@ -1328,7 +1327,6 @@ export default function FullBookView({
       clearTimeout(timer);
       if (pvRAF.current) cancelAnimationFrame(pvRAF.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [parsedSections, imageUrls, audioUrls]);
 
   // ── Render ────────────────────────────────────────────────

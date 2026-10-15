@@ -5,14 +5,14 @@ import { appPath } from '@/utils/app-path';
 
 import Swal from 'sweetalert2';
 
+// Theme each dialog through its options. The active page owns the body theme,
+// including the CSS palette inherited by editor toolbars and portaled menus.
 export const showAlert = (
   message: string,
   type: 'success' | 'error' | 'info' | 'warning' = 'info',
   customTitle?: string,
   isDarkMode: boolean = true
 ) => {
-  document.body.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
-
   const titles = {
     success: 'Success!',
     error: 'Error',
@@ -57,8 +57,6 @@ export const showInputAlert = async (
   placeholder: string = '',
   isDarkMode: boolean = true
 ): Promise<string | null> => {
-  document.body.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
-  
   const result = await Swal.fire({
     title: 'Enter filename',
     text: message,
@@ -88,8 +86,6 @@ export const showUrlInput = async (
   defaultValue: string = 'https://',
   isDarkMode: boolean = true
 ): Promise<string | null> => {
-  document.body.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
-
   // Add style for high z-index if not already present
   if (!document.getElementById('swal-high-z-style')) {
     const style = document.createElement('style');
@@ -167,8 +163,6 @@ export const showStickyErrorWithLogout = (
   message: string,
   isDarkMode: boolean = true
 ) => {
-  document.body.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
-
   const hasNewlines = message.includes('\n');
   
   // Detect if this is a long message (like the detailed permission explanation)

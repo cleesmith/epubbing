@@ -86,6 +86,24 @@ function escapeHtmlForLayout(text: string): string {
     .replace(/>/g, '&gt;');
 }
 
+// Traffic light: date-based export reminder
+function getExportTrafficLightStatus(): 'green' | 'yellow' | 'red' {
+  const stored = localStorage.getItem('last_export_date');
+  if (!stored) return 'green'; // New user, no data to export yet
+  const daysSince = (Date.now() - new Date(stored).getTime()) / (1000 * 60 * 60 * 24);
+  if (daysSince < 1) return 'green';
+  if (daysSince < 7) return 'yellow';
+  return 'red';
+}
+function getExportTooltip(): string {
+  const stored = localStorage.getItem('last_export_date');
+  if (!stored) return 'Click to Export a backup zip file';
+  const status = getExportTrafficLightStatus();
+  if (status === 'green') return `Exported on: ${new Date(stored).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`;
+  if (status === 'yellow') return 'Export needed';
+  return 'Export now';
+}
+
 interface AuthorsLayoutProps {
   theme: ThemeConfig;
   isDarkMode: boolean;
@@ -137,23 +155,6 @@ export default function AuthorsLayout({
   const [pendingTitle, setPendingTitle] = useState<string>('');
   // Removed: pendingSectionSwitch and showUnsavedDialog - now auto-saves on section switch
 
-  // Traffic light: date-based export reminder
-  function getExportTrafficLightStatus(): 'green' | 'yellow' | 'red' {
-    const stored = localStorage.getItem('last_export_date');
-    if (!stored) return 'green'; // New user, no data to export yet
-    const daysSince = (Date.now() - new Date(stored).getTime()) / (1000 * 60 * 60 * 24);
-    if (daysSince < 1) return 'green';
-    if (daysSince < 7) return 'yellow';
-    return 'red';
-  }
-  function getExportTooltip(): string {
-    const stored = localStorage.getItem('last_export_date');
-    if (!stored) return 'Click to Export a backup zip file';
-    const status = getExportTrafficLightStatus();
-    if (status === 'green') return `Exported on: ${new Date(stored).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`;
-    if (status === 'yellow') return 'Export needed';
-    return 'Export now';
-  }
   const [trafficLightStatus, setTrafficLightStatus] = useState<'green' | 'yellow' | 'red'>(() => {
     if (typeof window === 'undefined') return 'green';
     localStorage.removeItem('ee_authors_modified_sections_since_send');

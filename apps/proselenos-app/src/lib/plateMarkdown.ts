@@ -16,7 +16,6 @@ import type { Value } from 'platejs';
  * Convert a markdown string to Plate editor Value
  */
 export function markdownToPlate(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   editor: any,
   markdown: string
 ): Value {
@@ -49,7 +48,6 @@ export function markdownToPlate(
  * Convert the current Plate editor content to a markdown string
  */
 export function plateToMarkdown(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   editor: any
 ): string {
   try {

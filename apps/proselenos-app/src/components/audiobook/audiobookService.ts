@@ -423,7 +423,9 @@ export async function buildM4B(
   // Collect ffmpeg log output so we can surface real errors
   const logs: string[] = [];
   ffmpeg.on('log', ({ message }: { message: string }) => {
-    console.warn('[ffmpeg]', message);
+    // FFmpeg's log includes normal status output. Keep it available under the
+    // Console's Verbose/Debug filter; failed builds still surface below.
+    console.debug('[ffmpeg]', message);
     logs.push(message);
   });
 
