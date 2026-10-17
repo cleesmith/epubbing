@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { ThemeConfig } from '../shared/theme';
-import { showAlert } from '../shared/alerts';
+import { showAlert, showConfirm } from '../shared/alerts';
 import Swal from 'sweetalert2';
 import AuthorsHeader from './AuthorsHeader';
 import ChapterSidebar from './ChapterSidebar';
@@ -46,11 +46,13 @@ function reorderSectionsByVisualGroup<T extends { type?: ElementType }>(sections
 import TitlePagePanel, { BookMetadata } from './TitlePagePanel';
 import { parseEpub, ParsedEpub } from '@/services/epubService';
 import { parseDocx } from '@/services/docxService';
+import { parseManuscriptFile } from '@/services/manuscriptTextService';
 import { parsePdf } from '@/lib/pdfToPages';
 import { countWords } from '@/services/htmlExtractor';
 import {
   loadFullWorkingCopy,
   saveFullWorkingCopy,
+  replaceTextWorkingCopy,
   deleteSection,
   saveWorkingCopyMeta,
   loadWorkingCopyMeta,
@@ -786,6 +788,58 @@ export default function AuthorsLayout({
           console.error('Error parsing docx:', error);
           showAlert('Error parsing DOCX file. Please try a different file.', 'error', undefined, isDarkMode);
         }
+      }
+    };
+    input.click();
+  };
+
+  const handleOpenManuscript = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.txt';
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      try {
+        // Validate the complete file before offering to replace anything.
+        const parsed = await parseManuscriptFile(file);
+        const chapterCount = parsed.sections.filter(section => section.type === 'chapter').length;
+        const confirmed = await showConfirm(
+          `Load ${chapterCount} ${chapterCount === 1 ? 'chapter' : 'chapters'} from this manuscript? This replaces the current Authors working copy, including unsaved edits. Books already in your Library stay there.`,
+          isDarkMode,
+          'Load manuscript.txt',
+          'Load manuscript',
+        );
+        if (!confirmed) return;
+
+        // Commit all chapters together; a storage failure leaves the old copy intact.
+        const saved = await replaceTextWorkingCopy({
+          title: parsed.title,
+          author: parsed.author,
+          language: parsed.language,
+          sections: parsed.sections.map(section => ({ ...section, type: section.type || 'chapter' })),
+        });
+        setEpub({
+          ...saved,
+          sections: saved.sections.map(section => ({ ...section, href: `${section.id}.xhtml` })),
+        });
+        setBookMeta({
+          title: saved.title,
+          author: saved.author,
+          language: saved.language,
+          coverImageId: null,
+          sectionIds: saved.sections.map(section => section.id),
+        });
+        setHasUnsavedChanges(false);
+        setPendingXhtml('');
+        setPendingTitle('');
+        setWritingMode(false);
+        handleSearchClose();
+        setSelectedSectionId(saved.sections[0]?.id ?? null);
+        showAlert(`Loaded ${chapterCount} ${chapterCount === 1 ? 'chapter' : 'chapters'} from the manuscript.`, 'success', undefined, isDarkMode);
+      } catch (error) {
+        console.error('Error loading manuscript:', error);
+        showAlert(error instanceof Error ? error.message : 'Could not load the manuscript. Please try again.', 'error', undefined, isDarkMode);
       }
     };
     input.click();
@@ -1840,6 +1894,7 @@ export default function AuthorsLayout({
         onOpenClick={handleOpenEpub}
         onOpenDocxClick={handleOpenDocx}
         onOpenPdfClick={handleOpenPdf}
+        onOpenManuscriptClick={handleOpenManuscript}
         onOpenFountainClick={handleOpenFountain}
         onLoadFromLibraryClick={onLoadFromLibraryClick}
         onSaveClick={handleSave}

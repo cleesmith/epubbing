@@ -25,6 +25,7 @@ interface AuthorsHeaderProps {
   onOpenClick: () => void;
   onOpenDocxClick: () => void;
   onOpenPdfClick: () => void;
+  onOpenManuscriptClick: () => void;
   onOpenFountainClick: () => void;
   onLoadFromLibraryClick: () => void;
   onSaveClick: () => void;
@@ -50,6 +51,7 @@ export default function AuthorsHeader({
   onOpenClick,
   onOpenDocxClick,
   onOpenPdfClick,
+  onOpenManuscriptClick,
   onOpenFountainClick: _onOpenFountainClick,
   onLoadFromLibraryClick,
   onSaveClick,
@@ -274,6 +276,23 @@ export default function AuthorsHeader({
                   }}
                 >
                   Load PDF <PiArrowRight style={{ display: 'inline', verticalAlign: 'middle' }} /> EPUB
+                </button>
+                <button
+                  onClick={() => { onOpenManuscriptClick(); setOpenDropdownOpen(false); }}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    padding: '8px 12px',
+                    background: 'none',
+                    border: 'none',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    color: theme.text,
+                    fontSize: '13px',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  Load manuscript.txt <PiArrowRight style={{ display: 'inline', verticalAlign: 'middle' }} /> EPUB
                 </button>
                 {/* <button
                   onClick={() => { onOpenFountainClick(); setOpenDropdownOpen(false); }}

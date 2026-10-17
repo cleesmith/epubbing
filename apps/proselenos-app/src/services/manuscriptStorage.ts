@@ -988,6 +988,66 @@ export async function saveFullWorkingCopy(epub: {
   await saveWorkingCopyMeta(oldMeta);
 }
 
+/** Replace a text import in one transaction, preserving the old book on failure. */
+export async function replaceTextWorkingCopy(
+  manuscript: Pick<FullWorkingCopy, 'title' | 'author' | 'language' | 'sections'>,
+): Promise<FullWorkingCopy> {
+  const sections = manuscript.sections.map((section, index) => ({
+    ...section,
+    id: `section-${String(index + 1).padStart(3, '0')}`,
+  }));
+  const meta: ManuscriptMeta = {
+    title: manuscript.title,
+    author: manuscript.author,
+    language: manuscript.language,
+    coverImageId: null,
+    sections: sections.map(({ id, title, type }) => ({ id, title, type })),
+  };
+  const legacyMeta: WorkingCopyMeta = {
+    title: meta.title,
+    author: meta.author,
+    language: meta.language,
+    coverImageId: null,
+    sectionIds: sections.map(section => section.id),
+  };
+  const db = await openDB();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORES.MANUSCRIPT, 'readwrite');
+      const store = tx.objectStore(STORES.MANUSCRIPT);
+      const obsolete = new Set<string>();
+      const request = store.openCursor();
+      tx.oncomplete = () => resolve();
+      tx.onabort = () => reject(tx.error || new Error('The manuscript could not be saved. The previous working copy was kept.'));
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if (cursor) {
+          const key = String(cursor.key);
+          if (key.startsWith('images/') || key.startsWith('audio/')) obsolete.add(key);
+          if (key === 'meta.json' || key === 'working_copy_meta.json') {
+            const previous = cursor.value.value as ManuscriptMeta & WorkingCopyMeta;
+            const ids = previous.sections?.map(section => section.id) ?? previous.sectionIds ?? [];
+            for (const id of ids) {
+              obsolete.add(`${id}.xhtml`);
+              obsolete.add(`${id}.json`);
+            }
+            if (previous.coverImageId) obsolete.add(previous.coverImageId);
+          }
+          cursor.continue();
+          return;
+        }
+        for (const key of obsolete) store.delete(key);
+        for (const section of sections) store.put({ key: `${section.id}.xhtml`, value: section.xhtml });
+        store.put({ key: 'meta.json', value: meta });
+        store.put({ key: 'working_copy_meta.json', value: legacyMeta });
+      };
+    });
+  } finally {
+    db.close();
+  }
+  return { ...manuscript, sections, coverImage: null };
+}
+
 /**
  * Clear all working copy data from IndexedDB
  */
