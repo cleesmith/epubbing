@@ -1004,7 +1004,10 @@ function createEpub3ContentOPF(
 <package version="3.0" xmlns="http://www.idpf.org/2007/opf" unique-identifier="BookId" prefix="cc: http://creativecommons.org/ns#">
   <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
     <dc:identifier id="BookId">${bookId}</dc:identifier>
-    <dc:title>${escapeHtml(metadata.displayTitle)}</dc:title>
+    <dc:title id="book-title">${escapeHtml(metadata.displayTitle)}</dc:title>${metadata.subtitle?.trim() ? `
+    <meta refines="#book-title" property="title-type">main</meta>
+    <dc:title id="book-subtitle">${escapeHtml(metadata.subtitle.trim())}</dc:title>
+    <meta refines="#book-subtitle" property="title-type">subtitle</meta>` : ''}
     <dc:creator>${escapeHtml(metadata.author)}</dc:creator>
     <dc:language>${metadata.language}</dc:language>
     <dc:publisher>${escapeHtml(metadata.publisher || 'Independent Publisher')}</dc:publisher>

@@ -46,7 +46,7 @@ function reorderSectionsByVisualGroup<T extends { type?: ElementType }>(sections
 import TitlePagePanel, { BookMetadata } from './TitlePagePanel';
 import { parseEpub, ParsedEpub } from '@/services/epubService';
 import { parseDocx } from '@/services/docxService';
-import { parseManuscriptFile } from '@/services/manuscriptTextService';
+import { parseManuscriptFile, exportManuscriptText } from '@/services/manuscriptTextService';
 import { parsePdf } from '@/lib/pdfToPages';
 import { countWords } from '@/services/htmlExtractor';
 import {
@@ -55,6 +55,7 @@ import {
   replaceTextWorkingCopy,
   deleteSection,
   saveWorkingCopyMeta,
+  updateWorkingCopyImageIds,
   loadWorkingCopyMeta,
   clearWorkingCopy,
   saveSection,
@@ -79,6 +80,7 @@ import { exportWorkspaceToDocx } from '@/lib/workspace-to-docx';
 import { exportWorkspaceToFountain } from '@/lib/fountain-generator';
 import { xhtmlToPlainText } from '@/lib/plateXhtml';
 import environmentConfig from '@/services/environment';
+import { publishManuscript } from '@/services/publishManuscript';
 
 // Helper to escape HTML for XHTML storage
 function escapeHtmlForLayout(text: string): string {
@@ -143,6 +145,7 @@ export default function AuthorsLayout({
   const [epub, setEpub] = useState<ParsedEpub | null>(null);
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
   const [bookMeta, setBookMeta] = useState<WorkingCopyMeta | null>(null);
+  const publishingRef = useRef(false);
   const [writingMode, setWritingMode] = useState(false);
 
   // A newly selected/reloaded chapter always opens with the full controls.
@@ -533,13 +536,8 @@ export default function AuthorsLayout({
     // Save to IndexedDB
     await saveManuscriptImage(filename, file);
 
-    // Update meta with new imageId
-    if (bookMeta) {
-      const newImageIds = [...(bookMeta.imageIds || []), filename];
-      const updatedMeta = { ...bookMeta, imageIds: newImageIds };
-      await saveWorkingCopyMeta(updatedMeta);
-      setBookMeta(updatedMeta);
-    }
+    await updateWorkingCopyImageIds(filename);
+    setBookMeta(await loadWorkingCopyMeta());
 
     // Reload images to update UI
     const images = await getAllManuscriptImages();
@@ -550,20 +548,15 @@ export default function AuthorsLayout({
       url: URL.createObjectURL(img.blob)
     }));
     setImageUrls(urls);
-  }, [manuscriptImages, bookMeta, imageUrls]);
+  }, [manuscriptImages, imageUrls]);
 
   // Image delete handler
   const handleImageDelete = useCallback(async (filename: string) => {
     // Delete from IndexedDB
     await deleteManuscriptImage(filename);
 
-    // Update meta
-    if (bookMeta) {
-      const newImageIds = (bookMeta.imageIds || []).filter(id => id !== filename);
-      const updatedMeta = { ...bookMeta, imageIds: newImageIds };
-      await saveWorkingCopyMeta(updatedMeta);
-      setBookMeta(updatedMeta);
-    }
+    await updateWorkingCopyImageIds(filename, true);
+    setBookMeta(await loadWorkingCopyMeta());
 
     // Reload images
     const images = await getAllManuscriptImages();
@@ -574,7 +567,7 @@ export default function AuthorsLayout({
       url: URL.createObjectURL(img.blob)
     }));
     setImageUrls(urls);
-  }, [bookMeta, imageUrls]);
+  }, [imageUrls]);
 
   // Audio upload handler
   const handleAudioUpload = useCallback(async (file: File) => {
@@ -663,6 +656,8 @@ export default function AuthorsLayout({
             title: parsed.title,
             author: parsed.author,
             language: parsed.language,
+            subtitle: parsed.subtitle,
+            publisher: parsed.publisher,
             coverImage: parsed.coverImage,
             sections: parsed.sections
               .filter((s) => s.type !== 'table-of-contents')
@@ -1664,36 +1659,39 @@ export default function AuthorsLayout({
 
   // Handle Save button - generate EPUB and add to library
   const handleSave = async () => {
-    // 1. Save any pending editor changes first
-    if (hasUnsavedChanges && selectedSection && selectedSectionId) {
-      await saveCurrentSection();
-    }
-
-    // 2. Load full working copy (now includes any just-saved changes)
-    const workingCopy = await loadFullWorkingCopy();
-    if (!workingCopy) {
-      showAlert('No manuscript to save. Please create or load a manuscript first.', 'warning', undefined, isDarkMode);
-      return;
-    }
-
-    // 3. Load metadata
-    const meta = await loadWorkingCopyMeta();
-    if (!meta) {
-      showAlert('Could not load manuscript metadata.', 'error', undefined, isDarkMode);
-      return;
-    }
-
-    // 4. Load cover image (may be null)
-    const coverBlob = await loadCoverImage();
-
-    // 5. Use in-memory epub.sections order (the sidebar order) to reorder loaded sections
-    // This ensures EPUB matches exactly what the user sees, regardless of meta.json order
-    const sectionOrder = epub!.sections.map(s => s.id);
-    const orderedSections = sectionOrder
-      .map(id => workingCopy.sections.find(s => s.id === id))
-      .filter((s): s is WorkingCopySection => s !== undefined);
-
+    // Ignore a second click while this publication is still in progress.
+    if (publishingRef.current) return;
+    publishingRef.current = true;
     try {
+      // 1. Save any pending editor changes first
+      if (hasUnsavedChanges && selectedSection && selectedSectionId) {
+        await saveCurrentSection();
+      }
+
+      // 2. Load full working copy (now includes any just-saved changes)
+      const workingCopy = await loadFullWorkingCopy();
+      if (!workingCopy) {
+        showAlert('No manuscript to save. Please create or load a manuscript first.', 'warning', undefined, isDarkMode);
+        return;
+      }
+
+      // 3. Load metadata
+      const meta = await loadWorkingCopyMeta();
+      if (!meta) {
+        showAlert('Could not load manuscript metadata.', 'error', undefined, isDarkMode);
+        return;
+      }
+
+      // 4. Load cover image (may be null)
+      const coverBlob = await loadCoverImage();
+
+      // 5. Use in-memory epub.sections order (the sidebar order) to reorder loaded sections
+      // This ensures EPUB matches exactly what the user sees, regardless of meta.json order
+      const sectionOrder = epub!.sections.map(s => s.id);
+      const orderedSections = sectionOrder
+        .map(id => workingCopy.sections.find(s => s.id === id))
+        .filter((s): s is WorkingCopySection => s !== undefined);
+
       // 6. Fetch images fresh from IndexedDB to ensure we have any newly uploaded images
       const freshImages = await getAllManuscriptImages();
 
@@ -1715,26 +1713,9 @@ export default function AuthorsLayout({
 
       // 7. Import to e-reader library (replace existing, don't duplicate)
       const appService = await environmentConfig.getAppService();
-      const books = await appService.loadLibraryBooks();
-
-      // Delete existing working copy book if we saved before
-      if (meta.libraryBookHash) {
-        const existingBook = books.find(b => b.hash === meta.libraryBookHash);
-        if (existingBook) {
-          await appService.deleteBook(existingBook, 'local');
-          // Remove from books array
-          const idx = books.indexOf(existingBook);
-          if (idx > -1) books.splice(idx, 1);
-        }
-      }
-
-      // Import new version
-      const book = await appService.importBook(file, books);
+      const book = await publishManuscript(appService, file, meta.libraryBookHash);
       if (book) {
-        // Store new hash in meta for next save
-        meta.libraryBookHash = book.hash;
-        await saveWorkingCopyMeta(meta);
-        await appService.saveLibraryBooks(books);
+        setBookMeta(await loadWorkingCopyMeta());
 
         // Tell Library tab to reload (if open)
         const channel = new BroadcastChannel('everythingebooks-library');
@@ -1759,9 +1740,44 @@ export default function AuthorsLayout({
     } catch (error) {
       console.error('Error saving manuscript:', error);
       showAlert(`Error saving manuscript: ${(error as Error).message}`, 'error', undefined, isDarkMode);
+    } finally {
+      publishingRef.current = false;
     }
   };
 
+
+  const handleTxtExport = async () => {
+    try {
+      if (hasUnsavedChanges && selectedSection && selectedSectionId) {
+        await saveCurrentSection();
+      }
+      const workingCopy = await loadFullWorkingCopy();
+      if (!workingCopy || !epub) throw new Error('No manuscript is loaded.');
+      const savedById = new Map(workingCopy.sections.map(section => [section.id, section]));
+      // Match the visible Chapters area, including legacy/floating chapter types.
+      const chapters = epub.sections
+        .filter(section => getEffectiveSectionNumber(section.type) === 4)
+        .map(section => {
+          const saved = savedById.get(section.id);
+          if (!saved) throw new Error('A chapter could not be read. Please try again.');
+          return saved;
+        });
+      const text = exportManuscriptText(chapters);
+      const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'manuscript.txt';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      // Let the browser begin the download before releasing its URL.
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      showAlert('Downloaded manuscript.txt!', 'success', undefined, isDarkMode);
+    } catch (error) {
+      console.error('TXT export failed:', error);
+      showAlert(error instanceof Error ? error.message : 'TXT export failed.', 'error', undefined, isDarkMode);
+    }
+  };
 
   // Handle DOCX export - download manuscript for Vellum/Atticus import
   const handleDocxExport = async () => {
@@ -1901,6 +1917,7 @@ export default function AuthorsLayout({
         onSearchClose={handleSearchClose}
         onCoverClick={onCoverClick}
         onDocxExportClick={handleDocxExport}
+        onTxtExportClick={handleTxtExport}
         onFountainExportClick={handleFountainExport}
         onXrayClick={onXrayClick}
         hasUnsavedChanges={hasUnsavedChanges}

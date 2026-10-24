@@ -80,7 +80,7 @@ export async function parseEpub(file: File): Promise<ParsedEpub> {
     throw new Error(`Invalid epub: missing ${rootfilePath}`);
   }
 
-  const { title, author, language, publisher, manifest, spine, coverImageId } = parseContentOpf(contentOpf);
+  const { title, author, language, publisher, subtitle: opfSubtitle, manifest, spine, coverImageId } = parseContentOpf(contentOpf);
 
   // Extract SceneCraft meta.json if present (embedded by generateEPUB)
   let sceneCraftMeta: { sections: Array<{ id: string; title: string; type?: string; sceneCraftConfig?: SceneCraftConfig }> } | null = null;
@@ -260,10 +260,11 @@ export async function parseEpub(file: File): Promise<ParsedEpub> {
   // Rebuild sections array with protected sections first (no cover section)
   const orderedSections = [titlePageSection, copyrightSection, ...otherSections];
 
-  // Extract subtitle from Title Page XHTML (subtitle is not in OPF metadata)
-  let subtitle: string | undefined;
+  // Older EverythingEbooks files stored the subtitle only on the title page.
+  // Prefer explicit EPUB metadata, retaining the older title-page fallback.
+  let subtitle = opfSubtitle || undefined;
   const titlePageSec = orderedSections.find(s => s.type === 'title-page');
-  if (titlePageSec) {
+  if (!subtitle && titlePageSec) {
     const tpParser = new DOMParser();
     const tpDoc = tpParser.parseFromString(`<body>${titlePageSec.xhtml}</body>`, 'text/html');
     const subtitleEl = tpDoc.querySelector('.book-subtitle');
@@ -306,6 +307,7 @@ function parseRootfilePath(containerXml: string): string | null {
  */
 function parseContentOpf(opfContent: string): {
   title: string;
+  subtitle: string;
   author: string;
   language: string;
   publisher: string;
@@ -316,18 +318,33 @@ function parseContentOpf(opfContent: string): {
   const parser = new DOMParser();
   const doc = parser.parseFromString(opfContent, 'text/xml');
 
-  // Extract metadata
-  const titleEl = doc.querySelector('metadata > title, metadata > dc\\:title');
-  const title = titleEl?.textContent || '';
-
-  const creatorEl = doc.querySelector('metadata > creator, metadata > dc\\:creator');
-  const author = creatorEl?.textContent || '';
-
-  const languageEl = doc.querySelector('metadata > language, metadata > dc\\:language');
-  const language = languageEl?.textContent || 'en';
-
-  const publisherEl = doc.querySelector('metadata > publisher, metadata > dc\\:publisher');
-  const publisher = publisherEl?.textContent || '';
+  // Dublin Core prefixes are arbitrary (dc:, dcterms:, etc.); use the namespace
+  // and local name, while retaining support for older unqualified metadata.
+  const metadataEl = doc.getElementsByTagNameNS('*', 'metadata')[0];
+  const metadataElements = Array.from(metadataEl?.children || []);
+  const dcElements = (name: string) => {
+    const matching = metadataElements.filter(el => el.localName === name);
+    const qualified = matching.filter(el => el.namespaceURI === 'http://purl.org/dc/elements/1.1/');
+    return qualified.length ? qualified : matching;
+  };
+  const text = (el: Element | undefined) => el?.textContent?.trim() || '';
+  const titleType = (el: Element) => {
+    const id = el.getAttribute('id');
+    if (!id) return '';
+    return text(metadataElements.find(meta =>
+      meta.localName === 'meta' &&
+      meta.getAttribute('property') === 'title-type' &&
+      meta.getAttribute('refines') === `#${id}`,
+    ));
+  };
+  const titles = dcElements('title');
+  const mainTitle = titles.find(el => titleType(el) === 'main') ||
+    titles.find(el => titleType(el) !== 'subtitle') || titles[0];
+  const title = text(mainTitle);
+  const subtitle = text(titles.find(el => titleType(el) === 'subtitle'));
+  const author = text(dcElements('creator')[0]);
+  const language = text(dcElements('language')[0]) || 'en';
+  const publisher = text(dcElements('publisher')[0]);
 
   // Extract manifest (including properties for cover-image detection)
   const manifest = new Map<string, { id: string; href: string; mediaType: string; properties: string }>();
@@ -367,7 +384,7 @@ function parseContentOpf(opfContent: string): {
     }
   });
 
-  return { title, author, language, publisher, manifest, spine, coverImageId };
+  return { title, subtitle, author, language, publisher, manifest, spine, coverImageId };
 }
 
 /**

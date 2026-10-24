@@ -1,7 +1,7 @@
 import clsx from 'clsx';
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { PiGear, PiPencil, PiBookOpenText, PiTrash, PiArrowClockwise, PiArrowCircleUp, PiDatabase, PiInfo } from 'react-icons/pi';
+import { PiGear, PiPencil, PiBookOpenText, PiTrash, PiArrowClockwise, PiArrowCircleUp, PiDatabase, PiInfo, PiDownloadSimple } from 'react-icons/pi';
 import { PiSun, PiMoon } from 'react-icons/pi';
 import { showConfirm, showAlert } from '@/app/shared/alerts';
 import { TbSunMoon } from 'react-icons/tb';
@@ -18,6 +18,7 @@ import { saveSysSettings } from '@/helpers/settings';
 import { invoke } from '@/utils/desktop-stubs';
 import MenuItem from '@/components/MenuItem';
 import Menu from '@/components/Menu';
+import { showOfflinePreparation } from '@/components/OfflinePreparation';
 
 interface SettingsMenuProps {
   setIsDropdownOpen?: (isOpen: boolean) => void;
@@ -337,6 +338,16 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ setIsDropdownOpen }) => {
       )}
       <hr aria-hidden='true' className='border-base-200 my-1' />
       <MenuItem label={_('Storage')} Icon={PiDatabase} onClick={showStorageInfo} />
+      <MenuItem
+        label={_('Prep for offline use')}
+        description={_('save application files in this browser')}
+        Icon={PiDownloadSimple}
+        onClick={() => {
+          setIsDropdownOpen?.(false);
+          const isDark = themeMode === 'dark' || (themeMode === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          void showOfflinePreparation(isDark);
+        }}
+      />
       <MenuItem
         label={_('Reset Library & Authors')}
         description={_('clear all local data')}

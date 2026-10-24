@@ -6,7 +6,7 @@ import { appPath } from '@/utils/app-path';
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { PiFolderOpen, PiNotePencil, PiDatabase, PiInfo, PiFileDoc, /* PiFileText, */ PiImage, PiArrowRight } from 'react-icons/pi';
+import { PiFolderOpen, PiNotePencil, PiDatabase, PiInfo, PiFileDoc, PiFileText, PiImage, PiArrowRight } from 'react-icons/pi';
 import { GiBoxUnpacking } from 'react-icons/gi';
 import { ThemeConfig } from '../shared/theme';
 import { showConfirm } from '../shared/alerts';
@@ -32,6 +32,7 @@ interface AuthorsHeaderProps {
   onSearchClose?: () => void;
   onCoverClick?: () => void;
   onDocxExportClick?: () => void;
+  onTxtExportClick?: () => void;
   onFountainExportClick?: () => void;
   onXrayClick?: () => void;
   hasUnsavedChanges?: boolean;
@@ -58,6 +59,7 @@ export default function AuthorsHeader({
   onSearchClose,
   onCoverClick,
   onDocxExportClick,
+  onTxtExportClick,
   onFountainExportClick: _onFountainExportClick,
   onXrayClick,
   hasUnsavedChanges = false,
@@ -412,6 +414,26 @@ export default function AuthorsHeader({
             >
               <PiImage size={16} />
               Cover
+            </button>
+            <button
+              onClick={() => { onTxtExportClick?.(); setMenuOpen(false); }}
+              title="Download chapters as manuscript.txt"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                width: '100%',
+                padding: '8px 12px',
+                background: 'rgba(34, 197, 94, 0.15)',
+                border: 'none',
+                textAlign: 'left',
+                cursor: 'pointer',
+                color: theme.text,
+                fontSize: '13px',
+              }}
+            >
+              <PiFileText size={16} />
+              TXT
             </button>
             <button
               onClick={() => { onDocxExportClick?.(); setMenuOpen(false); }}

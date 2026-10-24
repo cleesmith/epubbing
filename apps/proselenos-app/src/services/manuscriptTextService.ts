@@ -56,14 +56,11 @@ export function parseManuscriptText(text: string): ParsedEpub {
     // Strip only boundary whitespace. Blank lines inside the prose remain paragraphs.
     while (content.length && isBlank(content[0])) content.shift();
     while (content.length && isBlank(content[content.length - 1])) content.pop();
-    if (!content.length) {
-      throw new Error(`Chapter ${marker.number} has no text. Add its text or remove its marker before loading.`);
-    }
     return {
       id: `chapter-${marker.number}`,
       title: `Chapter ${marker.number}`,
       href: `chapter-${marker.number}.xhtml`,
-      xhtml: paragraphsToXhtml(content),
+      xhtml: paragraphsToXhtml(content) || '<p></p>',
       type: 'chapter' as const,
     };
   });
@@ -93,4 +90,65 @@ export async function parseManuscriptFile(file: File): Promise<ParsedEpub> {
     throw new Error('This file contains unsupported control characters. Save it as plain UTF-8 text and try again.');
   }
   return parseManuscriptText(text);
+}
+
+/** Extract prose without merging adjacent paragraphs or repeating nested text. */
+function chapterText(xhtml: string): string {
+  const doc = new DOMParser().parseFromString(xhtml, 'text/html');
+  doc.querySelectorAll('script, style, template, noscript, img, audio, video, source, iframe, canvas, svg, input, button, .scene-audio, .audio-block, .sticky-img-wrap')
+    .forEach(element => element.remove());
+  doc.querySelectorAll('figure').forEach(figure => {
+    if (!figure.textContent?.trim()) figure.remove();
+  });
+  doc.querySelectorAll('.dialogue .speaker').forEach(speaker => {
+    speaker.append(doc.createTextNode(': '));
+  });
+  const blockSelector = 'p,div,h1,h2,h3,h4,h5,h6,blockquote,li,ul,ol,pre,figure,figcaption,section,article,table,thead,tbody,tfoot,tr,td,th,hr';
+  const blocks: string[] = [];
+  const inlineText = (node: Node): string => {
+    if (node.nodeType === 3) return (node.textContent || '').replace(/\r\n?|\n/g, ' ');
+    if (node.nodeType !== 1) return '';
+    const element = node as Element;
+    if (element.tagName === 'BR') return '\n';
+    return Array.from(element.childNodes).map(inlineText).join('');
+  };
+  const walk = (container: Element) => {
+    let inline = '';
+    const flush = () => {
+      if (inline.trim()) blocks.push(inline);
+      inline = '';
+    };
+    for (const node of Array.from(container.childNodes)) {
+      if (node.nodeType === 1 && (node as Element).matches(blockSelector)) {
+        flush();
+        const element = node as Element;
+        if (element.querySelector(blockSelector)) walk(element);
+        else if (element.tagName === 'HR') blocks.push('* * *');
+        else if (element.tagName === 'PRE') blocks.push(element.textContent || '');
+        else blocks.push(inlineText(element));
+      } else if (node.nodeType !== 3 || node.textContent?.trim() || inline) {
+        inline += inlineText(node);
+      }
+    }
+    flush();
+  };
+  walk(doc.body);
+  // A normal paragraph break is two newlines; an empty paragraph adds one more.
+  return blocks.map((block, index) => `${index ? (blocks[index - 1] === '' ? '\n' : '\n\n') : ''}${block}`)
+    .join('')
+    .replace(/^\n+|\n+$/g, '');
+}
+
+/** Number chapters by their current order using the same delimiters as Load. */
+export function exportManuscriptText(chapters: ReadonlyArray<{ xhtml: string }>): string {
+  if (!chapters.length) throw new Error('There are no chapters to export.');
+  const blocks = chapters.map((chapter, index) => {
+    const text = chapterText(chapter.xhtml);
+    if (text.split('\n').some(line => markerPattern.test(line))) {
+      throw new Error(`Chapter ${index + 1} contains a chapter-marker line inside its text. Remove that marker before exporting TXT.`);
+    }
+    const number = String(index + 1).padStart(3, '0');
+    return `===== ${number}.txt =====\n\n\n${text}`;
+  });
+  return `\n\n${blocks.join('\n\n\n')}\n`;
 }

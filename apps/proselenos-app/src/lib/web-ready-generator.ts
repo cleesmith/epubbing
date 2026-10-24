@@ -41,7 +41,7 @@ export function makeWebReadySlug(title: string, author: string): string {
 }
 
 /**
- * Derive a URL-friendly slug from a book title for use in <base href>.
+ * Derive a URL-friendly slug for the exported folder and download filename.
  * Example: "What I Learned from Birds" → "What-I-Learned-from-Birds"
  */
 function makeTitleSlug(title: string): string {
@@ -160,7 +160,6 @@ function buildIndexHtml(opts: BuildHtmlOptions): string {
   // Reset the global enlarge counter for each new HTML build
   globalEnlargeCounter = 0;
 
-  const titleSlug = makeTitleSlug(title);
   const sectionHtmls: string[] = [];
   let hasAnyVnContent = false;
   let hasAnySceneCraft = false;
@@ -256,7 +255,6 @@ ${tocEntries.map(entry => `      <div class="toc-item"><p class="toc-content"><a
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escapeHtml(title)}</title>
-  <base href="/${titleSlug}/" />
   <style>
 ${EPUB_BASE_CSS}
 ${vnCssBlock}
@@ -329,7 +327,6 @@ function buildAutoplayHtml(opts: BuildHtmlOptions): string {
   // Reset the global enlarge counter for each new HTML build
   globalEnlargeCounter = 0;
 
-  const titleSlug = makeTitleSlug(title);
   const sectionHtmls: string[] = [];
   let hasAnyVnContent = false;
   let hasAnySceneCraft = false;
@@ -425,7 +422,6 @@ ${tocEntries.map(entry => `      <div class="toc-item"><p class="toc-content"><a
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escapeHtml(title)} &#8212; Autoplay</title>
-  <base href="/${titleSlug}/" />
   <style>
 ${EPUB_BASE_CSS}
 ${vnCssBlock}
@@ -482,7 +478,6 @@ export function buildEdgeHtml(opts: BuildHtmlOptions): string {
 
   globalEnlargeCounter = 0;
 
-  const titleSlug = makeTitleSlug(title);
   const sectionHtmls: string[] = [];
   let hasAnyVnContent = false;
 
@@ -560,7 +555,6 @@ ${contentHtml}
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escapeHtml(title)} &#8212; Edge Read Aloud</title>
-  <base href="/${titleSlug}/" />
   <style>
 ${EPUB_BASE_CSS}
 ${vnCssBlock}

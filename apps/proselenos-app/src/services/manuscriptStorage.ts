@@ -413,6 +413,52 @@ export async function saveWorkingCopyMeta(meta: WorkingCopyMeta): Promise<void> 
   await setValue(STORES.MANUSCRIPT, 'working_copy_meta.json', meta);
 }
 
+// Patch the current records in one transaction. Image edits and publishing must
+// not write an older React metadata snapshot over the latest Library link.
+async function updateWorkingCopyMetadata(
+  update: (meta: WorkingCopyMeta | ManuscriptMeta) => void,
+): Promise<void> {
+  const db = await openDB();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORES.MANUSCRIPT, 'readwrite');
+      const store = tx.objectStore(STORES.MANUSCRIPT);
+      tx.oncomplete = () => resolve();
+      tx.onabort = () => reject(tx.error || new Error('Could not update manuscript metadata.'));
+      for (const key of ['working_copy_meta.json', 'meta.json']) {
+        const request = store.get(key);
+        request.onsuccess = () => {
+          if (!request.result) {
+            // The legacy record is required by Publish; meta.json may be absent
+            // in an older working copy that has not been migrated yet.
+            if (key === 'working_copy_meta.json') tx.abort();
+            return;
+          }
+          const meta = request.result.value as WorkingCopyMeta | ManuscriptMeta;
+          update(meta);
+          store.put({ key, value: meta });
+        };
+      }
+    });
+  } finally {
+    db.close();
+  }
+}
+
+export async function saveWorkingCopyLibraryHash(hash: string | undefined): Promise<void> {
+  await updateWorkingCopyMetadata(meta => {
+    if (hash) meta.libraryBookHash = hash;
+    else delete meta.libraryBookHash;
+  });
+}
+
+export async function updateWorkingCopyImageIds(filename: string, remove = false): Promise<void> {
+  await updateWorkingCopyMetadata(meta => {
+    const ids = (meta.imageIds || []).filter(id => id !== filename);
+    meta.imageIds = remove ? ids : [...ids, filename];
+  });
+}
+
 /**
  * Infer section type from title for formatting support.
  * Only structural/metadata sections are non-chapters.
@@ -826,6 +872,8 @@ export interface FullWorkingCopy {
   title: string;
   author: string;
   language: string;
+  subtitle?: string;
+  publisher?: string;
   coverImage: Blob | null;
   sections: WorkingCopySection[];  // XHTML is the single source of truth
 }
@@ -860,6 +908,8 @@ export async function loadFullWorkingCopy(): Promise<FullWorkingCopy | null> {
       title: newMeta.title,
       author: newMeta.author,
       language: newMeta.language,
+      subtitle: newMeta.subtitle,
+      publisher: newMeta.publisher,
       coverImage,
       sections,
     };
@@ -888,6 +938,8 @@ export async function loadFullWorkingCopy(): Promise<FullWorkingCopy | null> {
     title: oldMeta.title,
     author: oldMeta.author,
     language: oldMeta.language,
+    subtitle: oldMeta.subtitle,
+    publisher: oldMeta.publisher,
     coverImage,
     sections,
   };
@@ -904,7 +956,10 @@ export async function saveFullWorkingCopy(epub: {
   title: string;
   author: string;
   language: string;
+  subtitle?: string;
+  publisher?: string;
   coverImage: Blob | null;
+  libraryBookHash?: string;
   sections: Array<{
     id: string;
     title: string;
@@ -972,8 +1027,11 @@ export async function saveFullWorkingCopy(epub: {
     title: epub.title,
     author: epub.author,
     language: epub.language,
+    subtitle: epub.subtitle,
+    publisher: epub.publisher,
     coverImageId,
     sections: sectionMetas,
+    libraryBookHash: epub.libraryBookHash,
   };
   await saveManuscriptMeta(meta);
 
@@ -982,8 +1040,11 @@ export async function saveFullWorkingCopy(epub: {
     title: epub.title,
     author: epub.author,
     language: epub.language,
+    subtitle: epub.subtitle,
+    publisher: epub.publisher,
     sectionIds: sectionMetas.map(s => s.id),
     coverImageId,
+    libraryBookHash: epub.libraryBookHash,
   };
   await saveWorkingCopyMeta(oldMeta);
 }

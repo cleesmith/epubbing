@@ -173,8 +173,11 @@ export default function AuthorsClient() {
       // Filter out table-of-contents - it gets auto-generated on "Publish"
       await saveFullWorkingCopy({
         title: parsed.title,
+        libraryBookHash: book.hash,
         author: parsed.author,
         language: parsed.language,
+        subtitle: parsed.subtitle,
+        publisher: parsed.publisher,
         coverImage: parsed.coverImage,
         sections: parsed.sections
           .filter((s) => s.type !== 'table-of-contents')
