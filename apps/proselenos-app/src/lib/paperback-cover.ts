@@ -35,11 +35,29 @@ export function paperbackPublishingNote(pdfPages: number, paper: PaperChoice) {
 export function characterCount(text: string) { return Array.from(text).length; }
 export function limitBackText(text: string) { return Array.from(text).slice(0, BACK_COVER_LIMIT).join(''); }
 
-// A quarter-inch inset preserves existing cover lettering without cropping.
-export function frontPlacement(width: number, height: number) {
-  if (!(width > 0 && height > 0)) throw new Error('The EPUB cover image has no usable dimensions.');
-  const scale = Math.min(5.5 / width, 8.5 / height);
+// Front panel: 6 x 9 trim, plus bleed at top, bottom, and outer edge.
+export const FRONT_WIDTH = 6.125;
+export const FRONT_HEIGHT = 9.25;
+export const COVER_BACKGROUND = '#f3efe5';
+export type FrontFit = 'fill' | 'border';
+
+export function frontPlacement(width: number, height: number, fit: FrontFit = 'fill') {
+  if (![width, height].every(value => Number.isFinite(value) && value > 0)) throw new Error('The cover image has no usable dimensions.');
+  const scale = fit === 'border' ? Math.min(5.5 / width, 8.5 / height) : Math.max(FRONT_WIDTH / width, FRONT_HEIGHT / height);
   const printWidth = width * scale;
   const printHeight = height * scale;
-  return { width: printWidth, height: printHeight, dpi: 1 / scale };
+  const x = ((fit === 'border' ? 6 : FRONT_WIDTH) - printWidth) / 2;
+  const y = fit === 'border' ? 0.125 + (9 - printHeight) / 2 : (FRONT_HEIGHT - printHeight) / 2;
+  return { width: printWidth, height: printHeight, x, y, dpi: 1 / scale,
+    cropSides: fit === 'fill' && (printWidth - FRONT_WIDTH) / scale > 1,
+    cropTopBottom: fit === 'fill' && (printHeight - FRONT_HEIGHT) / scale > 1 };
+}
+
+export function frontImageWarnings(width: number, height: number, fit: FrontFit) {
+  const placement = frontPlacement(width, height, fit);
+  const warnings: string[] = [];
+  if (fit === 'border') warnings.push('This option adds a cream border around the front image. It will be visible in print and may look uneven after trimming. Choose Fill front cover or a different image if you do not want it.');
+  if (placement.cropSides || placement.cropTopBottom) warnings.push(`To fill the front cover without an added border, the ${placement.cropSides ? 'sides' : 'top and bottom'} of this image will be cropped. Check the preview, especially any lettering near the edges.`);
+  if (placement.dpi < 299.9) warnings.push(`This image is ${width} × ${height} pixels, about ${Math.round(placement.dpi)} DPI at this size, and may look blurry in print. For the same image shape at 300 DPI, use at least ${Math.ceil(width * 300 / placement.dpi)} × ${Math.ceil(height * 300 / placement.dpi)} pixels. You can still use this image.`);
+  return warnings;
 }

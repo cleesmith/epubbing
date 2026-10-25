@@ -4,19 +4,34 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import type { Book } from '@/types/book';
 import type { PaperbackCoverResult } from '@/lib/paperback-cover-browser';
 import PaperbackCoverModal from './PaperbackCoverModal';
-const mocked = vi.hoisted(() => ({ generate: vi.fn(), openFile: vi.fn(), createUrl: vi.fn(), revokeUrl: vi.fn() }));
-vi.mock('@/context/EnvContext', () => ({ useEnv: () => ({ envConfig: { getAppService: async () => ({ openFile: mocked.openFile }) } }) }));
-vi.mock('@/utils/book', () => ({ getLocalBookFilename: () => 'book.epub' }));
+const mocked = vi.hoisted(() => {
+  const service = { openFile: vi.fn(), writeFile: vi.fn(), deleteFile: vi.fn() };
+  return { ...service, envConfig: { getAppService: async () => service }, files: new Map<string, string>(), generate: vi.fn(), prepare: vi.fn(), normalize: vi.fn(), createUrl: vi.fn(), revokeUrl: vi.fn() };
+});
+vi.mock('@/context/EnvContext', () => ({ useEnv: () => ({ envConfig: mocked.envConfig }) }));
+vi.mock('@/utils/book', () => ({ getLocalBookFilename: () => 'book.epub', getPaperbackFrontFilename: (b: Book) => `${b.hash}/paperback-front.json` }));
 vi.mock('jszip', () => ({ default: { loadAsync: async () => ({ loadedEpub: true }) } }));
 vi.mock('@/lib/epub-to-pdf', () => ({ getSpineItems: async () => ['chapter.xhtml'], resolveTitlePageText: async () => ({ title: 'Book title' }) }));
-vi.mock('@/lib/paperback-cover-browser', () => ({ generatePaperbackCover: mocked.generate }));
+vi.mock('@/lib/epub-cover', () => ({ extractEpubCover: async () => new Blob(['epub cover']) }));
+vi.mock('@/lib/paperback-cover-browser', () => ({ generatePaperbackCover: mocked.generate, prepareFrontImage: mocked.prepare, normalizeFrontUpload: mocked.normalize }));
 const book = { hash: 'one', format: 'EPUB', title: 'Book title', author: 'Clee Smith', createdAt: 1, updatedAt: 1 } as Book;
 const result = () => ({ blob: new Blob(['PDF'], { type: 'application/pdf' }), warnings: ['The image may look blurry in print.'], dimensions: { pdfPages: 300, printPages: 300, spine: 0.75, width: 13, height: 9.25 } });
 const open = (onClose = vi.fn()) => render(<PaperbackCoverModal book={book} bookMeta={null} isOpen onClose={onClose} />);
 const calculate = (pages = '300') => { fireEvent.change(screen.getByLabelText('Page count'), { target: { value: pages } }); fireEvent.click(screen.getByText('Calculate dimensions')); };
 beforeEach(() => {
   vi.clearAllMocks();
-  mocked.openFile.mockResolvedValue({ arrayBuffer: async () => new ArrayBuffer(0) });
+  mocked.files.clear();
+  mocked.openFile.mockImplementation(async (path: string) => {
+    if (path.endsWith('paperback-front.json')) {
+      if (!mocked.files.has(path)) throw new Error(`File not found: ${path}`);
+      return { text: async () => mocked.files.get(path) };
+    }
+    return { arrayBuffer: async () => new ArrayBuffer(0) };
+  });
+  mocked.writeFile.mockImplementation(async (path: string, _base: string, content: string) => { mocked.files.set(path, content); });
+  mocked.deleteFile.mockImplementation(async (path: string) => { mocked.files.delete(path); });
+  mocked.prepare.mockImplementation(async (_blob: Blob, fit: string) => ({ dataUrl: 'data:image/jpeg;base64,eA==', sourceWidth: 1838, sourceHeight: 2775, dpi: 300, fit, warnings: [] }));
+  mocked.normalize.mockImplementation(async (file: File) => ({ name: file.name.replace(/\.[^.]*$/, '.jpg'), jpeg: 'data:image/jpeg;base64,eA==' }));
   mocked.generate.mockResolvedValue(result());
   mocked.createUrl.mockReturnValue('blob:cover');
   vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: mocked.createUrl, revokeObjectURL: mocked.revokeUrl }));
@@ -62,7 +77,7 @@ describe('separate paperback-cover calculator', () => {
     fireEvent.click(screen.getByText('Create cover PDF'));
     await screen.findByRole('link', { name: 'Download cover PDF' });
     expect(mocked.openFile).toHaveBeenCalledWith('book.epub', 'Books');
-    expect(mocked.generate).toHaveBeenCalledWith({ loadedEpub: true }, 300, { paper: 'bw-cream', backText: 'A quiet valley.' }, 'Book title', 'Clee Smith', expect.any(Function));
+    expect(mocked.generate).toHaveBeenCalledWith({ loadedEpub: true }, 300, { paper: 'bw-cream', backText: 'A quiet valley.' }, 'Book title', 'Clee Smith', expect.any(Function), expect.objectContaining({ fit: 'fill' }));
     expect(screen.queryByText('Download interior PDF')).toBeNull();
     expect(screen.getByText('The image may look blurry in print.')).toBeTruthy();
     fireEvent.click(screen.getByText('Close')); expect(close).toHaveBeenCalledOnce(); expect(mocked.revokeUrl).toHaveBeenCalledWith('blob:cover');
@@ -84,5 +99,32 @@ describe('separate paperback-cover calculator', () => {
     await waitFor(() => expect(mocked.generate).toHaveBeenCalledOnce());
     fireEvent.click(screen.getByText('Cancel')); finish(result());
     await waitFor(() => expect(close).toHaveBeenCalledOnce()); expect(mocked.createUrl).not.toHaveBeenCalled();
+  });
+  it('saves one uploaded image and its placement per ebook, reloads it, and replaces it', async () => {
+    const view = open(); calculate();
+    const input = await screen.findByLabelText('Choose front-cover image');
+    fireEvent.change(input, { target: { files: [new File(['first'], 'print-cover.png', { type: 'image/png' })] } });
+    await screen.findByText('print-cover.jpg · Saved with this ebook');
+    fireEvent.change(screen.getByLabelText('Image placement'), { target: { value: 'border' } });
+    await waitFor(() => expect(JSON.parse(mocked.files.get('one/paperback-front.json')!).fit).toBe('border'));
+    view.unmount(); open(); calculate();
+    await screen.findByText('print-cover.jpg · Saved with this ebook');
+    expect((screen.getByLabelText('Image placement') as HTMLSelectElement).value).toBe('border');
+    fireEvent.change(screen.getByLabelText('Choose front-cover image'), { target: { files: [new File(['next'], 'new-cover.jpg', { type: 'image/jpeg' })] } });
+    await screen.findByText('new-cover.jpg · Saved with this ebook');
+    expect(mocked.files.size).toBe(1);
+    expect(JSON.parse(mocked.files.get('one/paperback-front.json')!).name).toBe('new-cover.jpg');
+    fireEvent.click(screen.getByText('Use EPUB cover'));
+    await screen.findByText('Using the EPUB cover');
+    expect(mocked.files.size).toBe(0);
+  });
+  it('reports a failed save without replacing the saved image', async () => {
+    const saved = JSON.stringify({ version: 1, name: 'saved.jpg', jpeg: 'data:image/jpeg;base64,eA==', fit: 'fill' });
+    mocked.files.set('one/paperback-front.json', saved);
+    open(); calculate(); await screen.findByText('saved.jpg · Saved with this ebook');
+    mocked.writeFile.mockRejectedValueOnce(new Error('Storage is full.'));
+    fireEvent.change(screen.getByLabelText('Choose front-cover image'), { target: { files: [new File(['next'], 'next.png', { type: 'image/png' })] } });
+    expect((await screen.findByRole('alert')).textContent).toContain('was not saved');
+    expect(mocked.files.get('one/paperback-front.json')).toBe(saved);
   });
 });

@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { coverDimensions, frontPlacement, characterCount, limitBackText, paperbackPublishingNote, PAPER_CHOICES, type PaperChoice } from './paperback-cover';
+import { coverDimensions, frontPlacement, frontImageWarnings, FRONT_WIDTH, FRONT_HEIGHT, characterCount, limitBackText, paperbackPublishingNote, PAPER_CHOICES, type PaperChoice } from './paperback-cover';
 import { checkBackCoverText, createPaperbackCover } from 'book-pdf/cover';
 import fs from 'node:fs';
 
@@ -31,11 +31,21 @@ describe('6x9 paperback cover', () => {
     expect(paperbackPublishingNote(776, 'bw-cream')).toBe('');
     expect(paperbackPublishingNote(828, 'bw-white')).toBe('');
   });
-  it('preserves portrait, square, and landscape artwork and measures effective resolution', () => {
-    expect(frontPlacement(1650, 2550)).toEqual({ width: 5.5, height: 8.5, dpi: 300 });
-    expect(frontPlacement(1000, 1000)).toMatchObject({ width: 5.5, height: 5.5 });
-    expect(frontPlacement(2200, 1100)).toMatchObject({ width: 5.5, height: 2.75 });
+  it('covers the entire front panel including bleed for every image shape', () => {
+    for (const [width, height] of [[2450, 3700], [600, 900], [1000, 1000], [2200, 1100]]) {
+      const p = frontPlacement(width!, height!);
+      expect(p.x).toBeLessThanOrEqual(0.000001); expect(p.y).toBeLessThanOrEqual(0.000001);
+      expect(p.x + p.width).toBeGreaterThanOrEqual(FRONT_WIDTH - 0.000001);
+      expect(p.y + p.height).toBeGreaterThanOrEqual(FRONT_HEIGHT - 0.000001);
+    }
+    expect(frontImageWarnings(1838, 2775, 'fill')).toEqual([]);
+    expect(frontImageWarnings(2200, 1100, 'fill').join(' ')).toMatch(/cropped/);
     expect(frontPlacement(600, 900).dpi).toBeLessThan(300);
+  });
+  it('keeps the entire image only when the author chooses a warned border', () => {
+    expect(frontPlacement(1650, 2550, 'border')).toMatchObject({ width: 5.5, height: 8.5, dpi: 300, x: 0.25, y: 0.375 });
+    expect(frontPlacement(2200, 1100, 'border')).toMatchObject({ width: 5.5, height: 2.75, cropSides: false, cropTopBottom: false });
+    expect(frontImageWarnings(1650, 2550, 'border')[0]).toMatch(/cream border/);
   });
   it('counts spaces and Unicode characters without splitting surrogate pairs', () => {
     expect(characterCount('A 😀 B')).toBe(5);
@@ -58,6 +68,8 @@ describe('6x9 paperback cover', () => {
     const thin = await createPaperbackCover({ ...input, printPages: 24, spine: 0.054048 });
     expect(thin.spineText).toBe(false);
     expect(thin.warnings[0]).toMatch(/left off/);
-    if (process.env.COVER_TEST_OUTPUT) fs.writeFileSync(process.env.COVER_TEST_OUTPUT, new Uint8Array(await thick.blob.arrayBuffer()));
+    const full = await createPaperbackCover({ ...input, frontFullBleed: true });
+    expect(full.blob.size).toBeGreaterThan(1000);
+    if (process.env.COVER_TEST_OUTPUT) fs.writeFileSync(process.env.COVER_TEST_OUTPUT, new Uint8Array(await full.blob.arrayBuffer()));
   });
 });

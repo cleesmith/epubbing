@@ -76,10 +76,16 @@ export async function createPaperbackCover(input) {
     // Keep a 2 x 1.2-inch barcode box clear, 0.25 inch from spine and bottom trim.
     doc.rect(BLEED + (6 - 0.25 - 2) * PT, BLEED + (9 - 0.25 - 1.2) * PT, 2 * PT, 1.2 * PT).fill('#ffffff');
 
-    // The full EPUB artwork is preserved; the matching neutral surround supplies bleed.
+    // A prepared front panel includes its own bleed and any author-chosen border.
     const frontX = BLEED + (6 + spine) * PT;
-    doc.image(frontImage, frontX + (6 - frontWidth) * PT / 2,
-      BLEED + (9 - frontHeight) * PT / 2, { width: frontWidth * PT, height: frontHeight * PT });
+    doc.save().rect(frontX, 0, 6.125 * PT, height).clip();
+    if (input.frontFullBleed) {
+      doc.image(frontImage, frontX, 0, { width: 6.125 * PT, height });
+    } else {
+      doc.image(frontImage, frontX + (6 - frontWidth) * PT / 2,
+        BLEED + (9 - frontHeight) * PT / 2, { width: frontWidth * PT, height: frontHeight * PT });
+    }
+    doc.restore();
 
     // Read down the spine. Title starts near the top; author ends near the bottom.
     const safeWidth = spine * PT - 2 * 0.0625 * PT;

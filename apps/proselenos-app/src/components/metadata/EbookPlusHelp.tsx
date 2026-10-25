@@ -72,7 +72,7 @@ const bottomRowItems: HelpItem[] = [
   {
     icon: <SimpleShelfIcon size={ICON_SIZE} className="text-amber-600" />,
     name: 'Create 6x9 paperback cover PDF',
-    description: 'Create your 6×9 interior PDF first, then enter its total page count here. Uses your EPUB cover and arranges the front, back, and spine automatically. Downloads the cover as a separate PDF.',
+    description: 'Create your 6×9 interior PDF first, then enter its total page count here. Use your EPUB cover or choose one paperback image to save with this ebook. Arranges the front, back, and spine automatically and downloads the cover as a separate PDF.',
   },
   {
     icon: <MdOutlinePictureAsPdf size={ICON_SIZE} className="fill-red-500" />,

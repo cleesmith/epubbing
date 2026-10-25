@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import JSZip from 'jszip';
 import SimpleShelfIcon from '@/components/SimpleShelfIcon';
 import type { Book } from '@/types/book';
@@ -8,8 +8,11 @@ import type { BookMetadata } from '@/libs/document';
 import { useEnv } from '@/context/EnvContext';
 import { getLocalBookFilename } from '@/utils/book';
 import { getSpineItems, resolveTitlePageText } from '@/lib/epub-to-pdf';
-import { BACK_COVER_LIMIT, COVER_PAGE_MIN, COVER_PAGE_MAX, characterCount, coverDimensions, limitBackText, paperbackPublishingNote, type PaperChoice } from '@/lib/paperback-cover';
-import type { PaperbackCoverResult } from '@/lib/paperback-cover-browser';
+import { BACK_COVER_LIMIT, COVER_PAGE_MIN, COVER_PAGE_MAX, characterCount, coverDimensions, limitBackText, paperbackPublishingNote, type FrontFit, type PaperChoice } from '@/lib/paperback-cover';
+import { extractEpubCover } from '@/lib/epub-cover';
+import type { PaperbackCoverResult, PreparedFrontImage } from '@/lib/paperback-cover-browser';
+import PaperbackFrontImage from './PaperbackFrontImage';
+import { loadPaperbackFront, paperbackFrontFile, savePaperbackFront, removePaperbackFront, type SavedPaperbackFront } from '@/services/paperbackCoverStorage';
 
 interface PaperbackCoverModalProps {
   book: Book;
@@ -23,6 +26,14 @@ const PaperbackCoverModal: React.FC<PaperbackCoverModalProps> = ({ book, bookMet
   const [pages, setPages] = useState('');
   const [paper, setPaper] = useState<PaperChoice>('bw-white');
   const [backText, setBackText] = useState('');
+  const [frontFile, setFrontFile] = useState<File | null>(null);
+  const [frontFit, setFrontFit] = useState<FrontFit>('fill');
+  const [front, setFront] = useState<PreparedFrontImage | null>(null);
+  const [savedFront, setSavedFront] = useState<SavedPaperbackFront | null>(null);
+  const [frontLoaded, setFrontLoaded] = useState(false);
+  const [frontSaving, setFrontSaving] = useState(false);
+  const [frontError, setFrontError] = useState('');
+  const frontRequest = useRef(0);
   const [calculated, setCalculated] = useState<ReturnType<typeof coverDimensions> | null>(null);
   const [validation, setValidation] = useState<{ value: string; error: string | null } | null>(null);
   const [phase, setPhase] = useState<'options' | 'working' | 'ready'>('options');
@@ -33,6 +44,66 @@ const PaperbackCoverModal: React.FC<PaperbackCoverModalProps> = ({ book, bookMet
   const pageInput = useRef<HTMLInputElement>(null);
   const interiorType = paper.startsWith('bw-') ? 'bw' : paper;
   const filename = (book.title || 'Book').replace(/[<>:"/\\|?*]/g, '').slice(0, 120).trim() || 'Book';
+  const loadFrontFromEpub = useCallback(async () => {
+    const appService = await envConfig.getAppService();
+    const file = await appService.openFile(getLocalBookFilename(book), 'Books');
+    return extractEpubCover(await JSZip.loadAsync(await file.arrayBuffer()));
+  }, [envConfig, book]);
+
+  useEffect(() => {
+    const id = ++frontRequest.current;
+    setFrontFile(null); setFrontFit('fill'); setFront(null); setSavedFront(null);
+    setFrontLoaded(false); setFrontSaving(false); setFrontError('');
+    if (!isOpen) return;
+    void envConfig.getAppService().then(service => loadPaperbackFront(service, book)).then(saved => {
+      if (frontRequest.current !== id) return;
+      if (saved) { setFrontFile(paperbackFrontFile(saved)); setFrontFit(saved.fit); setSavedFront(saved); }
+      setFrontLoaded(true);
+    }).catch(() => {
+      if (frontRequest.current !== id) return;
+      setFrontError('The saved paperback image could not be loaded. You can choose another image.');
+      setFrontLoaded(true);
+    });
+    return () => { frontRequest.current++; };
+  }, [book, isOpen, envConfig]);
+
+  const chooseFrontFile = async (file: File | null) => {
+    const id = ++frontRequest.current;
+    setFront(null); setFrontSaving(true); setFrontError('');
+    try {
+      const service = await envConfig.getAppService();
+      if (file) {
+        const { normalizeFrontUpload } = await import('@/lib/paperback-cover-browser');
+        const image = await normalizeFrontUpload(file);
+        if (frontRequest.current !== id) return;
+        const saved: SavedPaperbackFront = { version: 1, ...image, fit: frontFit };
+        await savePaperbackFront(service, book, saved);
+        if (frontRequest.current !== id) return;
+        setSavedFront(saved); setFrontFile(paperbackFrontFile(saved));
+      } else {
+        await removePaperbackFront(service, book);
+        if (frontRequest.current !== id) return;
+        setSavedFront(null); setFrontFile(null);
+      }
+    } catch (failure) {
+      if (frontRequest.current === id) setFrontError(`The paperback image was not saved. ${failure instanceof Error ? failure.message : 'Try again.'}`);
+    } finally { if (frontRequest.current === id) setFrontSaving(false); }
+  };
+
+  const chooseFrontFit = async (fit: FrontFit) => {
+    setFront(null); setFrontFit(fit); setFrontError('');
+    if (!savedFront) return;
+    const id = ++frontRequest.current;
+    setFrontSaving(true);
+    try {
+      const service = await envConfig.getAppService();
+      const saved = { ...savedFront, fit };
+      await savePaperbackFront(service, book, saved);
+      if (frontRequest.current === id) setSavedFront(saved);
+    } catch {
+      if (frontRequest.current === id) setFrontError('The image placement was not saved. Try choosing it again.');
+    } finally { if (frontRequest.current === id) setFrontSaving(false); }
+  };
 
   const clearDownload = () => {
     if (downloadUrl.current) URL.revokeObjectURL(downloadUrl.current);
@@ -76,6 +147,7 @@ const PaperbackCoverModal: React.FC<PaperbackCoverModalProps> = ({ book, bookMet
 
   const close = () => {
     request.current++;
+    frontRequest.current++;
     clearDownload();
     onClose();
   };
@@ -86,7 +158,7 @@ const PaperbackCoverModal: React.FC<PaperbackCoverModalProps> = ({ book, bookMet
     setError('');
   };
   const createCover = async () => {
-    if (!calculated || phase === 'working' || !validation || validation.value !== backText || validation.error) return;
+    if (!calculated || !front || frontSaving || phase === 'working' || !validation || validation.value !== backText || validation.error) return;
     const generation = ++request.current;
     const cancelled = () => generation !== request.current;
     setPhase('working');
@@ -104,7 +176,7 @@ const PaperbackCoverModal: React.FC<PaperbackCoverModalProps> = ({ book, bookMet
       if (cancelled()) return;
       const { generatePaperbackCover } = await import('@/lib/paperback-cover-browser');
       if (cancelled()) return;
-      const cover = await generatePaperbackCover(zip, calculated.pdfPages, { paper, backText }, titlePage.title, book.author || 'Unknown', cancelled);
+      const cover = await generatePaperbackCover(zip, calculated.pdfPages, { paper, backText }, titlePage.title, book.author || 'Unknown', cancelled, front);
       if (cancelled()) return;
       const url = URL.createObjectURL(cover.blob);
       downloadUrl.current = url;
@@ -188,7 +260,13 @@ const PaperbackCoverModal: React.FC<PaperbackCoverModalProps> = ({ book, bookMet
                     </tbody>
                   </table>
                   {calculated.printPages !== calculated.pdfPages && <p className='mb-3 text-xs text-base-content/70'>The cover allows for {calculated.printPages} pages because KDP rounds up to an even page count.</p>}
-                  <p className='mb-3 text-sm text-base-content/70'>Uses this EPUB’s cover. The front, back, spine lettering, and space for KDP’s barcode are arranged automatically.</p>
+                  {frontLoaded ? <fieldset disabled={frontSaving}>
+                    <PaperbackFrontImage key={book.hash} loadEpubCover={loadFrontFromEpub} onChange={setFront}
+                      file={frontFile} fit={frontFit} onFileChange={file => { void chooseFrontFile(file); }} onFitChange={fit => { void chooseFrontFit(fit); }} />
+                  </fieldset> : <p role='status' className='mb-3 text-sm'>Loading the saved front-cover image…</p>}
+                  {frontSaving && <p role='status' className='mb-3 text-sm'>Saving the paperback image with this ebook…</p>}
+                  {frontError && <p role='alert' className='mb-3 text-sm text-error'>{frontError}</p>}
+                  <p className='mb-3 text-sm text-base-content/70'>The front, back, spine lettering, and space for KDP’s barcode are arranged automatically.</p>
                   <label className='block text-sm'>Back-cover text
                     <textarea className='textarea textarea-bordered mt-1 h-32 w-full text-base' value={backText} aria-describedby='cover-back-count'
                       onChange={event => { setBackText(limitBackText(event.target.value)); setValidation(null); }} />
@@ -203,7 +281,7 @@ const PaperbackCoverModal: React.FC<PaperbackCoverModalProps> = ({ book, bookMet
             <div className='mt-5 flex items-center justify-end gap-2'>
               {phase === 'working' && <span role='status' className='mr-auto flex items-center gap-2 text-sm'><span className='loading loading-spinner loading-sm' />Creating your cover…</span>}
               <button type='button' className='btn btn-ghost btn-sm' onClick={close}>Cancel</button>
-              {calculated && <button type='submit' className='btn btn-primary btn-sm' disabled={phase === 'working' || !validation || validation.value !== backText || !!validation.error}>Create cover PDF</button>}
+              {calculated && <button type='submit' className='btn btn-primary btn-sm' disabled={phase === 'working' || frontSaving || !front || !validation || validation.value !== backText || !!validation.error}>Create cover PDF</button>}
             </div>
           </form>
         )}

@@ -7,6 +7,7 @@ export interface CoverPdfInput {
   frontImage: string;
   frontWidth: number;
   frontHeight: number;
+  frontFullBleed?: boolean;
 }
 export function checkBackCoverText(text: string): string | null;
 export function createPaperbackCover(input: CoverPdfInput): Promise<{ blob: Blob; spineText: boolean; warnings: string[] }>;

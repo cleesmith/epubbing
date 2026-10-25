@@ -24,6 +24,7 @@ import {
   getDir,
   getLocalBookFilename,
   getCoverFilename,
+  getPaperbackFrontFilename,
   getConfigFilename,
   getLibraryFilename,
   INIT_BOOK_CONFIG,
@@ -410,6 +411,7 @@ export abstract class BaseAppService implements AppService {
     const filesToDelete = [
       getLocalBookFilename(book),
       getCoverFilename(book),
+      getPaperbackFrontFilename(book),
       getConfigFilename(book),
     ];
     for (const fp of filesToDelete) {
