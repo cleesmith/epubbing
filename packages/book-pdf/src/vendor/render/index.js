@@ -2074,4 +2074,18 @@ const render = (ctx, doc) => {
     return ctx;
 };
 
-export { render as default };
+const renderResponsive = async (ctx, doc, task) => {
+    const pages = doc.children || [];
+    const options = { imageCache: new Map(), fieldSets: [] };
+    await task.checkpoint({ stage: 'render', completed: 0, total: pages.length }, true);
+    for (let i = 0; i < pages.length; i++) {
+        renderNode(ctx, pages[i], options);
+        await task.checkpoint({ stage: 'render', completed: i + 1, total: pages.length });
+    }
+    addBookmarks(ctx, doc);
+    await task.checkpoint(undefined, true);
+    ctx.end();
+    return ctx;
+};
+
+export { render as default, renderResponsive };

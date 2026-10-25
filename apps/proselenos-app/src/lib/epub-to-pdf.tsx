@@ -16,6 +16,7 @@ export interface PdfOptions {
   copyrightHtml?: string;  // HTML from the epub's copyright.xhtml, or omit to skip
   includeToc?: boolean;    // default false
   includeChapterHeadings?: boolean; // default false
+  sectionPages?: boolean; // 6x9 proof: lay out chapters independently, keeping global page numbers
 }
 
 // Passed as hyphenationCallback: every word is a single unbreakable
@@ -96,11 +97,13 @@ function isFrontMatter(path: string): boolean {
 
 export async function extractChapters(
   zip: JSZip,
-  spinePaths: string[]
+  spinePaths: string[],
+  checkpoint?: (completed: number, total: number) => Promise<void>,
 ): Promise<ChapterData[]> {
   const chapters: ChapterData[] = [];
 
   for (const path of spinePaths) {
+    await checkpoint?.(spinePaths.indexOf(path), spinePaths.length);
     // Skip epub's own front matter — we generate ours
     if (isFrontMatter(path)) continue;
 
@@ -639,12 +642,12 @@ function collectInlineContent(el: Element): React.ReactNode[] {
 export const BookDocument: React.FC<{
   chapters: ChapterData[];
   options: PdfOptions;
-}> = ({ chapters, options }) => {
+  onRender?: (result: { _INTERNAL__LAYOUT__DATA_: { children: unknown[] } }) => void;
+}> = ({ chapters, options, onRender }) => {
   const includeToc = options.includeToc === true;
   const includeChapterHeadings = options.includeChapterHeadings === true;
 
-  return (
-    <Document>
+  const content = (
       <Page size={[PAGE_W, PAGE_H]} style={styles.page}>
         {/* Running header: hidden on first few pages */}
         <Text style={styles.header} fixed hyphenationCallback={noHyphenation} render={({ pageNumber }: { pageNumber: number }) => {
@@ -696,6 +699,24 @@ export const BookDocument: React.FC<{
           return String(pageNumber);
         }} />
       </Page>
+  );
+
+  if (!options.sectionPages) return <Document onRender={onRender}>{content}</Document>;
+
+  // These View sections already began on new pages. Making them independent
+  // input pages avoids repeatedly laying out all remaining chapters on each split.
+  const children = React.Children.toArray(content.props.children).filter(React.isValidElement);
+  const header = children[0];
+  const footer = children[children.length - 1];
+  return (
+    <Document title={options.title} author={options.author} onRender={onRender}>
+      {children.slice(1, -1).map((section, index) => (
+        <Page key={index} size={[PAGE_W, PAGE_H]} style={styles.page}>
+          {header}
+          {React.cloneElement(section as React.ReactElement<{ break?: boolean }>, { break: false })}
+          {footer}
+        </Page>
+      ))}
     </Document>
   );
 };

@@ -1,6 +1,7 @@
 import * as P from '../../vendor/primitives/index.js';
 import { omit, compose } from '../../vendor/fns/index.js';
 import type FontStore from '../../font/index';
+import type { RenderTask } from '../../render-task';
 
 import isFixed from '../node/isFixed';
 import splitText from '../text/splitText';
@@ -283,35 +284,59 @@ const dissocSubPageData = (page) => {
   return omit(['subPageNumber', 'subPageTotalPages'], page);
 };
 
-const paginate = (
+function* paginatePages(
   page: SafePageNode,
   pageNumber: number,
   fontStore: FontStore,
   yoga: YogaInstance,
-) => {
-  if (!page) return [];
+) {
+  if (!page) return;
 
-  if (page.props?.wrap === false) return [page];
+  if (page.props?.wrap === false) { yield page; return; }
 
   let splittedPage = splitPage(page, pageNumber, fontStore, yoga);
 
-  const pages = [splittedPage[0]];
+  yield splittedPage[0];
+  let count = 1;
   let nextPage = splittedPage[1];
 
   while (nextPage !== null) {
     splittedPage = splitPage(
       nextPage,
-      pageNumber + pages.length,
+      pageNumber + count,
       fontStore,
       yoga,
     );
 
-    pages.push(splittedPage[0]);
+    yield splittedPage[0];
+    count += 1;
     nextPage = splittedPage[1];
   }
 
-  return pages;
-};
+}
+
+const paginate = (page: SafePageNode, pageNumber: number, fontStore: FontStore, yoga: YogaInstance) =>
+  Array.from(paginatePages(page, pageNumber, fontStore, yoga));
+
+/** Same splitting rules as the synchronous path, with task boundaries between pages. */
+export async function resolvePaginationResponsive(root: SafeDocumentNode, fontStore: FontStore, task: RenderTask): Promise<SafeDocumentNode> {
+  let pages = [];
+  let pageNumber = 1;
+  for (const page of root.children) {
+    const subpages = [];
+    for (const subpage of paginatePages(page, pageNumber, fontStore, root.yoga)) {
+      subpages.push(subpage);
+      await task.checkpoint({ stage: 'paginate', completed: pages.length + subpages.length });
+    }
+    pages = pages.concat(assocSubPageData(subpages));
+    pageNumber += subpages.length;
+  }
+  for (let i = 0; i < pages.length; i++) {
+    pages[i] = dissocSubPageData(resolvePageIndices(fontStore, root.yoga, pages[i], i, pages));
+    await task.checkpoint({ stage: 'finalize', completed: i + 1, total: pages.length });
+  }
+  return assingChildren(pages, root);
+}
 
 /**
  * Performs pagination. This is the step responsible of breaking the whole document

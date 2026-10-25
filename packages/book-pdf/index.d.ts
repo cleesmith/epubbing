@@ -11,6 +11,7 @@ type PageSize = string | number | [number, number];
 // ── Component Props ──────────────────────────────────────────────
 
 interface DocumentProps {
+  onRender?: (result: { _INTERNAL__LAYOUT__DATA_: { children: unknown[] } }) => void;
   children?: ReactNode;
   style?: Style | Style[];
   title?: string;
@@ -101,13 +102,24 @@ export declare const StyleSheet: {
   create: <T extends Record<string, any>>(styles: T) => T;
 };
 
+export interface PdfProgress {
+  stage: 'layout' | 'paginate' | 'finalize' | 'render';
+  completed: number;
+  total?: number;
+}
+
+export interface PdfRenderOptions {
+  signal?: AbortSignal;
+  onProgress?: (progress: PdfProgress) => void;
+}
+
 export declare function pdf(
   initialValue?: ReactElement<DocumentProps>,
 ): {
   container: any;
   isDirty: () => boolean;
   toString: () => string;
-  toBlob: () => Promise<Blob>;
+  toBlob: (options?: PdfRenderOptions) => Promise<Blob>;
   toBuffer: () => Promise<any>;
   on: (event: string, listener: (...args: any[]) => void) => void;
   removeListener: (event: string, listener: (...args: any[]) => void) => void;

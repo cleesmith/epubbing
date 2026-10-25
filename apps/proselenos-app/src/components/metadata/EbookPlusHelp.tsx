@@ -10,6 +10,7 @@ import {
   MdPictureAsPdf,
 } from 'react-icons/md';
 import { GiBoxUnpacking } from 'react-icons/gi';
+import SimpleShelfIcon from '@/components/SimpleShelfIcon';
 
 import Dialog from '@/components/Dialog';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -61,10 +62,17 @@ const bottomRowItems: HelpItem[] = [
     name: 'Download web ready (zip)',
     description: 'Download your book formatted for web reading, with Scenecraft styling and audio.',
   },
+  /* 5x8 option hidden; retained in case it is restored.
   {
     icon: <MdPictureAsPdf size={ICON_SIZE} className="fill-red-400" />,
     name: 'Download 5x8 inch PDF (KDP)',
     description: 'Generate a 5×8 inch print PDF for Amazon KDP. The most popular small paperback size. You can choose to include a Table of Contents and chapter headings.',
+  },
+  */
+  {
+    icon: <SimpleShelfIcon size={ICON_SIZE} className="text-amber-600" />,
+    name: 'Create 6x9 paperback cover PDF',
+    description: 'Create your 6×9 interior PDF first, then enter its total page count here. Uses your EPUB cover and arranges the front, back, and spine automatically. Downloads the cover as a separate PDF.',
   },
   {
     icon: <MdOutlinePictureAsPdf size={ICON_SIZE} className="fill-red-500" />,

@@ -3,3 +3,4 @@ export { default as Pdf5x8Modal } from './Pdf5x8Modal';
 export { default as PdfSquareModal } from './PdfSquareModal';
 export { default as PdfOptionsDialog } from './PdfOptionsDialog';
 export type { PdfContentOptions } from './PdfOptionsDialog';
+export { default as PaperbackCoverModal } from './PaperbackCoverModal';

@@ -23,6 +23,7 @@ import {
   Pdf5x8Modal,
   PdfSquareModal,
   PdfOptionsDialog,
+  PaperbackCoverModal,
   type PdfContentOptions,
 } from '@/components/pdf';
 import EbookPlusHelp from './EbookPlusHelp';
@@ -66,6 +67,7 @@ const BookDetailModal: React.FC<BookDetailModalProps> = ({
   const [showAudiobook, setShowAudiobook] = useState(false);
   const [showPdf5x8, setShowPdf5x8] = useState(false);
   const [showPdf, setShowPdf] = useState(false);
+  const [showPaperbackCover, setShowPaperbackCover] = useState(false);
   const [showPdfSquare, setShowPdfSquare] = useState(false);
   const [pdfOptionsFor, setPdfOptionsFor] = useState<'6x9' | '5x8' | null>(null);
   const [pdfContentOptions, setPdfContentOptions] = useState<PdfContentOptions>({
@@ -138,6 +140,7 @@ const BookDetailModal: React.FC<BookDetailModalProps> = ({
     setShowPdf5x8(false);
     setShowPdf(false);
     setShowPdfSquare(false);
+    setShowPaperbackCover(false);
     setPdfOptionsFor(null);
     setShowHelp(false);
     onClose();
@@ -332,6 +335,7 @@ const BookDetailModal: React.FC<BookDetailModalProps> = ({
                 onDownloadBookseller={book.hash === '__bookseller_temp__' ? undefined : handleDownloadBookseller}
                 onDownloadWebReady={book.hash === '__bookseller_temp__' ? undefined : handleDownloadWebReady}
                 onDownloadPdf5x8={book.hash === '__bookseller_temp__' ? undefined : handlePdf5x8}
+                onPaperbackCover={book.hash === '__bookseller_temp__' ? undefined : () => setShowPaperbackCover(true)}
                 onDownloadPdf={book.hash === '__bookseller_temp__' ? undefined : handlePdf}
                 onDownloadPdfSquare={book.hash === '__bookseller_temp__' ? undefined : handlePdfSquare}
                 onXray={book.hash === '__bookseller_temp__' ? undefined : handleXray}
@@ -373,6 +377,7 @@ const BookDetailModal: React.FC<BookDetailModalProps> = ({
       />
 
       <PdfOptionsDialog
+        key={book.hash}
         isOpen={pdfOptionsFor !== null}
         formatLabel={pdfOptionsFor === '5x8' ? '5x8 inch PDF (KDP)' : '6x9 inch PDF (KDP)'}
         onCancel={() => setPdfOptionsFor(null)}
@@ -395,6 +400,14 @@ const BookDetailModal: React.FC<BookDetailModalProps> = ({
         onClose={handleClosePdf}
         includeToc={pdfContentOptions.includeToc}
         includeChapterHeadings={pdfContentOptions.includeChapterHeadings}
+      />
+
+      <PaperbackCoverModal
+        key={book.hash}
+        book={book}
+        bookMeta={bookMeta}
+        isOpen={showPaperbackCover}
+        onClose={() => setShowPaperbackCover(false)}
       />
 
       <PdfSquareModal

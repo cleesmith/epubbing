@@ -1,0 +1,88 @@
+import React from 'react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type { Book } from '@/types/book';
+import type { PaperbackCoverResult } from '@/lib/paperback-cover-browser';
+import PaperbackCoverModal from './PaperbackCoverModal';
+const mocked = vi.hoisted(() => ({ generate: vi.fn(), openFile: vi.fn(), createUrl: vi.fn(), revokeUrl: vi.fn() }));
+vi.mock('@/context/EnvContext', () => ({ useEnv: () => ({ envConfig: { getAppService: async () => ({ openFile: mocked.openFile }) } }) }));
+vi.mock('@/utils/book', () => ({ getLocalBookFilename: () => 'book.epub' }));
+vi.mock('jszip', () => ({ default: { loadAsync: async () => ({ loadedEpub: true }) } }));
+vi.mock('@/lib/epub-to-pdf', () => ({ getSpineItems: async () => ['chapter.xhtml'], resolveTitlePageText: async () => ({ title: 'Book title' }) }));
+vi.mock('@/lib/paperback-cover-browser', () => ({ generatePaperbackCover: mocked.generate }));
+const book = { hash: 'one', format: 'EPUB', title: 'Book title', author: 'Clee Smith', createdAt: 1, updatedAt: 1 } as Book;
+const result = () => ({ blob: new Blob(['PDF'], { type: 'application/pdf' }), warnings: ['The image may look blurry in print.'], dimensions: { pdfPages: 300, printPages: 300, spine: 0.75, width: 13, height: 9.25 } });
+const open = (onClose = vi.fn()) => render(<PaperbackCoverModal book={book} bookMeta={null} isOpen onClose={onClose} />);
+const calculate = (pages = '300') => { fireEvent.change(screen.getByLabelText('Page count'), { target: { value: pages } }); fireEvent.click(screen.getByText('Calculate dimensions')); };
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocked.openFile.mockResolvedValue({ arrayBuffer: async () => new ArrayBuffer(0) });
+  mocked.generate.mockResolvedValue(result());
+  mocked.createUrl.mockReturnValue('blob:cover');
+  vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: mocked.createUrl, revokeObjectURL: mocked.revokeUrl }));
+});
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+describe('separate paperback-cover calculator', () => {
+  it('requires the PDF page count and recalculation after changing paper', () => {
+    open();
+    expect((screen.getByText('Calculate dimensions') as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByLabelText('Binding type') as HTMLInputElement).value).toBe('Paperback');
+    expect((screen.getByLabelText('Interior trim size') as HTMLInputElement).value).toBe('6 × 9 inches');
+    expect(screen.getByRole('link', { name: /KDP’s cover calculator/ }).getAttribute('href')).toBe('https://kdp.amazon.com/cover-calculator');
+    calculate('301');
+    expect(screen.getByRole('table')).toBeTruthy(); expect(screen.getByText('302')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Interior type'), { target: { value: 'standard-color' } });
+    expect(screen.queryByRole('table')).toBeNull();
+    expect((screen.getByLabelText('Paper type') as HTMLSelectElement).disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText('Page count'), { target: { value: '40' } });
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByText(/KDP lists 72–600/)).toBeTruthy();
+    expect((screen.getByText('Calculate dimensions') as HTMLButtonElement).disabled).toBe(false);
+  });
+  it('accepts 830 for cover calculation and blocks 871 with the calculator range', () => {
+    open();
+    fireEvent.change(screen.getByLabelText('Interior type'), { target: { value: 'standard-color' } });
+    calculate('830');
+    expect(screen.getByRole('table')).toBeTruthy();
+    expect(screen.queryByRole('alert')).toBeNull();
+    const input = screen.getByLabelText('Page count');
+    expect(input.getAttribute('min')).toBe('24');
+    expect(input.getAttribute('max')).toBe('830');
+    fireEvent.change(input, { target: { value: '871' } });
+    expect(screen.getByRole('alert').textContent).toContain('Page count must be between 24–830. This PDF has 871 pages.');
+    expect(screen.queryByRole('table')).toBeNull();
+    expect((screen.getByText('Calculate dimensions') as HTMLButtonElement).disabled).toBe(true);
+  });
+  it('creates a cover using the EPUB and count, preserving the warnings', async () => {
+    const close = vi.fn(); open(close);
+    fireEvent.change(screen.getByLabelText('Paper type'), { target: { value: 'cream' } }); calculate();
+    expect(screen.getByText('0.7500 inches')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Back-cover text'), { target: { value: 'A quiet valley.' } });
+    await waitFor(() => expect((screen.getByText('Create cover PDF') as HTMLButtonElement).disabled).toBe(false), { timeout: 5000 });
+    fireEvent.click(screen.getByText('Create cover PDF'));
+    await screen.findByRole('link', { name: 'Download cover PDF' });
+    expect(mocked.openFile).toHaveBeenCalledWith('book.epub', 'Books');
+    expect(mocked.generate).toHaveBeenCalledWith({ loadedEpub: true }, 300, { paper: 'bw-cream', backText: 'A quiet valley.' }, 'Book title', 'Clee Smith', expect.any(Function));
+    expect(screen.queryByText('Download interior PDF')).toBeNull();
+    expect(screen.getByText('The image may look blurry in print.')).toBeTruthy();
+    fireEvent.click(screen.getByText('Close')); expect(close).toHaveBeenCalledOnce(); expect(mocked.revokeUrl).toHaveBeenCalledWith('blob:cover');
+  });
+  it('limits back text and rejects text that does not fit', async () => {
+    open(); calculate();
+    fireEvent.change(screen.getByLabelText('Back-cover text'), { target: { value: 'a'.repeat(1600) } });
+    expect((screen.getByLabelText('Back-cover text') as HTMLTextAreaElement).value.length).toBe(1500);
+    fireEvent.change(screen.getByLabelText('Back-cover text'), { target: { value: 'A\n'.repeat(70) } });
+    expect((await screen.findByRole('alert')).textContent).toContain('Shorten it');
+    expect((screen.getByText('Create cover PDF') as HTMLButtonElement).disabled).toBe(true);
+  });
+  it('ignores a late cover after cancellation', async () => {
+    let finish!: (value: PaperbackCoverResult) => void;
+    mocked.generate.mockImplementationOnce(() => new Promise<PaperbackCoverResult>(resolve => { finish = resolve; }));
+    const close = vi.fn(); open(close); calculate();
+    await waitFor(() => expect((screen.getByText('Create cover PDF') as HTMLButtonElement).disabled).toBe(false), { timeout: 5000 });
+    fireEvent.click(screen.getByText('Create cover PDF'));
+    await waitFor(() => expect(mocked.generate).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByText('Cancel')); finish(result());
+    await waitFor(() => expect(close).toHaveBeenCalledOnce()); expect(mocked.createUrl).not.toHaveBeenCalled();
+  });
+});

@@ -1,0 +1,12 @@
+export interface CoverPdfInput {
+  title: string;
+  author: string;
+  backText: string;
+  printPages: number;
+  spine: number;
+  frontImage: string;
+  frontWidth: number;
+  frontHeight: number;
+}
+export function checkBackCoverText(text: string): string | null;
+export function createPaperbackCover(input: CoverPdfInput): Promise<{ blob: Blob; spineText: boolean; warnings: string[] }>;

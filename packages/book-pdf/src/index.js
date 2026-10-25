@@ -4,9 +4,10 @@
 
 import FontStore from './font/index';
 import { EBGARAMOND_FONTS } from './font/embedded-fonts';
-import renderPDF from './vendor/render/index.js';
+import renderPDF, { renderResponsive } from './vendor/render/index.js';
 import PDFDocument from './pdfkit/index';
-import layoutDocument from './layout/index';
+import layoutDocument, { layoutResponsive } from './layout/index';
+import { createRenderTask } from './render-task';
 import { upperFirst } from './vendor/fns/index.js';
 
 import { omitNils } from './utils';
@@ -38,7 +39,7 @@ const pdf = (initialValue) => {
 
   if (initialValue) updateContainer(initialValue);
 
-  const render = async (compress = true) => {
+  const render = async (compress = true, task) => {
     const props = container.document.props || {};
     const {
       pdfVersion,
@@ -81,9 +82,21 @@ const pdf = (initialValue) => {
       ctx._root.data.PageMode = upperFirst(pageMode);
     }
 
-    const layout = await layoutDocument(container.document, fontStore);
-    const fileStream = renderPDF(ctx, layout);
-    return { layout, fileStream };
+    let streamError;
+    ctx.on('error', error => { streamError = error; });
+    try {
+      const layout = task
+        ? await layoutResponsive(container.document, fontStore, task)
+        : await layoutDocument(container.document, fontStore);
+      const fileStream = task
+        ? await renderResponsive(ctx, layout, task)
+        : renderPDF(ctx, layout);
+      if (streamError) throw streamError;
+      return { layout, fileStream };
+    } catch (error) {
+      ctx.destroy();
+      throw error;
+    }
   };
 
   const callOnRender = (params = {}) => {
@@ -92,12 +105,13 @@ const pdf = (initialValue) => {
     }
   };
 
-  const toBlob = async () => {
+  const toBlob = async (options) => {
     const chunks = [];
     const { layout: _INTERNAL__LAYOUT__DATA_, fileStream: instance } =
-      await render();
+      await render(true, options ? createRenderTask(options) : undefined);
 
     return new Promise((resolve, reject) => {
+      instance.on('error', reject);
       instance.on('data', (chunk) => {
         chunks.push(
           chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk),

@@ -12,6 +12,7 @@ import {
   MdPictureAsPdf,
 } from 'react-icons/md';
 import { GiBoxUnpacking } from 'react-icons/gi';
+import SimpleShelfIcon from '@/components/SimpleShelfIcon';
 
 import { Book } from '@/types/book';
 import { BookMetadata } from '@/libs/document';
@@ -38,6 +39,7 @@ interface BookDetailViewProps {
   onDownloadBookseller?: () => void;
   onDownloadWebReady?: () => void;
   onDownloadPdf5x8?: () => void;
+  onPaperbackCover?: () => void;
   onDownloadPdf?: () => void;
   onDownloadPdfSquare?: () => void;
   onXray?: () => void;
@@ -57,7 +59,8 @@ const BookDetailView: React.FC<BookDetailViewProps> = ({
   onDownloadLocal,
   onDownloadBookseller,
   onDownloadWebReady,
-  onDownloadPdf5x8,
+  // onDownloadPdf5x8, // Restore with the commented button below if wanted.
+  onPaperbackCover,
   onDownloadPdf,
   onDownloadPdfSquare,
   onXray,
@@ -65,15 +68,16 @@ const BookDetailView: React.FC<BookDetailViewProps> = ({
   onHelp,
 }) => {
   const _ = useTranslation();
+  const actionRowClassName = 'grid grid-cols-[repeat(auto-fill,1.5rem)] gap-2 [&>button]:grid [&>button]:h-6 [&>button]:w-6 [&>button]:place-items-center [&>button>svg]:h-5 [&>button>svg]:w-5';
 
   return (
     <div className='relative w-full rounded-lg'>
-      <div className='mb-6 me-4 flex min-h-32 items-start'>
+      <div className='mb-6 me-4 grid min-h-32 grid-cols-[auto_minmax(0,1fr)] items-start gap-y-3 sm:flex'>
         <div className='me-4 sm:me-10 aspect-[28/41] h-32 shadow-lg'>
           <BookCover mode='list' book={book} />
         </div>
-        <div className='title-author flex min-h-32 flex-col justify-between'>
-          <div>
+        <div className='title-author contents sm:flex sm:min-h-32 sm:min-w-0 sm:flex-1 sm:flex-col sm:justify-between'>
+          <div className='min-w-0'>
             <p className='text-base-content mb-2 line-clamp-2 text-lg font-bold'>
               {formatTitle(book.title) || _('Untitled')}
             </p>
@@ -81,19 +85,19 @@ const BookDetailView: React.FC<BookDetailViewProps> = ({
               {formatAuthors(book.author, book.primaryLanguage) || _('Unknown')}
             </p>
           </div>
-          <div className='flex items-center gap-x-3 bg-base-200/50 rounded-lg px-3 py-2'>
+          <div className='col-span-2 flex min-w-0 items-center gap-x-2 bg-base-200/50 rounded-lg px-2 py-2 sm:gap-x-3 sm:px-3'>
             {onHelp && (
               <button
                 onClick={onHelp}
                 title={_('Icon guide')}
-                className='border border-base-300 rounded px-2 py-1 text-[11px] text-neutral-content hover:text-base-content font-medium'
+                className='shrink-0 border border-base-300 rounded px-2 py-1 text-[11px] text-neutral-content hover:text-base-content font-medium'
               >
                 {_('Help')}
               </button>
             )}
-            <div className='w-px self-stretch bg-base-300'></div>
-            <div className='flex flex-col gap-y-2'>
-              <div className='flex flex-wrap items-center gap-x-3 sm:gap-x-8'>
+            <div className='w-px shrink-0 self-stretch bg-base-300'></div>
+            <div className='flex min-w-0 flex-1 flex-col gap-y-2'>
+              <div className={actionRowClassName}>
                 {onEdit && (
                   <button onClick={onEdit} title={_('Edit Ebook Metadata')}>
                     <MdOutlineEdit className='fill-base-content hover:fill-blue-500' />
@@ -130,15 +134,22 @@ const BookDetailView: React.FC<BookDetailViewProps> = ({
                   </button>
                 )}
               </div>
-              <div className='flex flex-wrap items-center gap-x-3 sm:gap-x-8'>
+              <div className={actionRowClassName}>
                 {onDownloadWebReady && (
                   <button onClick={onDownloadWebReady} title={_('Download web ready (zip)')}>
                     <MdOutlineLanguage className='fill-base-content hover:fill-teal-500' />
                   </button>
                 )}
+                {/* 5x8 button hidden by request; generator and handler remain available.
                 {onDownloadPdf5x8 && (
                   <button onClick={onDownloadPdf5x8} title={_('Download 5x8 inch PDF (KDP)')}>
                     <MdPictureAsPdf className='fill-base-content hover:fill-red-400' />
+                  </button>
+                )}
+                */}
+                {onPaperbackCover && (
+                  <button onClick={onPaperbackCover} title={_('Create 6x9 paperback cover PDF')} aria-label={_('Create 6x9 paperback cover PDF')}>
+                    <SimpleShelfIcon className='text-base-content hover:text-amber-600' />
                   </button>
                 )}
                 {onDownloadPdf && (
