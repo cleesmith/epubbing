@@ -27,6 +27,10 @@ export const getCoverFilename = (book: Book) => {
 export const getPaperbackFrontFilename = (book: Pick<Book, 'hash'>) => {
   return `${book.hash}/paperback-front.json`;
 };
+
+export const getPaperbackSettingsFilename = (book: Pick<Book, 'hash'>) => {
+  return `${book.hash}/paperback-cover.json`;
+};
 export const getConfigFilename = (book: Book) => {
   return `${book.hash}/config.json`;
 };

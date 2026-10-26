@@ -10,7 +10,7 @@ export const PAPER_CHOICES = {
   'premium-color': { label: 'Premium color on white paper', factor: 0.002347, min: 24, max: 828 },
 } as const;
 export type PaperChoice = keyof typeof PAPER_CHOICES;
-export interface PaperbackCoverOptions { paper: PaperChoice; backText: string }
+export interface PaperbackCoverOptions { paper: PaperChoice; backText: string; backgroundColor?: string }
 
 export function coverDimensions(pdfPages: number, paper: PaperChoice) {
   const choice = PAPER_CHOICES[paper];
@@ -39,6 +39,21 @@ export function limitBackText(text: string) { return Array.from(text).slice(0, B
 export const FRONT_WIDTH = 6.125;
 export const FRONT_HEIGHT = 9.25;
 export const COVER_BACKGROUND = '#f3efe5';
+
+export function coverBackground(value: unknown): string {
+  return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : COVER_BACKGROUND;
+}
+
+// Choose the larger contrast ratio against the selected RGB background.
+export function coverTextColor(background: string): '#000000' | '#ffffff' {
+  const hex = coverBackground(background).slice(1);
+  const rgb = [0, 2, 4].map(offset => {
+    const channel = parseInt(hex.slice(offset, offset + 2), 16) / 255;
+    return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+  });
+  const luminance = rgb[0]! * 0.2126 + rgb[1]! * 0.7152 + rgb[2]! * 0.0722;
+  return (luminance + 0.05) / 0.05 >= 1.05 / (luminance + 0.05) ? '#000000' : '#ffffff';
+}
 export type FrontFit = 'fill' | 'border';
 
 export function frontPlacement(width: number, height: number, fit: FrontFit = 'fill') {
@@ -56,8 +71,7 @@ export function frontPlacement(width: number, height: number, fit: FrontFit = 'f
 export function frontImageWarnings(width: number, height: number, fit: FrontFit) {
   const placement = frontPlacement(width, height, fit);
   const warnings: string[] = [];
-  if (fit === 'border') warnings.push('This option adds a cream border around the front image. It will be visible in print and may look uneven after trimming. Choose Fill front cover or a different image if you do not want it.');
+  if (fit === 'border') warnings.push('This option adds a border in your chosen background color around the front image. It will be visible in print and may look uneven after trimming. Choose Fill front cover or a different image if you do not want it.');
   if (placement.cropSides || placement.cropTopBottom) warnings.push(`To fill the front cover without an added border, the ${placement.cropSides ? 'sides' : 'top and bottom'} of this image will be cropped. Check the preview, especially any lettering near the edges.`);
-  if (placement.dpi < 299.9) warnings.push(`This image is ${width} × ${height} pixels, about ${Math.round(placement.dpi)} DPI at this size, and may look blurry in print. For the same image shape at 300 DPI, use at least ${Math.ceil(width * 300 / placement.dpi)} × ${Math.ceil(height * 300 / placement.dpi)} pixels. You can still use this image.`);
   return warnings;
 }

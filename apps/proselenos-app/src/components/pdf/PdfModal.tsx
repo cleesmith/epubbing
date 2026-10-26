@@ -8,6 +8,7 @@ import { BookMetadata } from '@/libs/document';
 import { formatPublisher, getLocalBookFilename } from '@/utils/book';
 import { useEnv } from '@/context/EnvContext';
 import { createPdfProofUrl } from '@/lib/pdf-proof-url';
+import { collectPdfFontUsage, type PdfFontUsage } from '@/lib/pdf-proof-fonts';
 import {
   getSpineItems, extractChapters, extractCopyrightHtml, resolveTitlePageText,
   BookDocument, resetElementKeyCounter, type PdfOptions,
@@ -22,7 +23,7 @@ interface PdfModalProps {
   includeChapterHeadings: boolean;
 }
 
-type Proof = ReturnType<typeof createPdfProofUrl> & { pages: number };
+type Proof = ReturnType<typeof createPdfProofUrl> & { pages: number; version: string; fontUsage: PdfFontUsage[] };
 
 const PdfModal: React.FC<PdfModalProps> = ({ book, bookMeta, isOpen, onClose, includeToc, includeChapterHeadings }) => {
   const { envConfig } = useEnv();
@@ -92,11 +93,21 @@ const PdfModal: React.FC<PdfModalProps> = ({ book, bookMeta, isOpen, onClose, in
         sectionNames = ['Title page', ...(copyrightHtml ? ['Copyright page'] : []),
           ...(includeToc ? ['Contents'] : []), ...chapters.map(chapter => chapter.title)];
         let pages = 0;
+        let layout: unknown;
         const blob = await pdf(<BookDocument chapters={chapters} options={options}
-          onRender={result => { pages = result._INTERNAL__LAYOUT__DATA_.children.length; }} />)
+          onRender={result => {
+            layout = result._INTERNAL__LAYOUT__DATA_;
+            pages = result._INTERNAL__LAYOUT__DATA_.children.length;
+          }} />)
           .toBlob({ signal: controller.signal, onProgress });
         if (cancelled()) return;
-        created = { ...createPdfProofUrl(blob), pages };
+        setMessage('Checking the PDF format and embedded font details…');
+        await pause();
+        const header = await blob.slice(0, 16).text();
+        const version = /^%PDF-(\d+\.\d+)/.exec(header)?.[1] ?? '';
+        const fontUsage = await collectPdfFontUsage(layout, pause);
+        if (cancelled()) return;
+        created = { ...createPdfProofUrl(blob), pages, version, fontUsage };
         setProof(created); setPhase('ready');
       } catch (err) {
         if (cancelled()) return;
@@ -125,8 +136,8 @@ const PdfModal: React.FC<PdfModalProps> = ({ book, bookMeta, isOpen, onClose, in
 
   if (!isOpen) return null;
   return (
-    <div className='fixed inset-0 z-[60] flex items-center justify-center bg-base-100' role='dialog' aria-modal='true' aria-labelledby='pdf-proof-heading'>
-      <div className='w-full max-w-md px-6 text-center'>
+    <div className='fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-base-100 py-6' role='dialog' aria-modal='true' aria-labelledby='pdf-proof-heading'>
+      <div className='my-auto w-full max-w-md px-6 text-center'>
         <h3 id='pdf-proof-heading' className='text-base-content mb-3 text-lg font-semibold'>
           {phase === 'ready' ? 'Your PDF proof is ready' : phase === 'error' ? 'Could not create the PDF' : 'Preparing your PDF proof'}
         </h3>
@@ -146,12 +157,28 @@ const PdfModal: React.FC<PdfModalProps> = ({ book, bookMeta, isOpen, onClose, in
           <p className='text-base-content/60 mb-5 text-sm'>Large books take longer. You can cancel while the book is being prepared.</p>
         </>}
         {phase === 'ready' && proof && <>
-          <p className='text-base-content/70 mb-4'>{proof.pages} pages · 6 × 9 inches</p>
+          <p className='text-base-content/70 mb-4'>Total pages: {proof.pages} for a 6 × 9 inch paperback</p>
+          <p className='text-base-content/70 mb-4 text-sm'>PDF format: Standard PDF{proof.version ? ` ${proof.version}` : ''}</p>
+          {proof.fontUsage.length > 0 && <div className='text-base-content/70 mb-5 text-left text-sm'>
+            <p className='text-base-content mb-2 text-center font-medium'>Embedded font styles and sizes</p>
+            <table className='w-full' aria-label='Embedded font styles and sizes'>
+              <thead>
+                <tr className='border-base-content/20 border-b'>
+                  <th scope='col' className='py-1 pr-3 font-medium'>Font style</th>
+                  <th scope='col' className='py-1 font-medium'>Sizes (pt)</th>
+                </tr>
+              </thead>
+              <tbody>{proof.fontUsage.map(font => <tr key={font.postscriptName}>
+                <td className='py-1 pr-3 align-top'>{font.name}</td>
+                <td className='py-1 align-top'>{font.sizes.join(', ')}</td>
+              </tr>)}</tbody>
+            </table>
+          </div>}
           <a className='btn btn-primary mb-4' href={proof.url} target='_blank' rel='noreferrer' onClick={event => {
             event.preventDefault();
             setError(proof.open() ? '' : 'Allow a new tab for EverythingEbooks, then click the link again.');
-          }}>Download a PDF proof</a>
-          <p className='text-base-content/60 mb-4 text-sm'>Opens your PDF in a new tab. Use its download button, or Open with Preview in Safari, to save it.</p>
+          }}>Open PDF proof in a new tab</a>
+          <p className='text-base-content/60 mb-4 text-sm'>Preview your PDF, then use its download button to save a copy. In Safari, you can also open it in Preview and save it there.</p>
           <p className='text-base-content/60 mb-4 text-sm'>Use this PDF’s total page count when creating its paperback cover.</p>
         </>}
         {error && <p role='alert' className='text-error mb-5 text-sm'>{error}</p>}

@@ -9,20 +9,25 @@ const mocked = vi.hoisted(() => {
   return { ...service, envConfig: { getAppService: async () => service }, files: new Map<string, string>(), generate: vi.fn(), prepare: vi.fn(), normalize: vi.fn(), createUrl: vi.fn(), revokeUrl: vi.fn() };
 });
 vi.mock('@/context/EnvContext', () => ({ useEnv: () => ({ envConfig: mocked.envConfig }) }));
-vi.mock('@/utils/book', () => ({ getLocalBookFilename: () => 'book.epub', getPaperbackFrontFilename: (b: Book) => `${b.hash}/paperback-front.json` }));
+vi.mock('@/utils/book', () => ({ getLocalBookFilename: () => 'book.epub', getPaperbackFrontFilename: (b: Book) => `${b.hash}/paperback-front.json`, getPaperbackSettingsFilename: (b: Book) => `${b.hash}/paperback-cover.json` }));
 vi.mock('jszip', () => ({ default: { loadAsync: async () => ({ loadedEpub: true }) } }));
 vi.mock('@/lib/epub-to-pdf', () => ({ getSpineItems: async () => ['chapter.xhtml'], resolveTitlePageText: async () => ({ title: 'Book title' }) }));
 vi.mock('@/lib/epub-cover', () => ({ extractEpubCover: async () => new Blob(['epub cover']) }));
 vi.mock('@/lib/paperback-cover-browser', () => ({ generatePaperbackCover: mocked.generate, prepareFrontImage: mocked.prepare, normalizeFrontUpload: mocked.normalize }));
 const book = { hash: 'one', format: 'EPUB', title: 'Book title', author: 'Clee Smith', createdAt: 1, updatedAt: 1 } as Book;
-const result = () => ({ blob: new Blob(['PDF'], { type: 'application/pdf' }), warnings: ['The image may look blurry in print.'], dimensions: { pdfPages: 300, printPages: 300, spine: 0.75, width: 13, height: 9.25 } });
-const open = (onClose = vi.fn()) => render(<PaperbackCoverModal book={book} bookMeta={null} isOpen onClose={onClose} />);
+const result = () => ({ blob: new Blob(['PDF'], { type: 'application/pdf' }), warnings: ['The sides of this image will be cropped.'], dimensions: { pdfPages: 300, printPages: 300, spine: 0.75, width: 13, height: 9.25 } });
+const open = async (onClose = vi.fn(), selectedBook = book) => {
+  const view = render(<PaperbackCoverModal book={selectedBook} bookMeta={null} isOpen onClose={onClose} />);
+  await screen.findByLabelText('Choose front-cover image');
+  return view;
+};
+const save = async () => { fireEvent.click(screen.getByRole('button', { name: 'Save', exact: true })); await screen.findByText('Cover details saved with this ebook.'); };
 const calculate = (pages = '300') => { fireEvent.change(screen.getByLabelText('Page count'), { target: { value: pages } }); fireEvent.click(screen.getByText('Calculate dimensions')); };
 beforeEach(() => {
   vi.clearAllMocks();
   mocked.files.clear();
   mocked.openFile.mockImplementation(async (path: string) => {
-    if (path.endsWith('paperback-front.json')) {
+    if (path.endsWith('.json')) {
       if (!mocked.files.has(path)) throw new Error(`File not found: ${path}`);
       return { text: async () => mocked.files.get(path) };
     }
@@ -38,11 +43,11 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 describe('separate paperback-cover calculator', () => {
-  it('requires the PDF page count and recalculation after changing paper', () => {
-    open();
+  it('requires the PDF page count and recalculation after changing paper', async () => {
+    await open();
     expect((screen.getByText('Calculate dimensions') as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByLabelText('Binding type') as HTMLInputElement).value).toBe('Paperback');
-    expect((screen.getByLabelText('Interior trim size') as HTMLInputElement).value).toBe('6 × 9 inches');
+    expect(screen.getByText('Paperback')).toBeTruthy();
+    expect(screen.getByText('6 × 9 inches')).toBeTruthy();
     expect(screen.getByRole('link', { name: /KDP’s cover calculator/ }).getAttribute('href')).toBe('https://kdp.amazon.com/cover-calculator');
     calculate('301');
     expect(screen.getByRole('table')).toBeTruthy(); expect(screen.getByText('302')).toBeTruthy();
@@ -54,8 +59,8 @@ describe('separate paperback-cover calculator', () => {
     expect(screen.getByText(/KDP lists 72–600/)).toBeTruthy();
     expect((screen.getByText('Calculate dimensions') as HTMLButtonElement).disabled).toBe(false);
   });
-  it('accepts 830 for cover calculation and blocks 871 with the calculator range', () => {
-    open();
+  it('accepts 830 for cover calculation and blocks 871 with the calculator range', async () => {
+    await open();
     fireEvent.change(screen.getByLabelText('Interior type'), { target: { value: 'standard-color' } });
     calculate('830');
     expect(screen.getByRole('table')).toBeTruthy();
@@ -69,21 +74,24 @@ describe('separate paperback-cover calculator', () => {
     expect((screen.getByText('Calculate dimensions') as HTMLButtonElement).disabled).toBe(true);
   });
   it('creates a cover using the EPUB and count, preserving the warnings', async () => {
-    const close = vi.fn(); open(close);
+    const close = vi.fn(); await open(close);
     fireEvent.change(screen.getByLabelText('Paper type'), { target: { value: 'cream' } }); calculate();
     expect(screen.getByText('0.7500 inches')).toBeTruthy();
     fireEvent.change(screen.getByLabelText('Back-cover text'), { target: { value: 'A quiet valley.' } });
+    fireEvent.change(screen.getByLabelText('Background color'), { target: { value: '#123456' } });
     await waitFor(() => expect((screen.getByText('Create cover PDF') as HTMLButtonElement).disabled).toBe(false), { timeout: 5000 });
     fireEvent.click(screen.getByText('Create cover PDF'));
     await screen.findByRole('link', { name: 'Download cover PDF' });
     expect(mocked.openFile).toHaveBeenCalledWith('book.epub', 'Books');
-    expect(mocked.generate).toHaveBeenCalledWith({ loadedEpub: true }, 300, { paper: 'bw-cream', backText: 'A quiet valley.' }, 'Book title', 'Clee Smith', expect.any(Function), expect.objectContaining({ fit: 'fill' }));
+    expect(mocked.generate).toHaveBeenCalledWith({ loadedEpub: true }, 300, { paper: 'bw-cream', backText: 'A quiet valley.', backgroundColor: '#123456' }, 'Book title', 'Clee Smith', expect.any(Function), expect.objectContaining({ fit: 'fill' }));
     expect(screen.queryByText('Download interior PDF')).toBeNull();
-    expect(screen.getByText('The image may look blurry in print.')).toBeTruthy();
-    fireEvent.click(screen.getByText('Close')); expect(close).toHaveBeenCalledOnce(); expect(mocked.revokeUrl).toHaveBeenCalledWith('blob:cover');
+    expect(screen.getByText('The sides of this image will be cropped.')).toBeTruthy();
+    expect(mocked.writeFile).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText('Close')); expect(close).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText('Discard changes and close')); expect(close).toHaveBeenCalledOnce(); expect(mocked.revokeUrl).toHaveBeenCalledWith('blob:cover');
   });
   it('limits back text and rejects text that does not fit', async () => {
-    open(); calculate();
+    await open(); calculate();
     fireEvent.change(screen.getByLabelText('Back-cover text'), { target: { value: 'a'.repeat(1600) } });
     expect((screen.getByLabelText('Back-cover text') as HTMLTextAreaElement).value.length).toBe(1500);
     fireEvent.change(screen.getByLabelText('Back-cover text'), { target: { value: 'A\n'.repeat(70) } });
@@ -93,38 +101,115 @@ describe('separate paperback-cover calculator', () => {
   it('ignores a late cover after cancellation', async () => {
     let finish!: (value: PaperbackCoverResult) => void;
     mocked.generate.mockImplementationOnce(() => new Promise<PaperbackCoverResult>(resolve => { finish = resolve; }));
-    const close = vi.fn(); open(close); calculate();
+    const close = vi.fn(); await open(close); calculate();
     await waitFor(() => expect((screen.getByText('Create cover PDF') as HTMLButtonElement).disabled).toBe(false), { timeout: 5000 });
     fireEvent.click(screen.getByText('Create cover PDF'));
     await waitFor(() => expect(mocked.generate).toHaveBeenCalledOnce());
     fireEvent.click(screen.getByText('Cancel')); finish(result());
+    fireEvent.click(screen.getByText('Discard changes and close'));
     await waitFor(() => expect(close).toHaveBeenCalledOnce()); expect(mocked.createUrl).not.toHaveBeenCalled();
   });
-  it('saves one uploaded image and its placement per ebook, reloads it, and replaces it', async () => {
-    const view = open(); calculate();
-    const input = await screen.findByLabelText('Choose front-cover image');
-    fireEvent.change(input, { target: { files: [new File(['first'], 'print-cover.png', { type: 'image/png' })] } });
-    await screen.findByText('print-cover.jpg · Saved with this ebook');
+  it('saves only on Save, restores the whole setup, and keeps recalled fields editable', async () => {
+    const view = await open();
+    fireEvent.change(screen.getByLabelText('Interior type'), { target: { value: 'standard-color' } });
+    calculate('266');
+    fireEvent.change(screen.getByLabelText('Background color'), { target: { value: '#123456' } });
+    expect(screen.getByText(/White text automatically/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Back-cover text'), { target: { value: 'The saved blurb.' } });
+    fireEvent.change(screen.getByLabelText('Choose front-cover image'), { target: { files: [new File(['first'], 'print-cover.png', { type: 'image/png' })] } });
+    await screen.findByText('print-cover.jpg · Not saved yet');
     fireEvent.change(screen.getByLabelText('Image placement'), { target: { value: 'border' } });
-    await waitFor(() => expect(JSON.parse(mocked.files.get('one/paperback-front.json')!).fit).toBe('border'));
-    view.unmount(); open(); calculate();
-    await screen.findByText('print-cover.jpg · Saved with this ebook');
+    expect(mocked.writeFile).not.toHaveBeenCalled();
+    await save();
+    expect(mocked.files.size).toBe(2);
+    view.unmount();
+    const restored = await open();
+    expect((screen.getByLabelText('Background color') as HTMLInputElement).value).toBe('#123456');
+    expect(screen.getByText(/White text automatically/)).toBeTruthy();
+    await waitFor(() => expect(mocked.prepare).toHaveBeenLastCalledWith(expect.any(Blob), 'border', '#123456'));
+    expect((screen.getByLabelText('Page count') as HTMLInputElement).value).toBe('266');
+    expect((screen.getByLabelText('Interior type') as HTMLSelectElement).value).toBe('standard-color');
+    expect((screen.getByLabelText('Back-cover text') as HTMLTextAreaElement).value).toBe('The saved blurb.');
     expect((screen.getByLabelText('Image placement') as HTMLSelectElement).value).toBe('border');
-    fireEvent.change(screen.getByLabelText('Choose front-cover image'), { target: { files: [new File(['next'], 'new-cover.jpg', { type: 'image/jpeg' })] } });
-    await screen.findByText('new-cover.jpg · Saved with this ebook');
-    expect(mocked.files.size).toBe(1);
-    expect(JSON.parse(mocked.files.get('one/paperback-front.json')!).name).toBe('new-cover.jpg');
-    fireEvent.click(screen.getByText('Use EPUB cover'));
-    await screen.findByText('Using the EPUB cover');
-    expect(mocked.files.size).toBe(0);
+    expect(screen.getByRole('table', { name: 'Calculated cover dimensions' })).toBeTruthy();
+    await screen.findByText('print-cover.jpg · Saved with this ebook');
+    const writes = mocked.writeFile.mock.calls.length;
+    fireEvent.change(screen.getByLabelText('Page count'), { target: { value: '300' } });
+    fireEvent.change(screen.getByLabelText('Interior type'), { target: { value: 'bw' } });
+    fireEvent.change(screen.getByLabelText('Paper type'), { target: { value: 'cream' } });
+    fireEvent.change(screen.getByLabelText('Back-cover text'), { target: { value: 'A revised blurb.' } });
+    expect(mocked.writeFile).toHaveBeenCalledTimes(writes);
+    await save(); restored.unmount(); await open();
+    expect((screen.getByLabelText('Page count') as HTMLInputElement).value).toBe('300');
+    expect((screen.getByLabelText('Paper type') as HTMLSelectElement).value).toBe('cream');
+    expect((screen.getByLabelText('Back-cover text') as HTMLTextAreaElement).value).toBe('A revised blurb.');
   });
-  it('reports a failed save without replacing the saved image', async () => {
+  it('discards unsaved image and text changes without changing the saved setup', async () => {
+    const close = vi.fn(), view = await open(close); calculate();
+    fireEvent.change(screen.getByLabelText('Back-cover text'), { target: { value: 'Saved text.' } });
+    await save(); const snapshot = new Map(mocked.files); mocked.writeFile.mockClear();
+    fireEvent.change(screen.getByLabelText('Back-cover text'), { target: { value: 'Do not save this.' } });
+    fireEvent.change(screen.getByLabelText('Background color'), { target: { value: '#000000' } });
+    fireEvent.change(screen.getByLabelText('Choose front-cover image'), { target: { files: [new File(['draft'], 'draft.jpg', { type: 'image/jpeg' })] } });
+    await screen.findByText('draft.jpg · Not saved yet');
+    fireEvent.click(screen.getByText('Close'));
+    expect(close).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText('Keep editing'));
+    expect((screen.getByLabelText('Back-cover text') as HTMLTextAreaElement).value).toBe('Do not save this.');
+    fireEvent.click(screen.getByText('Close')); fireEvent.click(screen.getByText('Discard changes and close'));
+    expect(close).toHaveBeenCalledOnce(); expect(mocked.writeFile).not.toHaveBeenCalled();
+    expect(mocked.files).toEqual(snapshot);
+    view.unmount(); await open();
+    expect((screen.getByLabelText('Back-cover text') as HTMLTextAreaElement).value).toBe('Saved text.');
+    expect(screen.getByText('Using the EPUB cover')).toBeTruthy();
+    expect((screen.getByLabelText('Background color') as HTMLInputElement).value).toBe('#f3efe5');
+  });
+  it('replaces one image on Save and removes it only after saving Use EPUB cover', async () => {
     const saved = JSON.stringify({ version: 1, name: 'saved.jpg', jpeg: 'data:image/jpeg;base64,eA==', fit: 'fill' });
     mocked.files.set('one/paperback-front.json', saved);
-    open(); calculate(); await screen.findByText('saved.jpg · Saved with this ebook');
-    mocked.writeFile.mockRejectedValueOnce(new Error('Storage is full.'));
-    fireEvent.change(screen.getByLabelText('Choose front-cover image'), { target: { files: [new File(['next'], 'next.png', { type: 'image/png' })] } });
-    expect((await screen.findByRole('alert')).textContent).toContain('was not saved');
+    await open(); calculate();
+    fireEvent.change(screen.getByLabelText('Choose front-cover image'), { target: { files: [new File(['next'], 'new.jpg', { type: 'image/jpeg' })] } });
+    await screen.findByText('new.jpg · Not saved yet');
     expect(mocked.files.get('one/paperback-front.json')).toBe(saved);
+    await save();
+    expect(JSON.parse(mocked.files.get('one/paperback-front.json')!).name).toBe('new.jpg');
+    expect([...mocked.files.keys()].filter(name => name.endsWith('paperback-front.json'))).toHaveLength(1);
+    fireEvent.click(screen.getByText('Use EPUB cover')); await screen.findByText('Using the EPUB cover');
+    expect(mocked.deleteFile).not.toHaveBeenCalled();
+    await save(); expect(mocked.files.has('one/paperback-front.json')).toBe(false);
+    expect(mocked.files.has('one/paperback-cover.json')).toBe(true);
+  });
+  it('keeps the saved setup when Save fails and allows a retry', async () => {
+    const saved = JSON.stringify({ version: 1, name: 'saved.jpg', jpeg: 'data:image/jpeg;base64,eA==', fit: 'fill' });
+    mocked.files.set('one/paperback-front.json', saved);
+    await open(); calculate();
+    fireEvent.change(screen.getByLabelText('Choose front-cover image'), { target: { files: [new File(['next'], 'next.png', { type: 'image/png' })] } });
+    await screen.findByText('next.jpg · Not saved yet');
+    mocked.writeFile.mockRejectedValueOnce(new Error('Storage is full.'));
+    fireEvent.click(screen.getByRole('button', { name: 'Save', exact: true }));
+    await screen.findByText(/Your cover details were not saved/);
+    expect(mocked.files.get('one/paperback-front.json')).toBe(saved);
+    await save(); expect(JSON.parse(mocked.files.get('one/paperback-front.json')!).name).toBe('next.jpg');
+  });
+  it('keeps each ebook separate and recalls EPUB-image placement after Save', async () => {
+    const first = await open(); calculate('266');
+    fireEvent.change(screen.getByLabelText('Back-cover text'), { target: { value: 'Book one.' } });
+    fireEvent.change(screen.getByLabelText('Image placement'), { target: { value: 'border' } });
+    await save(); first.unmount();
+    const second = await open(vi.fn(), { ...book, hash: 'two', title: 'Other book' });
+    expect((screen.getByLabelText('Page count') as HTMLInputElement).value).toBe('');
+    expect((screen.getByLabelText('Back-cover text') as HTMLTextAreaElement).value).toBe('');
+    calculate('400'); await save(); second.unmount(); await open();
+    expect((screen.getByLabelText('Page count') as HTMLInputElement).value).toBe('266');
+    expect((screen.getByLabelText('Back-cover text') as HTMLTextAreaElement).value).toBe('Book one.');
+    expect((screen.getByLabelText('Image placement') as HTMLSelectElement).value).toBe('border');
+  });
+  it('opens existing saved details without a color as cream without writing them', async () => {
+    mocked.files.set('one/paperback-cover.json', JSON.stringify({ version: 1, pages: '266', paper: 'bw-white', backText: 'Earlier blurb.', frontFit: 'fill' }));
+    await open();
+    expect((screen.getByLabelText('Background color') as HTMLInputElement).value).toBe('#f3efe5');
+    expect(screen.getByText(/Black text automatically/)).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Save', exact: true }) as HTMLButtonElement).disabled).toBe(true);
+    expect(mocked.writeFile).not.toHaveBeenCalled();
   });
 });

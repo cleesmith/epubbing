@@ -10,7 +10,7 @@ const BACK_WIDTH = 5 * PT;
 const BACK_HEIGHT = 6.5 * PT;
 const BACK_OPTIONS = { width: BACK_WIDTH, lineGap: 3, paragraphGap: 7, align: 'left' };
 const BG = '#f3efe5';
-const INK = '#211d17';
+const INK = '#000000';
 let fontBytes;
 function regularFont() {
   if (!fontBytes) {
@@ -54,6 +54,8 @@ export async function createPaperbackCover(input) {
   if (!Number.isFinite(spine) || spine <= 0 || !Number.isInteger(printPages) || printPages < 24) {
     throw new Error('Invalid paperback dimensions.');
   }
+  const background = /^#[0-9a-f]{6}$/i.test(input.backgroundColor ?? '') ? input.backgroundColor : BG;
+  const ink = ['#000000', '#ffffff'].includes(input.textColor) ? input.textColor : INK;
   const doc = documentWithFont({ info: { Title: `${title} — Paperback Cover`, Author: author } });
   const textError = checkText(doc, backText);
   if (textError) { doc.destroy(); throw new Error(textError); }
@@ -69,8 +71,8 @@ export async function createPaperbackCover(input) {
   let spineText = false;
   try {
     doc.addPage({ size: [width, height], margin: 0 });
-    doc.rect(0, 0, width, height).fill(BG);
-    doc.fillColor(INK).fontSize(BACK_FONT);
+    doc.rect(0, 0, width, height).fill(background);
+    doc.fillColor(ink).fontSize(BACK_FONT);
     if (backText.trim()) doc.text(backText.trim(), BLEED + 0.5 * PT, BLEED + 0.65 * PT, BACK_OPTIONS);
 
     // Keep a 2 x 1.2-inch barcode box clear, 0.25 inch from spine and bottom trim.
@@ -105,7 +107,7 @@ export async function createPaperbackCover(input) {
       const center = BLEED + 6 * PT + spine * PT / 2;
       const lineHeight = doc.currentLineHeight(true);
       const sideways = (text, y) => {
-        doc.save().translate(center, y).rotate(90).fillColor(INK);
+        doc.save().translate(center, y).rotate(90).fillColor(ink);
         doc.text(text, 0, -lineHeight / 2, { lineBreak: false });
         doc.restore();
       };

@@ -1,4 +1,5 @@
 import React from 'react';
+import { Blob } from 'node:buffer';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { Book } from '@/types/book';
@@ -23,16 +24,20 @@ beforeEach(() => {
   mocks.open.mockReturnValue(true);
   mocks.proof.mockReturnValue({ url: 'blob:proof', open: mocks.open, release: mocks.release });
   mocks.render.mockImplementation(async (_options, onRender) => {
-    onRender({ _INTERNAL__LAYOUT__DATA_: { children: [{}, {}, {}] } });
-    return new Blob(['pdf']);
+    onRender({ _INTERNAL__LAYOUT__DATA_: { children: [{ lines: [{ runs: [{ glyphs: [{}], positions: [{}], attributes: { font: [{ fullName: 'EB Garamond Regular', postscriptName: 'EBGaramond-Regular' }], fontSize: 11 } }] }] }, {}, {}] } });
+    return new Blob(['%PDF-1.3\nproof']);
   });
 });
 afterEach(cleanup);
 it('offers the finished proof on a deliberate click and never opens the print dialog', async () => {
   const print = vi.spyOn(window, 'print');
   const view = show();
-  const link = await screen.findByRole('link', { name: 'Download a PDF proof' });
-  expect(screen.getByText('3 pages · 6 × 9 inches')).toBeTruthy();
+  const link = await screen.findByRole('link', { name: 'Open PDF proof in a new tab' });
+  expect(screen.getByText('Total pages: 3 for a 6 × 9 inch paperback')).toBeTruthy();
+  expect(screen.getByText('PDF format: Standard PDF 1.3')).toBeTruthy();
+  expect(screen.getByRole('table', { name: 'Embedded font styles and sizes' })).toBeTruthy();
+  expect(screen.getByText('EB Garamond Regular')).toBeTruthy();
+  expect(screen.getByText('11')).toBeTruthy();
   expect(mocks.open).not.toHaveBeenCalled();
   fireEvent.click(link); expect(mocks.open).toHaveBeenCalledOnce();
   expect(print).not.toHaveBeenCalled();
@@ -50,7 +55,7 @@ it('shows real page activity, elapsed time and remaining steps without a percent
   expect(screen.queryByRole('progressbar')).toBeNull();
 });
 it('cancels the active render and ignores a late result', async () => {
-  let finish: (blob: Blob) => void = () => {};
+  let finish: (blob: unknown) => void = () => {};
   mocks.render.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
   const close = vi.fn(); show(close);
   await waitFor(() => expect(mocks.render).toHaveBeenCalledOnce());

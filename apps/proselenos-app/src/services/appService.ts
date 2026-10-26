@@ -25,6 +25,7 @@ import {
   getLocalBookFilename,
   getCoverFilename,
   getPaperbackFrontFilename,
+  getPaperbackSettingsFilename,
   getConfigFilename,
   getLibraryFilename,
   INIT_BOOK_CONFIG,
@@ -412,6 +413,7 @@ export abstract class BaseAppService implements AppService {
       getLocalBookFilename(book),
       getCoverFilename(book),
       getPaperbackFrontFilename(book),
+      getPaperbackSettingsFilename(book),
       getConfigFilename(book),
     ];
     for (const fp of filesToDelete) {

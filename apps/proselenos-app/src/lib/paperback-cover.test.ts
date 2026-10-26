@@ -1,10 +1,16 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { coverDimensions, frontPlacement, frontImageWarnings, FRONT_WIDTH, FRONT_HEIGHT, characterCount, limitBackText, paperbackPublishingNote, PAPER_CHOICES, type PaperChoice } from './paperback-cover';
+import { coverBackground, coverTextColor, coverDimensions, frontPlacement, frontImageWarnings, FRONT_WIDTH, FRONT_HEIGHT, characterCount, limitBackText, paperbackPublishingNote, PAPER_CHOICES, type PaperChoice } from './paperback-cover';
 import { checkBackCoverText, createPaperbackCover } from 'book-pdf/cover';
 import fs from 'node:fs';
 
 describe('6x9 paperback cover', () => {
+  it('chooses readable black or white ink for light, dark and saturated colors', () => {
+    for (const color of ['#ffffff', '#f3efe5', '#ffff00', '#00ff00', '#ff0000']) expect(coverTextColor(color)).toBe('#000000');
+    for (const color of ['#000000', '#123456', '#0000ff']) expect(coverTextColor(color)).toBe('#ffffff');
+    expect(coverBackground('#ABCDEF')).toBe('#abcdef');
+    for (const value of [undefined, null, '', 'red', '#123', '#12345678']) expect(coverBackground(value)).toBe('#f3efe5');
+  });
   it('uses the published KDP dimensions and rounds odd page counts up', () => {
     expect(coverDimensions(300, 'bw-cream')).toMatchObject({ spine: 0.75, width: 13, height: 9.25 });
     expect(coverDimensions(299, 'bw-cream').printPages).toBe(300);
@@ -39,13 +45,14 @@ describe('6x9 paperback cover', () => {
       expect(p.y + p.height).toBeGreaterThanOrEqual(FRONT_HEIGHT - 0.000001);
     }
     expect(frontImageWarnings(1838, 2775, 'fill')).toEqual([]);
+    expect(frontImageWarnings(245, 370, 'fill')).toEqual([]);
     expect(frontImageWarnings(2200, 1100, 'fill').join(' ')).toMatch(/cropped/);
     expect(frontPlacement(600, 900).dpi).toBeLessThan(300);
   });
   it('keeps the entire image only when the author chooses a warned border', () => {
     expect(frontPlacement(1650, 2550, 'border')).toMatchObject({ width: 5.5, height: 8.5, dpi: 300, x: 0.25, y: 0.375 });
     expect(frontPlacement(2200, 1100, 'border')).toMatchObject({ width: 5.5, height: 2.75, cropSides: false, cropTopBottom: false });
-    expect(frontImageWarnings(1650, 2550, 'border')[0]).toMatch(/cream border/);
+    expect(frontImageWarnings(1650, 2550, 'border')[0]).toMatch(/chosen background color/);
   });
   it('counts spaces and Unicode characters without splitting surrogate pairs', () => {
     expect(characterCount('A 😀 B')).toBe(5);
@@ -68,7 +75,7 @@ describe('6x9 paperback cover', () => {
     const thin = await createPaperbackCover({ ...input, printPages: 24, spine: 0.054048 });
     expect(thin.spineText).toBe(false);
     expect(thin.warnings[0]).toMatch(/left off/);
-    const full = await createPaperbackCover({ ...input, frontFullBleed: true });
+    const full = await createPaperbackCover({ ...input, frontFullBleed: true, backgroundColor: '#123456', textColor: '#ffffff' });
     expect(full.blob.size).toBeGreaterThan(1000);
     if (process.env.COVER_TEST_OUTPUT) fs.writeFileSync(process.env.COVER_TEST_OUTPUT, new Uint8Array(await full.blob.arrayBuffer()));
   });
