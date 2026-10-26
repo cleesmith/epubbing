@@ -12,7 +12,7 @@ import { UndoToolbarButton, RedoToolbarButton } from './history-toolbar-button';
 import { AlignToolbarButton } from './align-toolbar-button';
 import { FontSizeToolbarButton } from './font-size-toolbar-button';
 import { ImportToolbarButton } from './import-toolbar-button';
-import { EmojiToolbarButton } from './emoji-toolbar-button';
+// import { EmojiToolbarButton } from './emoji-toolbar-button'; // Hidden; retained for easy restoration.
 import {
   IndentToolbarButton,
   OutdentToolbarButton,
@@ -64,7 +64,7 @@ export function FixedToolbarButtons() {
           <ToolbarGroup key="indent">
             <OutdentToolbarButton />
             <IndentToolbarButton />
-            <EmojiToolbarButton />
+            {/* <EmojiToolbarButton /> */}
           </ToolbarGroup>
 
           <ToolbarGroup key="more">

@@ -59,11 +59,17 @@ const PaperbackCoverModal: React.FC<PaperbackCoverModalProps> = ({ book, bookMet
   const interiorType = paper.startsWith('bw-') ? 'bw' : paper;
   const closing = saveStatus === 'saving';
   const filename = (book.title || 'Book').replace(/[<>:"/\\|?*]/g, '').slice(0, 120).trim() || 'Book';
+  const epubFilename = getLocalBookFilename(book);
   const loadFrontFromEpub = useCallback(async () => {
     const appService = await envConfig.getAppService();
-    const file = await appService.openFile(getLocalBookFilename(book), 'Books');
+    const file = await appService.openFile(epubFilename, 'Books');
     return extractEpubCover(await JSZip.loadAsync(await file.arrayBuffer()));
-  }, [envConfig, book.hash, book.sourceTitle, book.title, book.format]);
+  }, [envConfig, epubFilename]);
+
+  const invalidateDetails = useCallback(() => {
+    detailsSession.current++;
+    frontRequest.current++;
+  }, []);
 
   useEffect(() => {
     const id = ++detailsSession.current;
@@ -100,8 +106,8 @@ const PaperbackCoverModal: React.FC<PaperbackCoverModalProps> = ({ book, bookMet
       if (detailsSession.current !== id) return;
       setSaveStatus('error'); setSaveError('Your saved cover details could not be loaded. Click Retry to try again.');
     });
-    return () => { detailsSession.current++; frontRequest.current++; };
-  }, [book.hash, isOpen, envConfig, reload]);
+    return invalidateDetails;
+  }, [book.hash, isOpen, envConfig, reload, invalidateDetails]);
 
   const storeDetails = async () => {
     const service = serviceRef.current;
@@ -164,19 +170,23 @@ const PaperbackCoverModal: React.FC<PaperbackCoverModalProps> = ({ book, bookMet
     setFrontRecord(current => current ? { ...current, fit } : null);
   };
 
-  const clearDownload = () => {
+  const clearDownload = useCallback(() => {
     if (downloadUrl.current) URL.revokeObjectURL(downloadUrl.current);
     downloadUrl.current = null;
-  };
+  }, []);
 
-  useEffect(() => {
+  const cancelGeneration = useCallback(() => {
     request.current++;
     clearDownload();
+  }, [clearDownload]);
+
+  useEffect(() => {
+    cancelGeneration();
     setResult(null);
     setError('');
     setPhase('options');
-    return () => { request.current++; clearDownload(); };
-  }, [isOpen, book.hash]);
+    return cancelGeneration;
+  }, [isOpen, book.hash, cancelGeneration]);
 
   useEffect(() => {
     if (isOpen && phase === 'options' && detailsBook === book.hash) pageInput.current?.focus();
