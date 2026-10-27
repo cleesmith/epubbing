@@ -13,6 +13,7 @@ import { COVER_BACKGROUND, coverBackground, coverTextColor, BACK_COVER_LIMIT, CO
 import { extractEpubCover } from '@/lib/epub-cover';
 import type { PaperbackCoverResult, PreparedFrontImage } from '@/lib/paperback-cover-browser';
 import PaperbackFrontImage from './PaperbackFrontImage';
+import { getPdfPageCount } from '@/lib/pdf-proof-page-count';
 import { loadPaperbackFront, paperbackFrontFile, savePaperbackFront, removePaperbackFront, loadPaperbackSettings, savePaperbackSettings, type SavedPaperbackFront, type SavedPaperbackSettings } from '@/services/paperbackCoverStorage';
 
 interface PaperbackCoverModalProps {
@@ -25,6 +26,7 @@ interface PaperbackCoverModalProps {
 const PaperbackCoverModal: React.FC<PaperbackCoverModalProps> = ({ book, bookMeta, isOpen, onClose }) => {
   const { envConfig } = useEnv();
   const [pages, setPages] = useState('');
+  const [pdfPages, setPdfPages] = useState<number | null>(null);
   const [paper, setPaper] = useState<PaperChoice>('bw-white');
   const [backText, setBackText] = useState('');
   const [backgroundColor, setBackgroundColor] = useState(COVER_BACKGROUND);
@@ -75,7 +77,7 @@ const PaperbackCoverModal: React.FC<PaperbackCoverModalProps> = ({ book, bookMet
     const id = ++detailsSession.current;
     frontRequest.current++;
     setDetailsBook(null); serviceRef.current = null;
-    setPages(''); setPaper('bw-white'); setBackText(''); setBackgroundColor(COVER_BACKGROUND); setCalculated(null); setValidation(null);
+    setPages(''); setPdfPages(null); setPaper('bw-white'); setBackText(''); setBackgroundColor(COVER_BACKGROUND); setCalculated(null); setValidation(null);
     setSaveStatus('idle'); setSaveError(''); setConfirmClose(false); setHasSavedDetails(false);
     savedSettings.current = ''; savedImage.current = null;
     setFrontFile(null); setFrontFit('fill'); setFront(null); setFrontRecord(null);
@@ -93,13 +95,16 @@ const PaperbackCoverModal: React.FC<PaperbackCoverModalProps> = ({ book, bookMet
       ]);
       if (detailsSession.current !== id) return;
       const restored: SavedPaperbackSettings = details ?? { version: 1, pages: '', paper: 'bw-white', backText: '', backgroundColor: COVER_BACKGROUND, frontFit: saved?.fit ?? 'fill' };
+      const latestPdfPages = getPdfPageCount({ hash: book.hash, updatedAt: book.updatedAt });
+      const initialPages = restored.pages.trim() ? restored.pages : latestPdfPages?.toString() ?? restored.pages;
+      setPdfPages(latestPdfPages);
       const imageRecord = saved ? { ...saved, fit: restored.frontFit } : null;
       const imageFile = imageRecord ? paperbackFrontFile(imageRecord) : null;
       serviceRef.current = service;
       savedSettings.current = JSON.stringify(restored); savedImage.current = imageRecord;
-      setPages(restored.pages); setPaper(restored.paper); setBackText(restored.backText); setBackgroundColor(restored.backgroundColor); setFrontFit(restored.frontFit);
+      setPages(initialPages); setPaper(restored.paper); setBackText(restored.backText); setBackgroundColor(restored.backgroundColor); setFrontFit(restored.frontFit);
       setFrontFile(imageFile); setFrontRecord(imageRecord); setFrontError(imageError); setFrontLoaded(true);
-      try { if (/^\d+$/.test(restored.pages.trim())) setCalculated(coverDimensions(Number(restored.pages), restored.paper)); }
+      try { if (/^\d+$/.test(initialPages.trim())) setCalculated(coverDimensions(Number(initialPages), restored.paper)); }
       catch { /* Keep a saved draft editable even when its count is incomplete or invalid. */ }
       setSaveStatus(details ? 'saved' : 'idle'); setHasSavedDetails(!!details); setDetailsBook(book.hash);
     })().catch(() => {
@@ -107,7 +112,7 @@ const PaperbackCoverModal: React.FC<PaperbackCoverModalProps> = ({ book, bookMet
       setSaveStatus('error'); setSaveError('Your saved cover details could not be loaded. Click Retry to try again.');
     });
     return invalidateDetails;
-  }, [book.hash, isOpen, envConfig, reload, invalidateDetails]);
+  }, [book.hash, book.updatedAt, isOpen, envConfig, reload, invalidateDetails]);
 
   const storeDetails = async () => {
     const service = serviceRef.current;
@@ -325,8 +330,15 @@ const PaperbackCoverModal: React.FC<PaperbackCoverModalProps> = ({ book, bookMet
                       <input ref={pageInput} type='number' min={COVER_PAGE_MIN} max={COVER_PAGE_MAX} step='1' inputMode='numeric' className='input input-bordered input-sm mt-1 w-full' value={pages}
                         aria-describedby='cover-page-help' aria-invalid={!!pageError} onChange={event => { setPages(event.target.value); setCalculated(null); setValidation(null); setError(''); }} />
                     </label>
-                    <button type='button' className='btn btn-outline btn-sm self-end' disabled={!dimensions} onClick={() => { setCalculated(dimensions); setValidation(null); setError(''); }}>Calculate dimensions</button>
+                    <button type='button' className={`btn btn-sm self-end ${dimensions && !calculated ? 'btn-primary' : 'btn-outline'}`} disabled={!dimensions} onClick={() => { setCalculated(dimensions); setValidation(null); setError(''); }}>Calculate dimensions</button>
                   </div>
+                  {pdfPages !== null && <div className='mt-2'>
+                    {pages.trim() === String(pdfPages)
+                      ? <p className='text-xs text-base-content/70'>Latest 6 × 9 PDF proof: {pdfPages} pages.</p>
+                      : <button type='button' className='btn btn-outline btn-sm' onClick={() => {
+                        setPages(String(pdfPages)); setCalculated(null); setValidation(null); setError('');
+                      }}>Use PDF page count: {pdfPages}</button>}
+                  </div>}
                   <p id='cover-page-help' className='mt-2 text-xs text-base-content/70'>Enter {COVER_PAGE_MIN}–{COVER_PAGE_MAX} pages. Use the PDF’s total, including title pages and blank pages.</p>
                   {pageError && <p role='alert' className='mt-2 text-sm text-error'>{pageError}</p>}
                   {dimensions && paperbackPublishingNote(dimensions.pdfPages, paper) && <p className='mt-2 text-xs text-base-content/70'>{paperbackPublishingNote(dimensions.pdfPages, paper)} <a className='link' href='https://kdp.amazon.com/en_US/help/topic/GVBQ3CMEQW3W2VL6#trimsize' target='_blank' rel='noreferrer'>KDP page-count limits</a></p>}

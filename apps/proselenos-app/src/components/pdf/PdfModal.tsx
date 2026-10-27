@@ -8,6 +8,7 @@ import { BookMetadata } from '@/libs/document';
 import { formatPublisher, getLocalBookFilename } from '@/utils/book';
 import { useEnv } from '@/context/EnvContext';
 import { createPdfProofUrl } from '@/lib/pdf-proof-url';
+import { rememberPdfPageCount } from '@/lib/pdf-proof-page-count';
 import { collectPdfFontUsage, type PdfFontUsage } from '@/lib/pdf-proof-fonts';
 import {
   getSpineItems, extractChapters, extractCopyrightHtml, resolveTitlePageText,
@@ -36,6 +37,7 @@ const PdfModal: React.FC<PdfModalProps> = ({ book, bookMeta, isOpen, onClose, in
   const [startedAt, setStartedAt] = useState(0);
   const [error, setError] = useState('');
   const [proof, setProof] = useState<Proof | null>(null);
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'error'>('idle');
   const closeRef = useRef(onClose); closeRef.current = onClose;
   const abortRef = useRef<AbortController | null>(null);
 
@@ -62,7 +64,7 @@ const PdfModal: React.FC<PdfModalProps> = ({ book, bookMeta, isOpen, onClose, in
       setSection(stage === 'layout' ? sectionNames[Math.min(completed, sectionNames.length - 1)] || '' : '');
     };
     const run = async () => {
-      setPhase('loading'); setProof(null); setError(''); setStep(0); setElapsed(0);
+      setPhase('loading'); setProof(null); setCopyStatus('idle'); setError(''); setStep(0); setElapsed(0);
       setBookInfo(''); setSection(''); setStartedAt(Date.now());
       setMessage('Opening your EPUB…');
       try {
@@ -108,6 +110,7 @@ const PdfModal: React.FC<PdfModalProps> = ({ book, bookMeta, isOpen, onClose, in
         const fontUsage = await collectPdfFontUsage(layout, pause);
         if (cancelled()) return;
         created = { ...createPdfProofUrl(blob), pages, version, fontUsage };
+        rememberPdfPageCount(book, pages);
         setProof(created); setPhase('ready');
       } catch (err) {
         if (cancelled()) return;
@@ -120,6 +123,18 @@ const PdfModal: React.FC<PdfModalProps> = ({ book, bookMeta, isOpen, onClose, in
   }, [isOpen, book, bookMeta, envConfig, includeToc, includeChapterHeadings]);
 
   const close = () => { abortRef.current?.abort(); closeRef.current(); };
+  const copyPageCount = async () => {
+    if (!proof) return;
+    try {
+      await navigator.clipboard.writeText(String(proof.pages));
+      setCopyStatus('copied');
+    } catch { setCopyStatus('error'); }
+  };
+  useEffect(() => {
+    if (copyStatus !== 'copied') return;
+    const timer = window.setTimeout(() => setCopyStatus('idle'), 2000);
+    return () => window.clearTimeout(timer);
+  }, [copyStatus]);
   useEffect(() => {
     if (!isOpen || phase !== 'loading' || !startedAt) return;
     const timer = setInterval(() => setElapsed(Math.floor((Date.now() - startedAt) / 1000)), 1000);
@@ -137,7 +152,7 @@ const PdfModal: React.FC<PdfModalProps> = ({ book, bookMeta, isOpen, onClose, in
   if (!isOpen) return null;
   return (
     <div className='fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-base-100 py-6' role='dialog' aria-modal='true' aria-labelledby='pdf-proof-heading'>
-      <div className='my-auto w-full max-w-md px-6 text-center'>
+      <div className='my-auto w-full max-w-3xl select-text px-6 text-center' style={{ userSelect: 'text', WebkitUserSelect: 'text' }}>
         <h3 id='pdf-proof-heading' className='text-base-content mb-3 text-lg font-semibold'>
           {phase === 'ready' ? 'Your PDF proof is ready' : phase === 'error' ? 'Could not create the PDF' : 'Preparing your PDF proof'}
         </h3>
@@ -157,7 +172,11 @@ const PdfModal: React.FC<PdfModalProps> = ({ book, bookMeta, isOpen, onClose, in
           <p className='text-base-content/60 mb-5 text-sm'>Large books take longer. You can cancel while the book is being prepared.</p>
         </>}
         {phase === 'ready' && proof && <>
-          <p className='text-base-content/70 mb-4'>Total pages: {proof.pages} for a 6 × 9 inch paperback</p>
+          <p className='text-base-content/70 mb-2'>Total pages: {proof.pages} for a 6 × 9 inch paperback</p>
+          <button type='button' className='btn btn-outline btn-sm mb-4' aria-live='polite' onClick={() => { void copyPageCount(); }}>
+            {copyStatus === 'copied' ? 'Copied: ' + proof.pages : 'Copy page count: ' + proof.pages}
+          </button>
+          {copyStatus === 'error' && <p role='alert' className='text-error mb-4 text-sm'>Could not copy. Select the page count above and copy it.</p>}
           <p className='text-base-content/70 mb-4 text-sm'>PDF format: Standard PDF{proof.version ? ` ${proof.version}` : ''}</p>
           {proof.fontUsage.length > 0 && <div className='text-base-content/70 mb-5 text-left text-sm'>
             <p className='text-base-content mb-2 text-center font-medium'>Embedded font styles and sizes</p>
@@ -178,8 +197,9 @@ const PdfModal: React.FC<PdfModalProps> = ({ book, bookMeta, isOpen, onClose, in
             event.preventDefault();
             setError(proof.open() ? '' : 'Allow a new tab for EverythingEbooks, then click the link again.');
           }}>Open PDF proof in a new tab</a>
-          <p className='text-base-content/60 mb-4 text-sm'>Preview your PDF, then use its download button to save a copy. In Safari, you can also open it in Preview and save it there.</p>
-          <p className='text-base-content/60 mb-4 text-sm'>Use this PDF’s total page count when creating its paperback cover.</p>
+          <p className='text-base-content/60 mb-2 text-sm'>Preview your PDF, then use its download button to save a copy.</p>
+          <p className='text-base-content/60 mb-4 text-sm'>In Safari, you can also open it in Preview and save it there.</p>
+          <p className='text-base-content/60 mb-4 text-sm'>This page count is also available in this ebook’s paperback cover calculator.</p>
         </>}
         {error && <p role='alert' className='text-error mb-5 text-sm'>{error}</p>}
         <button className='btn btn-ghost btn-sm' onClick={close}>{phase === 'loading' ? 'Cancel' : 'Close'}</button>
