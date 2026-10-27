@@ -7,17 +7,12 @@ import { useState, useEffect, useRef } from 'react';
 import { ThemeConfig } from '../shared/theme';
 import { showAlert } from '../shared/alerts';
 import StyledSmallButton from '@/components/StyledSmallButton';
+import { EPUB_COVER_SIZE } from '@/lib/epub-cover-size';
 import { makeCoverSvg, makeTypographySvg, svgToJpegBlob } from '@/lib/makeCoverSvg';
 import {
   loadCoverSettings,
-  saveCoverSettings,
   CoverSettings,
-  saveCoverImage,
-  deleteCoverImage,
-  loadWorkingCopyMeta,
-  saveWorkingCopyMeta,
-  loadManuscriptMeta,
-  saveManuscriptMeta,
+  saveManuscriptCover,
 } from '@/services/manuscriptStorage';
 
 interface CoverModalProps {
@@ -165,33 +160,7 @@ export default function CoverModal({
 
     setSaving(true);
     try {
-      const filename = 'cover.jpg';
-
-      // Delete old cover blob if it has a different filename
-      const oldMeta = await loadManuscriptMeta();
-      if (oldMeta?.coverImageId && oldMeta.coverImageId !== filename) {
-        await deleteCoverImage();
-      }
-
-      // Save the new cover image
-      await saveCoverImage(jpegBlob, filename);
-
-      // Update working copy meta (old format)
-      const wcMeta = await loadWorkingCopyMeta();
-      if (wcMeta) {
-        wcMeta.coverImageId = filename;
-        await saveWorkingCopyMeta(wcMeta);
-      }
-
-      // Update manuscript meta (new format) so sidebar refresh picks it up
-      const manuscriptMeta = await loadManuscriptMeta();
-      if (manuscriptMeta) {
-        manuscriptMeta.coverImageId = filename;
-        await saveManuscriptMeta(manuscriptMeta);
-      }
-
-      // Save settings for next time
-      await saveCoverSettings(settings);
+      await saveManuscriptCover(jpegBlob, 'cover.jpg', settings);
 
       onCoverSaved();
       onClose();
@@ -282,6 +251,10 @@ export default function CoverModal({
               <span style={{ fontSize: '13px', color: theme.text }}>{author || '(No author set)'}</span>
             </div>
           </div>
+
+          <p style={{ fontSize: '12px', color: theme.textMuted }}>
+            JPEG cover: {EPUB_COVER_SIZE}
+          </p>
 
           {/* Divider after metadata */}
           <div style={{ borderBottom: `1px solid ${theme.border}`, margin: '8px 0' }} />
@@ -509,7 +482,7 @@ export default function CoverModal({
                       boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
                     }}
                   >
-                    {saving ? 'Saving...' : 'Save to Manuscript'}
+                    {saving ? 'Saving...' : 'Save'}
                   </button>
                   <a
                     href={jpegUrl}

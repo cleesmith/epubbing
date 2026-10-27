@@ -648,6 +648,31 @@ export async function saveCoverImage(blob: Blob, filename: string): Promise<void
   await setValue(STORES.MANUSCRIPT, filename, blob);
 }
 
+// Save the image and its metadata together, only after an author's explicit Save.
+// A failed transaction leaves the previous cover and its metadata intact.
+export async function saveManuscriptCover(blob: Blob, filename: string, settings?: CoverSettings): Promise<void> {
+  const db = await openDB();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORES.MANUSCRIPT, 'readwrite');
+      const store = tx.objectStore(STORES.MANUSCRIPT);
+      tx.oncomplete = () => resolve();
+      tx.onabort = () => reject(tx.error || new Error('The cover could not be saved.'));
+      store.put({ key: filename, value: blob });
+      if (settings) store.put({ key: 'cover_settings.json', value: settings });
+      for (const key of ['working_copy_meta.json', 'meta.json']) {
+        const read = store.get(key);
+        read.onsuccess = () => {
+          const meta = read.result?.value as WorkingCopyMeta | ManuscriptMeta | undefined;
+          if (!meta) return;
+          if (meta.coverImageId && meta.coverImageId !== filename) store.delete(meta.coverImageId);
+          store.put({ key, value: { ...meta, coverImageId: filename } });
+        };
+      }
+    });
+  } finally { db.close(); }
+}
+
 export async function deleteCoverImage(): Promise<void> {
   // Try new meta.json first
   const newMeta = await loadManuscriptMeta();

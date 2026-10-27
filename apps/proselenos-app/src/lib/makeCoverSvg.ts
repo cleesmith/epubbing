@@ -1,11 +1,12 @@
 import { appPath } from '@/utils/app-path';
+import { EPUB_COVER_WIDTH, EPUB_COVER_HEIGHT } from './epub-cover-size';
 // apps/proselenos-app/src/lib/makeCoverSvg.ts
 
 // Uses fonts from /public/fonts/
 // Standard Ebooks-style cover design: dark box near bottom with title + author
 
-const WIDTH = 1600;                 // KDP standard width
-const HEIGHT = 2560;                // KDP standard height
+const WIDTH = EPUB_COVER_WIDTH;     // EE cover width: 1707 pixels
+const HEIGHT = EPUB_COVER_HEIGHT;   // EE cover height: 2560 pixels
 const TITLE_BOX_Y = 1975;           // Y position where dark box starts (scaled)
 const TITLE_BOX_HEIGHT = 524;       // Height of the dark box (scaled)
 const BOX_OPACITY = 0.75;           // Dark box opacity
@@ -276,8 +277,8 @@ export async function makeCoverSvg({
 
 export async function svgToJpegBlob(
   svg: string,
-  width = 1600,
-  height = 2560
+  width = WIDTH,
+  height = HEIGHT
 ): Promise<Blob> {
   const svgBlob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
   const url = URL.createObjectURL(svgBlob);

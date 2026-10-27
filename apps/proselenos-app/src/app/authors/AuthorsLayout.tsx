@@ -8,6 +8,7 @@ import { showAlert, showConfirm } from '../shared/alerts';
 import Swal from 'sweetalert2';
 import AuthorsHeader from './AuthorsHeader';
 import ChapterSidebar from './ChapterSidebar';
+import EpubCoverUploadModal from './EpubCoverUploadModal';
 import EditorPanel, { EditorPanelRef } from './EditorPanel';
 import { ElementType, getDefaultTitle, PROTECTED_SECTION_IDS, PROTECTED_SECTION_COUNT, getSectionNumber, isFloatingType } from './elementTypes';
 
@@ -59,8 +60,7 @@ import {
   loadWorkingCopyMeta,
   clearWorkingCopy,
   saveSection,
-  saveCoverImage,
-  deleteCoverImage,
+  saveManuscriptCover,
   loadCoverImage,
   loadManuscriptMeta,
   saveManuscriptMeta,
@@ -146,6 +146,7 @@ export default function AuthorsLayout({
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
   const [bookMeta, setBookMeta] = useState<WorkingCopyMeta | null>(null);
   const publishingRef = useRef(false);
+  const [showCoverUpload, setShowCoverUpload] = useState(false);
   const [writingMode, setWritingMode] = useState(false);
 
   // A newly selected/reloaded chapter always opens with the full controls.
@@ -1566,45 +1567,11 @@ export default function AuthorsLayout({
     }
   };
 
-  // Handle cover image click - open file picker to change cover
-  const handleCoverClick = () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    input.onchange = async (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (file) {
-        try {
-          // Normalize filename to cover.{ext}
-          const ext = file.name.split('.').pop() || 'png';
-          const coverFilename = `cover.${ext}`;
-          // Delete old cover first
-          await deleteCoverImage();
-          // Save new cover to IndexedDB with normalized name
-          await saveCoverImage(file, coverFilename);
-          // Update metadata with new coverImageId
-          const meta = await loadWorkingCopyMeta();
-          if (meta) {
-            meta.coverImageId = coverFilename;
-            await saveWorkingCopyMeta(meta);
-          }
-          // Also update meta.json so loadCoverImage() finds the correct file
-          const newMeta = await loadManuscriptMeta();
-          if (newMeta) {
-            newMeta.coverImageId = coverFilename;
-            await saveManuscriptMeta(newMeta);
-          }
-          // Update in-memory epub state
-          if (epub) {
-            setEpub({ ...epub, coverImage: file });
-          }
-        } catch (error) {
-          console.error('Error saving cover image:', error);
-          alert('Error saving cover image. Please try again.');
-        }
-      }
-    };
-    input.click();
+  // Preview and check a selected cover before the author saves it.
+  const handleCoverClick = () => setShowCoverUpload(true);
+  const handleSaveCover = async (file: File) => {
+    await saveManuscriptCover(file, 'cover.jpg');
+    setEpub(current => current ? { ...current, coverImage: file } : current);
   };
 
   // Handle content changes from EditorPanel
@@ -1897,6 +1864,12 @@ export default function AuthorsLayout({
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
       }}
     >
+      {showCoverUpload && <EpubCoverUploadModal
+        theme={theme}
+        currentCover={epub?.coverImage ?? null}
+        onSave={handleSaveCover}
+        onClose={() => setShowCoverUpload(false)}
+      />}
       {/* Header */}
       {!writingMode && <AuthorsHeader
         theme={theme}
