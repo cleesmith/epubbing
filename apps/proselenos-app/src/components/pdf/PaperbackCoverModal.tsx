@@ -14,6 +14,7 @@ import { extractEpubCover } from '@/lib/epub-cover';
 import type { PaperbackCoverResult, PreparedFrontImage } from '@/lib/paperback-cover-browser';
 import PaperbackFrontImage from './PaperbackFrontImage';
 import { getPdfPageCount } from '@/lib/pdf-proof-page-count';
+import { createCoverTemplatePng, downloadCoverTemplate } from '@/lib/paperback-cover-template';
 import { loadPaperbackFront, paperbackFrontFile, savePaperbackFront, removePaperbackFront, loadPaperbackSettings, savePaperbackSettings, type SavedPaperbackFront, type SavedPaperbackSettings } from '@/services/paperbackCoverStorage';
 
 interface PaperbackCoverModalProps {
@@ -51,6 +52,14 @@ const PaperbackCoverModal: React.FC<PaperbackCoverModalProps> = ({ book, bookMet
   const savedImage = useRef<SavedPaperbackFront | null>(null);
   const serviceRef = useRef<AppService | null>(null);
   const [calculated, setCalculated] = useState<ReturnType<typeof coverDimensions> | null>(null);
+  const [templateReady, setTemplateReady] = useState(false);
+  const [templateBusy, setTemplateBusy] = useState(false);
+  const templateRequest = useRef(0);
+  const invalidateTemplate = useCallback(() => { templateRequest.current++; }, []);
+  useEffect(() => {
+    invalidateTemplate(); setTemplateBusy(false);
+    return invalidateTemplate;
+  }, [book.hash, isOpen, calculated, backgroundColor, invalidateTemplate]);
   const [validation, setValidation] = useState<{ value: string; error: string | null } | null>(null);
   const [phase, setPhase] = useState<'options' | 'working' | 'ready'>('options');
   const [error, setError] = useState('');
@@ -76,7 +85,7 @@ const PaperbackCoverModal: React.FC<PaperbackCoverModalProps> = ({ book, bookMet
   useEffect(() => {
     const id = ++detailsSession.current;
     frontRequest.current++;
-    setDetailsBook(null); serviceRef.current = null;
+    setDetailsBook(null); serviceRef.current = null; setTemplateReady(false);
     setPages(''); setPdfPages(null); setPaper('bw-white'); setBackText(''); setBackgroundColor(COVER_BACKGROUND); setCalculated(null); setValidation(null);
     setSaveStatus('idle'); setSaveError(''); setConfirmClose(false); setHasSavedDetails(false);
     savedSettings.current = ''; savedImage.current = null;
@@ -235,6 +244,20 @@ const PaperbackCoverModal: React.FC<PaperbackCoverModalProps> = ({ book, bookMet
     setValidation(null);
     setError('');
   };
+  const downloadTemplate = async () => {
+    if (!calculated || !templateReady || templateBusy) return;
+    const id = ++templateRequest.current;
+    setTemplateBusy(true); setError('');
+    try {
+      const blob = await createCoverTemplatePng(calculated.pdfPages, paper, backgroundColor);
+      if (id !== templateRequest.current) return;
+      downloadCoverTemplate(blob, filename + '-6x9-' + calculated.printPages + '-' + paper + '-template.png');
+    } catch (failure) {
+      if (id === templateRequest.current) setError(failure instanceof Error ? failure.message : 'The template could not be created.');
+    } finally {
+      if (id === templateRequest.current) setTemplateBusy(false);
+    }
+  };
   const createCover = async () => {
     if (detailsBook !== book.hash || closing || !calculated || !front || frontSaving || phase === 'working' || !validation || validation.value !== backText || validation.error) return;
     const generation = ++request.current;
@@ -271,16 +294,16 @@ const PaperbackCoverModal: React.FC<PaperbackCoverModalProps> = ({ book, bookMet
     <div className='fixed inset-0 z-[60] flex items-center justify-center overflow-auto bg-black/50 p-4' onKeyDown={event => {
       if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); void close(); }
     }}>
-      <div role='dialog' aria-modal='true' aria-label='Paperback cover calculator' className='bg-base-100 flex max-h-[94vh] w-[1280px] min-w-[960px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-lg shadow-xl'>
+      <div role='dialog' aria-modal='true' aria-label='Paperback cover calculator' className='bg-base-100 flex max-h-[calc(100dvh-2rem)] w-[1440px] min-w-[960px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-lg shadow-xl'>
         <header className='shrink-0 border-b border-base-300 px-6 py-4'>
-          <div className='flex items-start justify-between gap-6'>
-            <div className='min-w-0'>
-              <h3 className='flex items-center gap-2 text-lg font-semibold'><SimpleShelfIcon /> Paperback cover calculator</h3>
-              <p className='mt-1 truncate text-sm text-base-content/70'>{book.title}</p>
+          <div className='flex items-baseline justify-between gap-6'>
+            <div className='flex min-w-0 flex-1 flex-wrap items-baseline gap-x-6 gap-y-1'>
+              <h3 className='flex shrink-0 items-center gap-2 text-lg font-semibold'><SimpleShelfIcon /> Paperback cover calculator</h3>
+              <p className='text-sm text-base-content/70'>Create your 6×9 interior PDF first, then enter its total page count here.</p>
             </div>
             <a className='link shrink-0 text-sm' href='https://kdp.amazon.com/cover-calculator' target='_blank' rel='noreferrer'>Open KDP’s cover calculator</a>
           </div>
-          <p className='mt-2 text-sm text-base-content/70'>Create your 6×9 interior PDF first, then enter its total page count here.</p>
+          <p className='mt-1 break-words text-sm text-base-content/70'>{book.title}</p>
         </header>
 
         {phase === 'ready' && result ? (
@@ -304,81 +327,86 @@ const PaperbackCoverModal: React.FC<PaperbackCoverModalProps> = ({ book, bookMet
           </div>
         ) : (
           <form className='flex min-h-0 flex-1 flex-col' noValidate onSubmit={event => { event.preventDefault(); void createCover(); }}>
-            <fieldset className='min-h-0 flex-1 overflow-y-auto px-6 py-4' disabled={phase === 'working' || closing || detailsBook !== book.hash}>
-              <legend className='sr-only'>Paperback cover details</legend>
-              <div className='grid grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] gap-6'>
-                <section aria-labelledby='cover-calculator-heading' className='min-w-0'>
-                  <h4 id='cover-calculator-heading' className='mb-2 font-semibold'>Book and printing details</h4>
-                  <dl className='mb-3 grid grid-cols-2 gap-x-4 gap-y-1 rounded bg-base-200 px-3 py-2 text-xs text-base-content/70'>
-                    <div><dt className='inline font-medium'>Binding: </dt><dd className='inline'>Paperback</dd></div>
-                    <div><dt className='inline font-medium'>Trim size: </dt><dd className='inline'>6 × 9 inches</dd></div>
-                    <div><dt className='inline font-medium'>Reading direction: </dt><dd className='inline'>Left to right</dd></div>
-                    <div><dt className='inline font-medium'>Measurement units: </dt><dd className='inline'>Inches</dd></div>
-                  </dl>
-                  <div className='grid grid-cols-2 gap-3'>
-                    <label className='block text-sm'>Interior type
-                      <select className='select select-bordered select-sm mt-1 w-full' value={interiorType} onChange={event => changePaper(event.target.value === 'bw' ? 'bw-white' : event.target.value as PaperChoice)}>
-                        <option value='bw'>Black &amp; white</option><option value='standard-color'>Standard color</option><option value='premium-color'>Premium color</option>
-                      </select>
+            <div className='min-h-0 flex-1 overflow-y-auto'>
+              <fieldset className='min-w-0 px-6 py-4' disabled={phase === 'working' || closing || detailsBook !== book.hash}>
+                <legend className='sr-only'>Paperback cover details</legend>
+                <div className='grid grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] gap-6'>
+                  <section aria-labelledby='cover-calculator-heading' className='min-w-0'>
+                    <h4 id='cover-calculator-heading' className='mb-2 font-semibold'>Book and printing details</h4>
+                    <dl className='mb-3 grid grid-cols-2 gap-x-4 gap-y-1 rounded bg-base-200 px-3 py-2 text-xs text-base-content/70'>
+                      <div><dt className='inline font-medium'>Binding: </dt><dd className='inline'>Paperback</dd></div>
+                      <div><dt className='inline font-medium'>Trim size: </dt><dd className='inline'>6 × 9 inches</dd></div>
+                      <div><dt className='inline font-medium'>Reading direction: </dt><dd className='inline'>Left to right</dd></div>
+                      <div><dt className='inline font-medium'>Measurement units: </dt><dd className='inline'>Inches</dd></div>
+                    </dl>
+                    <div className='grid grid-cols-2 gap-3'>
+                      <label className='block text-sm'>Interior type
+                        <select className='select select-bordered select-sm mt-1 w-full' value={interiorType} onChange={event => changePaper(event.target.value === 'bw' ? 'bw-white' : event.target.value as PaperChoice)}>
+                          <option value='bw'>Black &amp; white</option><option value='standard-color'>Standard color</option><option value='premium-color'>Premium color</option>
+                        </select>
+                      </label>
+                      <label className='block text-sm'>Paper type
+                        <select className='select select-bordered select-sm mt-1 w-full' value={paper === 'bw-cream' ? 'cream' : 'white'} disabled={interiorType !== 'bw'} onChange={event => changePaper(event.target.value === 'cream' ? 'bw-cream' : 'bw-white')}>
+                          <option value='white'>White paper</option>{interiorType === 'bw' && <option value='cream'>Cream paper</option>}
+                        </select>
+                      </label>
+                      <label className='block text-sm'>Page count
+                        <input ref={pageInput} type='number' min={COVER_PAGE_MIN} max={COVER_PAGE_MAX} step='1' inputMode='numeric' className='input input-bordered input-sm mt-1 w-full' value={pages}
+                          aria-describedby='cover-page-help' aria-invalid={!!pageError} onChange={event => { setPages(event.target.value); setCalculated(null); setValidation(null); setError(''); }} />
+                      </label>
+                      <button type='button' className={`btn btn-sm self-end ${dimensions && !calculated ? 'btn-primary' : 'btn-outline'}`} disabled={!dimensions} onClick={() => { setCalculated(dimensions); setTemplateReady(true); setValidation(null); setError(''); }}>Calculate dimensions</button>
+                    </div>
+                    {pdfPages !== null && <div className='mt-2'>
+                      {pages.trim() === String(pdfPages)
+                        ? <p className='text-xs text-base-content/70'>Latest 6 × 9 PDF proof: {pdfPages} pages.</p>
+                        : <button type='button' className='btn btn-outline btn-sm' onClick={() => {
+                          setPages(String(pdfPages)); setCalculated(null); setValidation(null); setError('');
+                        }}>Use PDF page count: {pdfPages}</button>}
+                    </div>}
+                    <p id='cover-page-help' className='mt-2 text-xs text-base-content/70'>Enter {COVER_PAGE_MIN}–{COVER_PAGE_MAX} pages. Use the PDF’s total, including title pages and blank pages.</p>
+                    {pageError && <p role='alert' className='mt-2 text-sm text-error'>{pageError}</p>}
+                    {dimensions && paperbackPublishingNote(dimensions.pdfPages, paper) && <p className='mt-2 text-xs text-base-content/70'>{paperbackPublishingNote(dimensions.pdfPages, paper)} <a className='link' href='https://kdp.amazon.com/en_US/help/topic/GVBQ3CMEQW3W2VL6#trimsize' target='_blank' rel='noreferrer'>KDP page-count limits</a></p>}
+                    {calculated && <div className='mt-3 rounded border border-base-300 px-3 py-2'>
+                      <table className='w-full text-sm' aria-label='Calculated cover dimensions'>
+                        <tbody>
+                          <tr><th className='py-1 text-left font-medium' scope='row'>Full cover, including bleed</th><td className='pl-3 text-right'>{calculated.width.toFixed(4)} × {calculated.height.toFixed(4)} inches</td></tr>
+                          <tr><th className='py-1 text-left font-medium' scope='row'>Spine width</th><td className='pl-3 text-right'>{calculated.spine.toFixed(4)} inches</td></tr>
+                          <tr><th className='py-1 text-left font-medium' scope='row'>Pages for printing</th><td className='pl-3 text-right'>{calculated.printPages}</td></tr>
+                        </tbody>
+                      </table>
+                      {calculated.printPages !== calculated.pdfPages && <p className='mt-1 text-xs text-base-content/70'>KDP rounds up to {calculated.printPages} pages for printing.</p>}
+                      {templateReady && <button type='button' className='btn btn-outline btn-sm mt-3' disabled={templateBusy} onClick={() => { void downloadTemplate(); }}>
+                        {templateBusy ? 'Creating template PNG…' : 'Download template PNG'}
+                      </button>}
+                    </div>}
+                    <div className='mt-3 flex items-center gap-3'>
+                      <label className='flex items-center gap-2 text-sm font-medium'>Background color
+                        <input type='color' className='h-9 w-12 cursor-pointer rounded border border-base-300 p-1' value={backgroundColor}
+                          onChange={event => { const next = coverBackground(event.target.value); if (next !== backgroundColor) { setFront(null); setBackgroundColor(next); } }} />
+                      </label>
+                      <span className='text-xs text-base-content/70'>{backgroundColor.toUpperCase()} · {textColor === '#ffffff' ? 'White' : 'Black'} text automatically</span>
+                    </div>
+                    <p className='mt-1 text-xs text-base-content/70'>Applies to the back, spine and any front-image border. The barcode area stays white.</p>
+                    <label className='mt-3 block text-sm font-medium'>Back-cover text
+                      <textarea className='textarea textarea-bordered mt-1 h-28 w-full text-sm font-normal' value={backText} aria-describedby='cover-back-count' style={{ backgroundColor, color: textColor }}
+                        onChange={event => { setBackText(limitBackText(event.target.value)); setValidation(null); }} />
                     </label>
-                    <label className='block text-sm'>Paper type
-                      <select className='select select-bordered select-sm mt-1 w-full' value={paper === 'bw-cream' ? 'cream' : 'white'} disabled={interiorType !== 'bw'} onChange={event => changePaper(event.target.value === 'cream' ? 'bw-cream' : 'bw-white')}>
-                        <option value='white'>White paper</option>{interiorType === 'bw' && <option value='cream'>Cream paper</option>}
-                      </select>
-                    </label>
-                    <label className='block text-sm'>Page count
-                      <input ref={pageInput} type='number' min={COVER_PAGE_MIN} max={COVER_PAGE_MAX} step='1' inputMode='numeric' className='input input-bordered input-sm mt-1 w-full' value={pages}
-                        aria-describedby='cover-page-help' aria-invalid={!!pageError} onChange={event => { setPages(event.target.value); setCalculated(null); setValidation(null); setError(''); }} />
-                    </label>
-                    <button type='button' className={`btn btn-sm self-end ${dimensions && !calculated ? 'btn-primary' : 'btn-outline'}`} disabled={!dimensions} onClick={() => { setCalculated(dimensions); setValidation(null); setError(''); }}>Calculate dimensions</button>
-                  </div>
-                  {pdfPages !== null && <div className='mt-2'>
-                    {pages.trim() === String(pdfPages)
-                      ? <p className='text-xs text-base-content/70'>Latest 6 × 9 PDF proof: {pdfPages} pages.</p>
-                      : <button type='button' className='btn btn-outline btn-sm' onClick={() => {
-                        setPages(String(pdfPages)); setCalculated(null); setValidation(null); setError('');
-                      }}>Use PDF page count: {pdfPages}</button>}
-                  </div>}
-                  <p id='cover-page-help' className='mt-2 text-xs text-base-content/70'>Enter {COVER_PAGE_MIN}–{COVER_PAGE_MAX} pages. Use the PDF’s total, including title pages and blank pages.</p>
-                  {pageError && <p role='alert' className='mt-2 text-sm text-error'>{pageError}</p>}
-                  {dimensions && paperbackPublishingNote(dimensions.pdfPages, paper) && <p className='mt-2 text-xs text-base-content/70'>{paperbackPublishingNote(dimensions.pdfPages, paper)} <a className='link' href='https://kdp.amazon.com/en_US/help/topic/GVBQ3CMEQW3W2VL6#trimsize' target='_blank' rel='noreferrer'>KDP page-count limits</a></p>}
-                  {calculated && <div className='mt-3 rounded border border-base-300 px-3 py-2'>
-                    <table className='w-full text-sm' aria-label='Calculated cover dimensions'>
-                      <tbody>
-                        <tr><th className='py-1 text-left font-medium' scope='row'>Full cover, including bleed</th><td className='pl-3 text-right'>{calculated.width.toFixed(4)} × {calculated.height.toFixed(4)} inches</td></tr>
-                        <tr><th className='py-1 text-left font-medium' scope='row'>Spine width</th><td className='pl-3 text-right'>{calculated.spine.toFixed(4)} inches</td></tr>
-                        <tr><th className='py-1 text-left font-medium' scope='row'>Pages for printing</th><td className='pl-3 text-right'>{calculated.printPages}</td></tr>
-                      </tbody>
-                    </table>
-                    {calculated.printPages !== calculated.pdfPages && <p className='mt-1 text-xs text-base-content/70'>KDP rounds up to {calculated.printPages} pages for printing.</p>}
-                  </div>}
-                  <div className='mt-3 flex items-center gap-3'>
-                    <label className='flex items-center gap-2 text-sm font-medium'>Background color
-                      <input type='color' className='h-9 w-12 cursor-pointer rounded border border-base-300 p-1' value={backgroundColor}
-                        onChange={event => { const next = coverBackground(event.target.value); if (next !== backgroundColor) { setFront(null); setBackgroundColor(next); } }} />
-                    </label>
-                    <span className='text-xs text-base-content/70'>{backgroundColor.toUpperCase()} · {textColor === '#ffffff' ? 'White' : 'Black'} text automatically</span>
-                  </div>
-                  <p className='mt-1 text-xs text-base-content/70'>Applies to the back, spine and any front-image border. The barcode area stays white.</p>
-                  <label className='mt-3 block text-sm font-medium'>Back-cover text
-                    <textarea className='textarea textarea-bordered mt-1 h-28 w-full text-sm font-normal' value={backText} aria-describedby='cover-back-count' style={{ backgroundColor, color: textColor }}
-                      onChange={event => { setBackText(limitBackText(event.target.value)); setValidation(null); }} />
-                  </label>
-                  <p id='cover-back-count' className='mt-1 text-xs text-base-content/70'>{characterCount(backText).toLocaleString()} / {BACK_COVER_LIMIT.toLocaleString()} characters, including spaces. Printed in 14-point EB Garamond.</p>
-                  {validation?.error && <p role='alert' className='mt-2 text-sm text-error'>{validation.error}</p>}
-                  <p className='mt-3 text-xs text-base-content/70'>The cover and spine lettering are arranged automatically, with space for KDP’s barcode. Choose these same printing and paper options when publishing.</p>
-                </section>
-
-                <section aria-label='Front-cover image and preview' className='min-w-0 border-l border-base-300 pl-6'>
-                  {frontLoaded ? <fieldset disabled={frontSaving}>
-                    <PaperbackFrontImage key={`${book.hash}:${frontRevision}`} loadEpubCover={loadFrontFromEpub} onChange={setFront}
-                      file={frontFile} fit={frontFit} backgroundColor={backgroundColor} saved={frontRecord === savedImage.current} onFileChange={file => { void chooseFrontFile(file); }} onFitChange={chooseFrontFit} />
-                  </fieldset> : <p role='status' className='text-sm'>Loading the saved front-cover image…</p>}
-                  {frontSaving && <p role='status' className='mt-2 text-sm'>Preparing the paperback image…</p>}
-                  {frontError && <p role='alert' className='mt-2 text-sm text-error'>{frontError}</p>}
-                </section>
-              </div>
-            </fieldset>
+                    <p id='cover-back-count' className='mt-1 text-xs text-base-content/70'>{characterCount(backText).toLocaleString()} / {BACK_COVER_LIMIT.toLocaleString()} characters, including spaces. Printed in 14-point EB Garamond.</p>
+                    {validation?.error && <p role='alert' className='mt-2 text-sm text-error'>{validation.error}</p>}
+                    <p className='mt-3 text-xs text-base-content/70'>The cover and spine lettering are arranged automatically, with space for KDP’s barcode. Choose these same printing and paper options when publishing.</p>
+                  </section>
+  
+                  <section aria-label='Front-cover image and preview' className='min-w-0 border-l border-base-300 pl-6'>
+                    {frontLoaded ? <fieldset disabled={frontSaving}>
+                      <PaperbackFrontImage key={`${book.hash}:${frontRevision}`} loadEpubCover={loadFrontFromEpub} onChange={setFront}
+                        file={frontFile} fit={frontFit} backgroundColor={backgroundColor} saved={frontRecord === savedImage.current} onFileChange={file => { void chooseFrontFile(file); }} onFitChange={chooseFrontFit} />
+                    </fieldset> : <p role='status' className='text-sm'>Loading the saved front-cover image…</p>}
+                    {frontSaving && <p role='status' className='mt-2 text-sm'>Preparing the paperback image…</p>}
+                    {frontError && <p role='alert' className='mt-2 text-sm text-error'>{frontError}</p>}
+                  </section>
+                </div>
+              </fieldset>
+            </div>
             <footer className='shrink-0 border-t border-base-300 px-6 py-3'>
               {error && <p role='alert' className='mb-2 text-sm text-error'>{error}</p>}
               {saveError && <p role='alert' className='mb-2 text-sm text-error'>{saveError} {detailsBook !== book.hash && <button type='button' className='link font-medium' onClick={() => setReload(value => value + 1)}>Retry</button>}</p>}
