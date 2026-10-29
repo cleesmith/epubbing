@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { coverBackground, coverTextColor, coverDimensions, frontPlacement, frontImageWarnings, FRONT_WIDTH, FRONT_HEIGHT, characterCount, limitBackText, paperbackPublishingNote, PAPER_CHOICES, type PaperChoice } from './paperback-cover';
+import { coverBackground, coverTextColor, coverDimensions, frontPlacement, frontImageWarnings, FRONT_WIDTH, FRONT_HEIGHT, characterCount, limitBackText, PAPER_CHOICES, type PaperChoice } from './paperback-cover';
 import { checkBackCoverText, createPaperbackCover } from 'book-pdf/cover';
 import fs from 'node:fs';
 
@@ -11,7 +11,7 @@ describe('6x9 paperback cover', () => {
     expect(coverBackground('#ABCDEF')).toBe('#abcdef');
     for (const value of [undefined, null, '', 'red', '#123', '#12345678']) expect(coverBackground(value)).toBe('#f3efe5');
   });
-  it('uses the published KDP dimensions and rounds odd page counts up', () => {
+  it('calculates the cover dimensions and rounds odd page counts up', () => {
     expect(coverDimensions(300, 'bw-cream')).toMatchObject({ spine: 0.75, width: 13, height: 9.25 });
     expect(coverDimensions(299, 'bw-cream').printPages).toBe(300);
     expect(coverDimensions(300, 'bw-white').spine).toBeCloseTo(0.6756, 6);
@@ -27,15 +27,6 @@ describe('6x9 paperback cover', () => {
     }
     expect(() => coverDimensions(NaN, 'bw-white')).toThrow(/invalid/);
     expect(() => coverDimensions(24.5, 'bw-white')).toThrow(/invalid/);
-  });
-  it('keeps narrower publishing ranges as notes without blocking calculation', () => {
-    expect(paperbackPublishingNote(70, 'standard-color')).toMatch(/72–600/);
-    expect(paperbackPublishingNote(777, 'bw-cream')).toMatch(/24–776/);
-    expect(paperbackPublishingNote(830, 'bw-white')).toMatch(/24–828/);
-    expect(paperbackPublishingNote(830, 'premium-color')).toMatch(/24–828/);
-    expect(paperbackPublishingNote(600, 'standard-color')).toBe('');
-    expect(paperbackPublishingNote(776, 'bw-cream')).toBe('');
-    expect(paperbackPublishingNote(828, 'bw-white')).toBe('');
   });
   it('covers the entire front panel including bleed for every image shape', () => {
     for (const [width, height] of [[2450, 3700], [600, 900], [1000, 1000], [2200, 1100]]) {

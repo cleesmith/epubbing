@@ -8,6 +8,7 @@
  * BookshelfItem (read as bookseller preview).
  */
 import JSZip from 'jszip';
+import { removePaperbackSetup } from './paperback-epub';
 
 /**
  * Mutates the given JSZip in place, stripping VN/sticky/SceneCraft content.
@@ -17,6 +18,7 @@ import JSZip from 'jszip';
  * - content.opf manifest entry for vn-style is removed.
  */
 export async function stripEpubForBookseller(zip: JSZip): Promise<void> {
+  removePaperbackSetup(zip);
   // Step 1: Strip XHTML content files
   const xhtmlFiles = Object.keys(zip.files).filter(
     (name) => name.startsWith('OEBPS/') && name.endsWith('.xhtml')

@@ -29,6 +29,7 @@ import {
 import EbookPlusHelp from './EbookPlusHelp';
 import JSZip from 'jszip';
 import { stripEpubForBookseller } from '@/lib/bookseller-strip';
+import { addPaperbackSetup } from '@/lib/paperback-epub';
 import { downloadBookAsWebReady } from '@/services/webReadyService';
 
 interface BookDetailModalProps {
@@ -75,6 +76,7 @@ const BookDetailModal: React.FC<BookDetailModalProps> = ({
     includeChapterHeadings: false,
   });
   const [showHelp, setShowHelp] = useState(false);
+  const [downloadError, setDownloadError] = useState('');
   const { envConfig } = useEnv();
   const { settings } = useSettingsStore();
 
@@ -143,6 +145,7 @@ const BookDetailModal: React.FC<BookDetailModalProps> = ({
     setShowPaperbackCover(false);
     setPdfOptionsFor(null);
     setShowHelp(false);
+    setDownloadError('');
     onClose();
   };
 
@@ -192,18 +195,30 @@ const BookDetailModal: React.FC<BookDetailModalProps> = ({
   };
 
   const handleDownloadLocal = async () => {
-    const appService = await envConfig.getAppService();
-    const epubFilename = getLocalBookFilename(book);
-    const epubFile = await appService.openFile(epubFilename, 'Books');
-    const arrayBuffer = await epubFile.arrayBuffer();
+    setDownloadError('');
+    try {
+      const appService = await envConfig.getAppService();
+      const epubFilename = getLocalBookFilename(book);
+      const epubFile = await appService.openFile(epubFilename, 'Books');
+      const arrayBuffer = await epubFile.arrayBuffer();
 
-    const blob = new Blob([arrayBuffer], { type: 'application/epub+zip' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${makeSafeFilename(book.title)}.${EXTS[book.format]}`;
-    a.click();
-    URL.revokeObjectURL(url);
+      let blob = new Blob([arrayBuffer], { type: 'application/epub+zip' });
+      if (book.format === 'EPUB') {
+        const zip = await JSZip.loadAsync(arrayBuffer);
+        await addPaperbackSetup(zip, appService, book);
+        // EPUB's mimetype entry must remain uncompressed.
+        zip.file('mimetype', 'application/epub+zip', { compression: 'STORE' });
+        blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/epub+zip', compression: 'DEFLATE' });
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${makeSafeFilename(book.title)}.${EXTS[book.format]}`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setDownloadError(`The Authors EPUB could not be downloaded. ${error instanceof Error ? error.message : 'Please try again.'}`);
+    }
   };
 
   const handleDownloadBookseller = async () => {
@@ -306,6 +321,7 @@ const BookDetailModal: React.FC<BookDetailModalProps> = ({
           )}
           contentClassName='!px-6 !py-4'
         >
+          {downloadError && <p role='alert' className='mb-3 text-sm text-error'>{downloadError}</p>}
           <div className='flex w-full select-text items-start justify-center'>
             {editMode ? (
               <BookDetailEdit

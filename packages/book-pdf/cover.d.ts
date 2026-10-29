@@ -2,6 +2,7 @@ export interface CoverPdfInput {
   title: string;
   author: string;
   backText: string;
+  backImage?: string;
   backgroundColor?: string;
   textColor?: '#000000' | '#ffffff';
   printPages: number;

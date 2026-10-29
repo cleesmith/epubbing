@@ -1,7 +1,7 @@
 import type JSZip from 'jszip';
 import { createPaperbackCover } from 'book-pdf/cover';
 import { extractEpubCover } from './epub-cover';
-import { COVER_BACKGROUND, coverBackground, coverTextColor, FRONT_WIDTH, FRONT_HEIGHT, coverDimensions, frontPlacement, frontImageWarnings, paperbackPublishingNote, type FrontFit, type PaperbackCoverOptions } from './paperback-cover';
+import { BACK_IMAGE_WIDTH, BACK_IMAGE_HEIGHT, backImagePlacement, BACK_IMAGE_PIXELS_WIDE, BACK_IMAGE_PIXELS_HIGH, checkBackImageSize, COVER_BACKGROUND, coverBackground, coverTextColor, FRONT_WIDTH, FRONT_HEIGHT, coverDimensions, frontPlacement, frontImageWarnings, type FrontFit, type PaperbackCoverOptions } from './paperback-cover';
 
 export interface PreparedFrontImage {
   dataUrl: string;
@@ -63,6 +63,31 @@ export async function prepareFrontImage(blob: Blob, fit: FrontFit = 'fill', back
   } finally { URL.revokeObjectURL(url); }
 }
 
+// Fill the back panel above the barcode; center-crop to preserve proportions.
+// Transparency is flattened to white, independent of later background changes.
+export async function normalizeBackUpload(file: File): Promise<{ name: string; jpeg: string; sourceWidth: number; sourceHeight: number }> {
+  if (!(['image/jpeg', 'image/png'].includes(file.type) || (!file.type && /\.(jpe?g|png)$/i.test(file.name)))) {
+    throw new Error('Choose a JPG or PNG image for the back cover.');
+  }
+  const url = URL.createObjectURL(file);
+  const canvas = document.createElement('canvas');
+  try {
+    const image = new Image(); image.src = url; await image.decode();
+    const error = checkBackImageSize(image.naturalWidth, image.naturalHeight);
+    if (error) throw new Error(error);
+    const placement = backImagePlacement(image.naturalWidth, image.naturalHeight);
+    canvas.width = BACK_IMAGE_PIXELS_WIDE; canvas.height = BACK_IMAGE_PIXELS_HIGH;
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('Your browser could not prepare the back-cover image.');
+    context.fillStyle = '#ffffff'; context.fillRect(0, 0, canvas.width, canvas.height);
+    const sx = canvas.width / BACK_IMAGE_WIDTH, sy = canvas.height / BACK_IMAGE_HEIGHT;
+    context.drawImage(image, placement.x * sx, placement.y * sy, placement.width * sx, placement.height * sy);
+    const jpeg = canvas.toDataURL('image/jpeg', 0.95);
+    if (!jpeg.startsWith('data:image/jpeg;base64,')) throw new Error('Your browser could not prepare this image. Choose another JPG or PNG.');
+    return { name: file.name.replace(/\.[^.]*$/, '') + '.jpg', jpeg, sourceWidth: image.naturalWidth, sourceHeight: image.naturalHeight };
+  } finally { canvas.width = canvas.height = 1; URL.revokeObjectURL(url); }
+}
+
 export interface PaperbackCoverResult {
   blob: Blob;
   warnings: string[];
@@ -76,21 +101,21 @@ export async function generatePaperbackCover(
 ): Promise<PaperbackCoverResult> {
   const check = () => { if (cancelled()) throw new DOMException('Cancelled', 'AbortError'); };
   check();
+  if (options.backMode === 'image' && !options.backImage) throw new Error('Choose a back-cover image, or select Text.');
   const dimensions = coverDimensions(pageCount, options.paper);
   const backgroundColor = coverBackground(options.backgroundColor);
   const front = selectedFront ?? await prepareFrontImage(await extractEpubCover(zip), 'fill', backgroundColor);
   check();
   const result = await createPaperbackCover({
     backgroundColor, textColor: coverTextColor(backgroundColor),
-    title, author, backText: options.backText, printPages: dimensions.printPages,
+    title, author, backText: options.backMode === 'image' ? '' : options.backText,
+    backImage: options.backMode === 'image' ? options.backImage : undefined, printPages: dimensions.printPages,
     spine: dimensions.spine, frontImage: front.dataUrl, frontWidth: FRONT_WIDTH, frontHeight: FRONT_HEIGHT, frontFullBleed: true,
   });
   check();
   const warnings = [...result.warnings];
-  const publishingNote = paperbackPublishingNote(pageCount, options.paper);
-  if (publishingNote) warnings.push(publishingNote);
   if (dimensions.pdfPages !== dimensions.printPages) warnings.push(
-    `The PDF has ${dimensions.pdfPages} pages. The cover allows for ${dimensions.printPages}, because KDP rounds up to an even page count.`,
+    `The PDF has ${dimensions.pdfPages} pages. The cover calculation uses ${dimensions.printPages} pages, rounded up to an even number.`,
   );
   return { blob: result.blob, dimensions, warnings };
 }

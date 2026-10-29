@@ -5,9 +5,11 @@ import { EBGARAMOND_FONTS } from './src/font/embedded-fonts';
 
 const PT = 72;
 const BLEED = 9;
-const BACK_FONT = 14;
+const BACK_FONT = 22; // Heading 2 size; EB Garamond Regular, weight 400, upright.
 const BACK_WIDTH = 5 * PT;
 const BACK_HEIGHT = 6.5 * PT;
+const BACK_IMAGE_WIDTH = 6.125 * PT;
+const BACK_IMAGE_HEIGHT = 7.425 * PT; // Leave 0.25 inch above the barcode box.
 const BACK_OPTIONS = { width: BACK_WIDTH, lineGap: 3, paragraphGap: 7, align: 'left' };
 const BG = '#f3efe5';
 const INK = '#000000';
@@ -38,7 +40,7 @@ function checkText(doc, text) {
   if (missing) return `EB Garamond cannot print “${missing}”. Please replace that character.`;
   doc.fontSize(BACK_FONT);
   if (text.trim() && doc.heightOfString(text.trim(), BACK_OPTIONS) > BACK_HEIGHT) {
-    return 'This text needs more space than the back cover allows. Shorten it or remove extra blank lines; the lettering stays at 14 points.';
+    return `This text needs more space than the back cover allows. Shorten it or remove extra blank lines; the lettering stays at ${BACK_FONT} points.`;
   }
   return null;
 }
@@ -50,14 +52,15 @@ export function checkBackCoverText(text) {
 }
 
 export async function createPaperbackCover(input) {
-  const { title, author, backText, printPages, spine, frontImage, frontWidth, frontHeight } = input;
+  const { title, author, backText, backImage, printPages, spine, frontImage, frontWidth, frontHeight } = input;
+  if (backImage && backText.trim()) throw new Error('Choose back-cover text or an image, not both.');
   if (!Number.isFinite(spine) || spine <= 0 || !Number.isInteger(printPages) || printPages < 24) {
     throw new Error('Invalid paperback dimensions.');
   }
   const background = /^#[0-9a-f]{6}$/i.test(input.backgroundColor ?? '') ? input.backgroundColor : BG;
   const ink = ['#000000', '#ffffff'].includes(input.textColor) ? input.textColor : INK;
   const doc = documentWithFont({ info: { Title: `${title} — Paperback Cover`, Author: author } });
-  const textError = checkText(doc, backText);
+  const textError = backImage ? null : checkText(doc, backText);
   if (textError) { doc.destroy(); throw new Error(textError); }
   const width = (12.25 + spine) * PT;
   const height = 9.25 * PT;
@@ -73,7 +76,13 @@ export async function createPaperbackCover(input) {
     doc.addPage({ size: [width, height], margin: 0 });
     doc.rect(0, 0, width, height).fill(background);
     doc.fillColor(ink).fontSize(BACK_FONT);
-    if (backText.trim()) doc.text(backText.trim(), BLEED + 0.5 * PT, BLEED + 0.65 * PT, BACK_OPTIONS);
+    if (backImage) {
+      // Fill the complete upper back panel, including top and outer bleed.
+      // Clip at the spine and above the 0.25-inch background gap before the barcode band.
+      doc.save().rect(0, 0, BACK_IMAGE_WIDTH, BACK_IMAGE_HEIGHT).clip();
+      doc.image(backImage, 0, 0, { cover: [BACK_IMAGE_WIDTH, BACK_IMAGE_HEIGHT], align: 'center', valign: 'center' });
+      doc.restore();
+    } else if (backText.trim()) doc.text(backText.trim(), BLEED + 0.5 * PT, BLEED + 0.65 * PT, BACK_OPTIONS);
 
     // Keep a 2 x 1.2-inch barcode box clear, 0.25 inch from spine and bottom trim.
     doc.rect(BLEED + (6 - 0.25 - 2) * PT, BLEED + (9 - 0.25 - 1.2) * PT, 2 * PT, 1.2 * PT).fill('#ffffff');
@@ -121,7 +130,5 @@ export async function createPaperbackCover(input) {
     doc.destroy(error);
   }
   const blob = await completed;
-  if (blob.size > 650 * 1000 * 1000) throw new Error('The cover PDF exceeds KDP’s 650 MB limit.');
-  if (blob.size > 40 * 1000 * 1000) warnings.push('This cover PDF is larger than KDP’s recommended 40 MB.');
   return { blob, spineText, warnings };
 }

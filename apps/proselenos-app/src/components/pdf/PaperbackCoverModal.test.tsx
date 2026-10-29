@@ -10,7 +10,7 @@ const mocked = vi.hoisted(() => {
 });
 vi.mock('@/context/EnvContext', () => ({ useEnv: () => ({ envConfig: mocked.envConfig }) }));
 vi.mock('@/utils/book', () => ({ getLocalBookFilename: () => 'book.epub', getPaperbackFrontFilename: (b: Book) => `${b.hash}/paperback-front.json`, getPaperbackSettingsFilename: (b: Book) => `${b.hash}/paperback-cover.json` }));
-vi.mock('jszip', () => ({ default: { loadAsync: async () => ({ loadedEpub: true }) } }));
+vi.mock('jszip', () => ({ default: { loadAsync: async () => ({ loadedEpub: true, file: () => null }) } }));
 vi.mock('@/lib/epub-to-pdf', () => ({ getSpineItems: async () => ['chapter.xhtml'], resolveTitlePageText: async () => ({ title: 'Book title' }) }));
 vi.mock('@/lib/epub-cover', () => ({ extractEpubCover: async () => new Blob(['epub cover']) }));
 vi.mock('@/lib/paperback-cover-browser', () => ({ generatePaperbackCover: mocked.generate, prepareFrontImage: mocked.prepare, normalizeFrontUpload: mocked.normalize }));
@@ -48,7 +48,7 @@ describe('separate paperback-cover calculator', () => {
     expect((screen.getByText('Calculate dimensions') as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText('Paperback')).toBeTruthy();
     expect(screen.getByText('6 × 9 inches')).toBeTruthy();
-    expect(screen.getByRole('link', { name: /KDP’s cover calculator/ }).getAttribute('href')).toBe('https://kdp.amazon.com/cover-calculator');
+    expect(screen.queryByRole('link', { name: /KDP/ })).toBeNull();
     calculate('301');
     expect(screen.getByRole('table')).toBeTruthy(); expect(screen.getByText('302')).toBeTruthy();
     fireEvent.change(screen.getByLabelText('Interior type'), { target: { value: 'standard-color' } });
@@ -56,7 +56,7 @@ describe('separate paperback-cover calculator', () => {
     expect((screen.getByLabelText('Paper type') as HTMLSelectElement).disabled).toBe(true);
     fireEvent.change(screen.getByLabelText('Page count'), { target: { value: '40' } });
     expect(screen.queryByRole('alert')).toBeNull();
-    expect(screen.getByText(/KDP lists 72–600/)).toBeTruthy();
+    expect(screen.queryByText(/KDP lists|publishing range/)).toBeNull();
     expect((screen.getByText('Calculate dimensions') as HTMLButtonElement).disabled).toBe(false);
   });
   it('accepts 830 for cover calculation and blocks 871 with the calculator range', async () => {
@@ -83,7 +83,7 @@ describe('separate paperback-cover calculator', () => {
     fireEvent.click(screen.getByText('Create cover PDF'));
     await screen.findByRole('link', { name: 'Download cover PDF' });
     expect(mocked.openFile).toHaveBeenCalledWith('book.epub', 'Books');
-    expect(mocked.generate).toHaveBeenCalledWith({ loadedEpub: true }, 300, { paper: 'bw-cream', backText: 'A quiet valley.', backgroundColor: '#123456' }, 'Book title', 'Clee Smith', expect.any(Function), expect.objectContaining({ fit: 'fill' }));
+    expect(mocked.generate).toHaveBeenCalledWith(expect.objectContaining({ loadedEpub: true }), 300, expect.objectContaining({ paper: 'bw-cream', backText: 'A quiet valley.', backgroundColor: '#123456' }), 'Book title', 'Clee Smith', expect.any(Function), expect.objectContaining({ fit: 'fill' }));
     expect(screen.queryByText('Download interior PDF')).toBeNull();
     expect(screen.getByText('The sides of this image will be cropped.')).toBeTruthy();
     expect(mocked.writeFile).not.toHaveBeenCalled();

@@ -1,16 +1,40 @@
-// KDP paperback rules, deliberately limited to the existing 6 x 9 export.
+// Dimensions for the existing 6 x 9 cover export.
 export const BACK_COVER_LIMIT = 1500;
-// Match the cover calculator's input range. Publishing ranges below are advisory.
+// Supported input range for this cover calculator.
 export const COVER_PAGE_MIN = 24;
 export const COVER_PAGE_MAX = 830;
 export const PAPER_CHOICES = {
-  'bw-white': { label: 'Black-and-white on white paper', factor: 0.002252, min: 24, max: 828 },
-  'bw-cream': { label: 'Black-and-white on cream paper', factor: 0.0025, min: 24, max: 776 },
-  'standard-color': { label: 'Standard color on white paper', factor: 0.002252, min: 72, max: 600 },
-  'premium-color': { label: 'Premium color on white paper', factor: 0.002347, min: 24, max: 828 },
+  'bw-white': { label: 'Black-and-white on white paper', factor: 0.002252 },
+  'bw-cream': { label: 'Black-and-white on cream paper', factor: 0.0025 },
+  'standard-color': { label: 'Standard color on white paper', factor: 0.002252 },
+  'premium-color': { label: 'Premium color on white paper', factor: 0.002347 },
 } as const;
 export type PaperChoice = keyof typeof PAPER_CHOICES;
-export interface PaperbackCoverOptions { paper: PaperChoice; backText: string; backgroundColor?: string }
+export type BackCoverMode = 'text' | 'image';
+export interface PaperbackCoverOptions { paper: PaperChoice; backText: string; backgroundColor?: string; backMode?: BackCoverMode; backImage?: string }
+
+// Fill to the spine, leaving a quarter-inch background strip above the barcode band.
+// Barcode top: 0.125 + 9 - 0.25 - 1.2 = 7.675 inches from the top bleed edge.
+export const BACK_IMAGE_WIDTH = 6.125;
+export const BACK_IMAGE_HEIGHT = 7.425; // Barcode top (7.675) minus 0.25-inch gap.
+export const BACK_IMAGE_PIXELS_WIDE = Math.ceil(BACK_IMAGE_WIDTH * 300);
+export const BACK_IMAGE_PIXELS_HIGH = Math.ceil(BACK_IMAGE_HEIGHT * 300);
+
+export function backImagePlacement(width: number, height: number) {
+  if (![width, height].every(value => Number.isFinite(value) && value > 0)) throw new Error('This image has no usable dimensions.');
+  const scale = Math.max(BACK_IMAGE_WIDTH / width, BACK_IMAGE_HEIGHT / height);
+  const printWidth = width * scale, printHeight = height * scale;
+  return { x: (BACK_IMAGE_WIDTH - printWidth) / 2, y: (BACK_IMAGE_HEIGHT - printHeight) / 2,
+    width: printWidth, height: printHeight, dpi: 1 / scale,
+    cropSides: (printWidth - BACK_IMAGE_WIDTH) / scale > 1,
+    cropTopBottom: (printHeight - BACK_IMAGE_HEIGHT) / scale > 1 };
+}
+
+export function checkBackImageSize(width: number, height: number): string | null {
+  if (![width, height].every(value => Number.isSafeInteger(value) && value > 0)) return 'This image has no usable dimensions.';
+  if (width < BACK_IMAGE_PIXELS_WIDE || height < BACK_IMAGE_PIXELS_HIGH) return `This image is ${width.toLocaleString()} × ${height.toLocaleString()} pixels. Use at least 1,838 × 2,228 pixels for the 6.125 × 7.425-inch back-cover image area at 300 DPI.`;
+  return null;
+}
 
 export function coverDimensions(pdfPages: number, paper: PaperChoice) {
   const choice = PAPER_CHOICES[paper];
@@ -23,13 +47,6 @@ export function coverDimensions(pdfPages: number, paper: PaperChoice) {
   const printPages = Math.ceil(pdfPages / 2) * 2;
   const spine = printPages * choice.factor;
   return { pdfPages, printPages, spine, width: 12.25 + spine, height: 9.25 };
-}
-
-export function paperbackPublishingNote(pdfPages: number, paper: PaperChoice) {
-  const { printPages } = coverDimensions(pdfPages, paper);
-  const choice = PAPER_CHOICES[paper];
-  if (printPages >= choice.min && printPages <= choice.max) return '';
-  return `KDP lists ${choice.min}–${choice.max} pages for ${choice.label.toLowerCase()} at 6 × 9 inches. You can calculate this cover, but this page count is outside that publishing range.`;
 }
 
 export function characterCount(text: string) { return Array.from(text).length; }
