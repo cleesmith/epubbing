@@ -29,6 +29,9 @@ interface PaperbackCoverModalProps {
 
 const PaperbackCoverModal: React.FC<PaperbackCoverModalProps> = ({ book, bookMeta, isOpen, onClose }) => {
   const { envConfig } = useEnv();
+  // Reload saved details when the source book changes, not merely when a parent
+  // creates another object for the same book (which would discard unsaved edits).
+  const { hash, sourceTitle, title, format, updatedAt } = book;
   const [pages, setPages] = useState('');
   const [pdfPages, setPdfPages] = useState<number | null>(null);
   const [paper, setPaper] = useState<PaperChoice>('bw-white');
@@ -104,10 +107,10 @@ const PaperbackCoverModal: React.FC<PaperbackCoverModalProps> = ({ book, bookMet
     if (!isOpen) return;
     void (async () => {
       const service = await envConfig.getAppService();
-      const { front: saved, settings: details, frontStored, imageError } = await loadPaperbackSetup(service, book);
+      const { front: saved, settings: details, frontStored, imageError } = await loadPaperbackSetup(service, { hash, sourceTitle, title, format });
       if (detailsSession.current !== id) return;
       const restored = selectedPaperbackSettings(details ?? { version: 1, pages: '', paper: 'bw-white', backText: '', backgroundColor: COVER_BACKGROUND, frontFit: saved?.fit ?? 'fill' });
-      const latestPdfPages = getPdfPageCount({ hash: book.hash, updatedAt: book.updatedAt });
+      const latestPdfPages = getPdfPageCount({ hash, updatedAt });
       const initialPages = restored.pages.trim() ? restored.pages : latestPdfPages?.toString() ?? restored.pages;
       setPdfPages(latestPdfPages);
       const imageRecord = saved ? { ...saved, fit: restored.frontFit } : null;
@@ -119,13 +122,13 @@ const PaperbackCoverModal: React.FC<PaperbackCoverModalProps> = ({ book, bookMet
       setBackMode(restored.backMode ?? 'text'); setBackRecord(restored.backImage ?? null);
       try { if (/^\d+$/.test(initialPages.trim())) setCalculated(coverDimensions(Number(initialPages), restored.paper)); }
       catch { /* Keep a saved draft editable even when its count is incomplete or invalid. */ }
-      setSaveStatus(details ? 'saved' : 'idle'); setHasSavedDetails(!!details); setDetailsBook(book.hash);
+      setSaveStatus(details ? 'saved' : 'idle'); setHasSavedDetails(!!details); setDetailsBook(hash);
     })().catch(() => {
       if (detailsSession.current !== id) return;
       setSaveStatus('error'); setSaveError('Your saved cover details could not be loaded. Click Retry to try again.');
     });
     return invalidateDetails;
-  }, [book.hash, book.updatedAt, isOpen, envConfig, reload, invalidateDetails]);
+  }, [hash, sourceTitle, title, format, updatedAt, isOpen, envConfig, reload, invalidateDetails]);
 
   const currentSettings = (): SavedPaperbackSettings => selectedPaperbackSettings({
     version: 1, pages, paper, backText, backgroundColor, frontFit, backMode, backImage: backRecord,

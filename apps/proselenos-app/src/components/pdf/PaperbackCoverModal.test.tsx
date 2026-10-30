@@ -1,6 +1,6 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { Book } from '@/types/book';
 import type { PaperbackCoverResult } from '@/lib/paperback-cover-browser';
 import PaperbackCoverModal from './PaperbackCoverModal';
@@ -21,7 +21,7 @@ const open = async (onClose = vi.fn(), selectedBook = book) => {
   await screen.findByLabelText('Choose front-cover image');
   return view;
 };
-const save = async () => { fireEvent.click(screen.getByRole('button', { name: 'Save', exact: true })); await screen.findByText('Cover details saved with this ebook.'); };
+const save = async () => { fireEvent.click(screen.getByRole('button', { name: 'Save' })); await screen.findByText('Cover details saved with this ebook.'); };
 const calculate = (pages = '300') => { fireEvent.change(screen.getByLabelText('Page count'), { target: { value: pages } }); fireEvent.click(screen.getByText('Calculate dimensions')); };
 beforeEach(() => {
   vi.clearAllMocks();
@@ -43,6 +43,21 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 describe('separate paperback-cover calculator', () => {
+  it('keeps unsaved edits when the parent passes another object for the same book', async () => {
+    const onClose = vi.fn();
+    const view = await open(onClose);
+    await screen.findByText('Click Save to remember these cover details.');
+    fireEvent.change(screen.getByLabelText('Page count'), { target: { value: '266' } });
+    fireEvent.change(screen.getByLabelText('Back-cover text'), { target: { value: 'Still editing this blurb.' } });
+    mocked.openFile.mockClear();
+    await act(async () => {
+      view.rerender(<PaperbackCoverModal book={{ ...book, progress: [2, 10] }} bookMeta={null} isOpen onClose={onClose} />);
+    });
+    expect((screen.getByLabelText('Page count') as HTMLInputElement).value).toBe('266');
+    expect((screen.getByLabelText('Back-cover text') as HTMLTextAreaElement).value).toBe('Still editing this blurb.');
+    expect(mocked.openFile).not.toHaveBeenCalled();
+    expect(mocked.writeFile).not.toHaveBeenCalled();
+  });
   it('requires the PDF page count and recalculation after changing paper', async () => {
     await open();
     expect((screen.getByText('Calculate dimensions') as HTMLButtonElement).disabled).toBe(true);
@@ -186,7 +201,7 @@ describe('separate paperback-cover calculator', () => {
     fireEvent.change(screen.getByLabelText('Choose front-cover image'), { target: { files: [new File(['next'], 'next.png', { type: 'image/png' })] } });
     await screen.findByText('next.jpg · Not saved yet');
     mocked.writeFile.mockRejectedValueOnce(new Error('Storage is full.'));
-    fireEvent.click(screen.getByRole('button', { name: 'Save', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     await screen.findByText(/Your cover details were not saved/);
     expect(mocked.files.get('one/paperback-front.json')).toBe(saved);
     await save(); expect(JSON.parse(mocked.files.get('one/paperback-front.json')!).name).toBe('next.jpg');
@@ -209,7 +224,7 @@ describe('separate paperback-cover calculator', () => {
     await open();
     expect((screen.getByLabelText('Background color') as HTMLInputElement).value).toBe('#f3efe5');
     expect(screen.getByText(/Black text automatically/)).toBeTruthy();
-    expect((screen.getByRole('button', { name: 'Save', exact: true }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true);
     expect(mocked.writeFile).not.toHaveBeenCalled();
   });
 });

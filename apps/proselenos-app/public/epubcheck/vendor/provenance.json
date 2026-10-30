@@ -1,0 +1,25 @@
+{
+  "package": "epubcheck-standalone",
+  "version": "5.4.0-build3",
+  "epubcheckVersion": "5.4.0",
+  "source": "https://github.com/jlarmstrongiv/epubcheck-standalone",
+  "tarball": "https://registry.npmjs.org/epubcheck-standalone/-/epubcheck-standalone-5.4.0-build3.tgz",
+  "integrity": "sha512-aq9UF3W7/cZMS3PyoKLYBZd++6/zJx0qSiozseCJCnIDSBbn4pkrap71V06sf2BH/d+hBatFfVqP76B3BFrAeg==",
+  "adaptation": "Only version.js is adapted: its package.json import is replaced with the identical literal EPUBCheck version for unbundled browsers. Other JavaScript files are unchanged.",
+  "files": {
+    "LICENSE": "6adc9d65a6ff262b5686232f816a3adff5a28dd2ac698ede2f1fcd48d6a4d9e7",
+    "THIRD-PARTY-NOTICES.txt": "631127767102632f76f266bb7c7f7e2bed10bf64ff61d90d4ccfd4f13f27d7a9",
+    "engine-browser.js": "0304038c860991d34207fac403e016494e7c9487f75288850ff21e94a5aea540",
+    "engine-run.js": "62ea6b3d3be3f780b234b1583c71c183499b757cad1f6f4c457635b81f86266a",
+    "epubcheck-engine.js": "72401a8e7065f442a715f021f40cbfe30dcd0234ecc103e1184417d142432504",
+    "formatters/console.js": "5d87e7f8cedd9baa12db84c6450c528006de814f47a38f7742cc6562b4f3d409",
+    "formatters/index.js": "194cb107d34fa3157d0d2ce9e79f82216d6f5c288cc49413d7d54ae86c799196",
+    "http-bridge.js": "d5c9187e531a119cc123909dc8b251a27a28dfd30bfe626f16498d6e9c250f14",
+    "parse.js": "09c381e5e5b1d54c76760f3ccabc823b00da4a40338189351132b8878ceef311",
+    "plugins.js": "258c3632093dd6745eec9ad4c60aca497842fb0e65305348b904e6466caf29e2",
+    "run-core.js": "8eaa480afa3b880ff6e23062210d67ab5b6567be3c6a4549066a127689d5611e",
+    "validate-browser.js": "80552f9a213a315a3453fae3cb86479d9cb19f58aabe26192e722645dd486935",
+    "validate-core.js": "aae8014776fb5254f13323aa4ec73dafc8bc880e1be33d093508c9180a0dcc99",
+    "version.js": "687dba469cd14b16b08afe2224d4aded3cdeda7ef8a617c5ca372dc6446b5022"
+  }
+}

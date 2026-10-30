@@ -58,7 +58,7 @@ describe('Authors EPUB paperback setup', () => {
     expect(Object.keys(exported.files).some(name => /\.pdf$/i.test(name))).toBe(false);
     expect(await exported.file('OEBPS/chapter.xhtml')!.async('string')).toBe(oldChapter);
     const target = service();
-    target.files.set('imported/book.epub', new File([bytes], 'authors.epub'));
+    target.files.set('imported/book.epub', new File([new Uint8Array(bytes)], 'authors.epub'));
     expect(await loadPaperbackSetup(target.app, imported)).toEqual({ settings, front, frontStored: false, imageError: '' });
     expect(target.writeFile).not.toHaveBeenCalled();
     // Downloading again before opening/saving the calculator preserves the setup.

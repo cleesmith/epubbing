@@ -1,0 +1,42 @@
+import { expect, it, vi } from 'vitest';
+import JSZip from 'jszip';
+import type { Book } from '@/types/book';
+import type { AppService } from '@/types/system';
+import { prepareEpubExport } from './epubExport';
+vi.mock('@/utils/book', () => ({ getLocalBookFilename: () => 'book/book.epub', getPaperbackSettingsFilename: () => 'book/settings.json', getPaperbackFrontFilename: () => 'book/front.json' }));
+vi.mock('@/utils/misc', () => ({ makeSafeFilename: (value: string) => value }));
+const book = { hash: 'book', title: 'Words', format: 'EPUB' } as Book;
+const arrayBuffer = (blob: Blob) => new Promise<ArrayBuffer>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result as ArrayBuffer); reader.onerror = reject; reader.readAsArrayBuffer(blob); });
+it('prepares both export variants, carries saved author settings, and writes nothing', async () => {
+  const original = new JSZip();
+  original.file('mimetype', 'application/epub+zip', { compression: 'STORE' });
+  original.file('OEBPS/chapter.xhtml', '<html><body><p>The words stay here.</p></body></html>');
+  original.file('OEBPS/meta.json', '{"scene":"private"}');
+  const bytes = await original.generateAsync({ type: 'arraybuffer' });
+  const settings = { version: 1, pages: '100', paper: 'bw-white', backText: 'Back cover', backgroundColor: '#ffffff', frontFit: 'fill' };
+  const writeFile = vi.fn();
+  const service = { writeFile, openFile: vi.fn(async (name: string) => {
+    if (name === 'book/book.epub') return { arrayBuffer: async () => bytes };
+    if (name === 'book/settings.json') return { text: async () => JSON.stringify(settings) };
+    throw new Error('File not found: ' + name);
+  }) } as unknown as AppService;
+  const authors = await prepareEpubExport(service, book, 'authors');
+  const authorZip = await JSZip.loadAsync(await arrayBuffer(authors.blob));
+  expect(authors.filename).toBe('Words.epub');
+  expect(JSON.parse(await authorZip.file('META-INF/ee-paperback/settings.json')!.async('string')).settings.pages).toBe('100');
+  expect(await authorZip.file('OEBPS/chapter.xhtml')!.async('string')).toContain('The words stay here.');
+  const sellers = await prepareEpubExport(service, book, 'booksellers');
+  const sellerZip = await JSZip.loadAsync(await arrayBuffer(sellers.blob));
+  expect(sellers.filename).toBe('Words-booksellers.epub');
+  expect(sellerZip.file('META-INF/ee-paperback/settings.json')).toBeNull();
+  expect(sellerZip.file('OEBPS/meta.json')).toBeNull();
+  expect(await sellerZip.file('OEBPS/chapter.xhtml')!.async('string')).toContain('The words stay here.');
+  expect(await original.file('OEBPS/meta.json')!.async('string')).toBe('{"scene":"private"}');
+  expect(writeFile).not.toHaveBeenCalled();
+});
+it('does not read or prepare a cancelled export', async () => {
+  const controller = new AbortController(); controller.abort();
+  const openFile = vi.fn();
+  await expect(prepareEpubExport({ openFile } as unknown as AppService, book, 'authors', { signal: controller.signal })).rejects.toMatchObject({ name: 'AbortError' });
+  expect(openFile).not.toHaveBeenCalled();
+});

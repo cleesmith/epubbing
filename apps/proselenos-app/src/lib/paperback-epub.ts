@@ -33,7 +33,7 @@ function readSetup(value: unknown): PaperbackSetup {
 
 // Local saved edits take precedence over the snapshot inside an imported EPUB.
 // Reading the imported setup does not write files or change the original EPUB.
-export async function loadPaperbackSetup(service: AppService, book: Book, sourceZip?: JSZip): Promise<PaperbackSetup> {
+export async function loadPaperbackSetup(service: AppService, book: Pick<Book, 'hash' | 'sourceTitle' | 'title' | 'format'>, sourceZip?: JSZip): Promise<PaperbackSetup> {
   let imageError = '';
   const [settings, front] = await Promise.all([
     loadPaperbackSettings(service, book),

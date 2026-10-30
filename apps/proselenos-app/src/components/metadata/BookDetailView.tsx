@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  MdOutlineFactCheck,
   MdOutlineCloudDownload,
   MdOutlineCloudUpload,
   MdOutlineDelete,
@@ -42,6 +43,7 @@ interface BookDetailViewProps {
   onPaperbackCover?: () => void;
   onDownloadPdf?: () => void;
   onDownloadPdfSquare?: () => void;
+  onCheckEpub?: () => void;
   onXray?: () => void;
   onAudiobook?: () => void;
   onReadEpub?: () => void;
@@ -63,6 +65,7 @@ const BookDetailView: React.FC<BookDetailViewProps> = ({
   onPaperbackCover,
   onDownloadPdf,
   onDownloadPdfSquare,
+  onCheckEpub,
   onXray,
   onAudiobook,
   onHelp,
@@ -124,8 +127,13 @@ const BookDetailView: React.FC<BookDetailViewProps> = ({
                   </button>
                 )}
                 {onDownloadBookseller && (
-                  <button onClick={onDownloadBookseller} title={_('Download for booksellers (EPUBCheck-clean)')}>
+                  <button onClick={onDownloadBookseller} title={_('Download for booksellers')}>
                     <MdOutlineStorefront className='fill-base-content hover:fill-orange-500' />
+                  </button>
+                )}
+                {onCheckEpub && (
+                  <button onClick={onCheckEpub} title={_('Check EPUB')} aria-label={_('Check EPUB')}>
+                    <MdOutlineFactCheck className='fill-base-content hover:fill-emerald-500' />
                   </button>
                 )}
                 {onXray && (

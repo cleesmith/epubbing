@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  MdOutlineFactCheck,
   MdOutlineEdit,
   MdOutlineDelete,
   MdOutlineFileDownload,
@@ -46,8 +47,13 @@ const topRowItems: HelpItem[] = [
   },
   {
     icon: <MdOutlineStorefront size={ICON_SIZE} className="fill-orange-500" />,
-    name: 'Download for booksellers (EPUBCheck-clean)',
-    description: 'Download a clean EPUB with Scenecraft data stripped out, ready for Amazon KDP and other booksellers.',
+    name: 'Download for booksellers',
+    description: 'Download an EPUB with authoring extras and paperback settings removed.',
+  },
+  {
+    icon: <MdOutlineFactCheck size={ICON_SIZE} className="fill-emerald-500" />,
+    name: 'Check EPUB',
+    description: 'Check the Booksellers EPUB prepared from your book, review errors and warnings, and download a text report. Results are cleared when you close the checker. Works offline after Prep for offline use.',
   },
   {
     icon: <GiBoxUnpacking size={ICON_SIZE} className="fill-purple-500" />,

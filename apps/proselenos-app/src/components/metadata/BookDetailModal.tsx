@@ -1,4 +1,5 @@
 import clsx from 'clsx';
+import dynamic from 'next/dynamic';
 import React, { useEffect, useState } from 'react';
 
 import { Book } from '@/types/book';
@@ -27,10 +28,10 @@ import {
   type PdfContentOptions,
 } from '@/components/pdf';
 import EbookPlusHelp from './EbookPlusHelp';
-import JSZip from 'jszip';
-import { stripEpubForBookseller } from '@/lib/bookseller-strip';
-import { addPaperbackSetup } from '@/lib/paperback-epub';
+import { prepareEpubExport } from '@/services/epubExport';
 import { downloadBookAsWebReady } from '@/services/webReadyService';
+
+const EpubCheckModal = dynamic(() => import('@/components/epubcheck/EpubCheckModal'), { ssr: false });
 
 interface BookDetailModalProps {
   book: Book;
@@ -65,6 +66,7 @@ const BookDetailModal: React.FC<BookDetailModalProps> = ({
   const [bookMeta, setBookMeta] = useState<BookMetadata | null>(null);
   const [fileSize, setFileSize] = useState<number | null>(null);
   const [showXray, setShowXray] = useState(false);
+  const [showEpubCheck, setShowEpubCheck] = useState(false);
   const [showAudiobook, setShowAudiobook] = useState(false);
   const [showPdf5x8, setShowPdf5x8] = useState(false);
   const [showPdf, setShowPdf] = useState(false);
@@ -138,6 +140,7 @@ const BookDetailModal: React.FC<BookDetailModalProps> = ({
     setEditMode(false);
     setActiveDeleteAction(null);
     setShowXray(false);
+    setShowEpubCheck(false);
     setShowAudiobook(false);
     setShowPdf5x8(false);
     setShowPdf(false);
@@ -198,18 +201,9 @@ const BookDetailModal: React.FC<BookDetailModalProps> = ({
     setDownloadError('');
     try {
       const appService = await envConfig.getAppService();
-      const epubFilename = getLocalBookFilename(book);
-      const epubFile = await appService.openFile(epubFilename, 'Books');
-      const arrayBuffer = await epubFile.arrayBuffer();
-
-      let blob = new Blob([arrayBuffer], { type: 'application/epub+zip' });
-      if (book.format === 'EPUB') {
-        const zip = await JSZip.loadAsync(arrayBuffer);
-        await addPaperbackSetup(zip, appService, book);
-        // EPUB's mimetype entry must remain uncompressed.
-        zip.file('mimetype', 'application/epub+zip', { compression: 'STORE' });
-        blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/epub+zip', compression: 'DEFLATE' });
-      }
+      const blob = book.format === 'EPUB'
+        ? (await prepareEpubExport(appService, book, 'authors')).blob
+        : await appService.openFile(getLocalBookFilename(book), 'Books');
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -222,21 +216,19 @@ const BookDetailModal: React.FC<BookDetailModalProps> = ({
   };
 
   const handleDownloadBookseller = async () => {
-    const appService = await envConfig.getAppService();
-    const epubFilename = getLocalBookFilename(book);
-    const epubFile = await appService.openFile(epubFilename, 'Books');
-    const arrayBuffer = await epubFile.arrayBuffer();
-
-    const zip = await JSZip.loadAsync(arrayBuffer);
-    await stripEpubForBookseller(zip);
-
-    const blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/epub+zip' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${makeSafeFilename(book.title)}-booksellers.epub`;
-    a.click();
-    URL.revokeObjectURL(url);
+    setDownloadError('');
+    try {
+      const appService = await envConfig.getAppService();
+      const { blob, filename } = await prepareEpubExport(appService, book, 'booksellers');
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setDownloadError(`The Booksellers EPUB could not be downloaded. ${error instanceof Error ? error.message : 'Please try again.'}`);
+    }
   };
 
   const handleDownloadWebReady = async () => {
@@ -313,7 +305,7 @@ const BookDetailModal: React.FC<BookDetailModalProps> = ({
       <div className='fixed inset-0 z-50 flex items-center justify-center'>
         <Dialog
           title={editMode ? _('Edit Ebook Metadata') : _('Ebook Plus')}
-          isOpen={isOpen}
+          isOpen={isOpen && !showEpubCheck}
           onClose={handleClose}
           boxClassName={clsx(
             editMode ? 'sm:min-w-[600px] sm:max-w-[600px]' : 'sm:min-w-[480px] sm:max-w-[480px]',
@@ -354,6 +346,7 @@ const BookDetailModal: React.FC<BookDetailModalProps> = ({
                 onPaperbackCover={book.hash === '__bookseller_temp__' ? undefined : () => setShowPaperbackCover(true)}
                 onDownloadPdf={book.hash === '__bookseller_temp__' ? undefined : handlePdf}
                 onDownloadPdfSquare={book.hash === '__bookseller_temp__' ? undefined : handlePdfSquare}
+                onCheckEpub={book.format === 'EPUB' && book.hash !== '__bookseller_temp__' ? () => setShowEpubCheck(true) : undefined}
                 onXray={book.hash === '__bookseller_temp__' ? undefined : handleXray}
                 onAudiobook={book.hash === '__bookseller_temp__' ? undefined : handleAudiobook}
                 onReadEpub={onReadEpub ? handleReadEpub : undefined}
@@ -379,6 +372,10 @@ const BookDetailModal: React.FC<BookDetailModalProps> = ({
           </div>
         )}
       </div>
+
+      {isOpen && showEpubCheck && (
+        <EpubCheckModal key={`${book.hash}:${book.updatedAt}`} book={book} onClose={() => setShowEpubCheck(false)} />
+      )}
 
       <XrayModal
         book={book}

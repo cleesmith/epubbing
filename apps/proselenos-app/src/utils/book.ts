@@ -18,7 +18,7 @@ export const getLibraryBackupFilename = () => {
 export const getRemoteBookFilename = (book: Book) => {
   return `${book.hash}/${makeSafeFilename(book.sourceTitle || book.title)}.${EXTS[book.format]}`;
 };
-export const getLocalBookFilename = (book: Book) => {
+export const getLocalBookFilename = (book: Pick<Book, 'hash' | 'sourceTitle' | 'title' | 'format'>) => {
   return `${book.hash}/${makeSafeFilename(book.sourceTitle || book.title)}.${EXTS[book.format]}`;
 };
 export const getCoverFilename = (book: Book) => {
