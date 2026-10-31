@@ -82,6 +82,54 @@ function relativePath(from: string, to: string): string {
   return [...parent.map(() => '..'), ...target].map(part => part === '..' ? part : encodeURIComponent(part)).join('/');
 }
 
+/** A contents label must never make a mixed text/contents section disposable. */
+export function containsOnlyNavigation(xhtml: string): boolean {
+  const root = parseXhtmlFragment(xhtml);
+  if (!root.querySelector('a[href]') || root.querySelector('img, svg, math, audio, video')) return false;
+  for (const element of Array.from(root.querySelectorAll('a, h1, h2, h3, h4, h5, h6'))) {
+    if (element.localName === 'a' || /^(?:table of )?contents$/i.test(element.textContent?.trim() || '')) element.remove();
+  }
+  return !root.textContent?.trim();
+}
+
+function rewriteDocumentReferences(xhtml: string, rewrite: (value: string) => string, keepUnchanged = false): string {
+  const root = parseXhtmlFragment(xhtml);
+  let changed = false;
+  for (const element of Array.from(root.querySelectorAll('*'))) {
+    for (const attribute of Array.from(element.attributes)) {
+      const isUrl = !attribute.namespaceURI && ['href', 'src', 'poster'].includes(attribute.localName);
+      const isXLink = attribute.namespaceURI === 'http://www.w3.org/1999/xlink' && attribute.localName === 'href';
+      if (!isUrl && !isXLink) continue;
+      const value = rewrite(attribute.value);
+      if (value !== attribute.value) {
+        element.setAttributeNS(attribute.namespaceURI, attribute.name, value);
+        changed = true;
+      }
+    }
+    const srcset = element.getAttribute('srcset');
+    if (srcset && !srcset.includes('data:')) {
+      const value = srcset.split(',').map(candidate => {
+        const [url = '', ...descriptor] = candidate.trim().split(/\s+/);
+        return [rewrite(url), ...descriptor].join(' ');
+      }).join(', ');
+      if (value !== srcset) { element.setAttribute('srcset', value); changed = true; }
+    }
+  }
+  return keepUnchanged && !changed ? xhtml : serializeChildren(root);
+}
+
+/** Keep a referenced cover resource under its own name, separate from EE's cover. */
+export function rewriteResourceReferences(xhtml: string, sourceHref: string, resources: Map<string, string>): string {
+  const targets = new Map([...resources].map(([source, target]) => [fileKey(source), target]));
+  return rewriteDocumentReferences(xhtml, value => {
+    if (!value || value.startsWith('#') || /^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(value)) return value;
+    let url: URL;
+    try { url = new URL(value, new URL(sourceHref, ROOT)); } catch { return value; }
+    const target = targets.get(fileKey(url.pathname));
+    return target ? relativePath(sourceHref, target) + url.search + url.hash : value;
+  }, true);
+}
+
 export function rewriteSectionReferences(
   xhtml: string,
   section: SectionLocation,
@@ -114,19 +162,5 @@ export function rewriteSectionReferences(
     const path = target === output && url.hash ? '' : relativePath(output, target);
     return path + url.search + url.hash;
   };
-  const root = parseXhtmlFragment(xhtml);
-  for (const element of Array.from(root.querySelectorAll('*'))) {
-    for (const name of ['href', 'src', 'poster', 'xlink:href']) {
-      const value = element.getAttribute(name);
-      if (value !== null) element.setAttribute(name, rewrite(value));
-    }
-    const srcset = element.getAttribute('srcset');
-    if (srcset && !srcset.includes('data:')) {
-      element.setAttribute('srcset', srcset.split(',').map(candidate => {
-        const [url = '', ...descriptor] = candidate.trim().split(/\s+/);
-        return [rewrite(url), ...descriptor].join(' ');
-      }).join(', '));
-    }
-  }
-  return serializeChildren(root);
+  return rewriteDocumentReferences(xhtml, rewrite);
 }

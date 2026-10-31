@@ -405,10 +405,27 @@ async function generateEPUB(
 
   // Imported content retains its vocabulary declarations during editing.
   // Put those declarations back on html when writing a complete EPUB document.
+  const svgDocuments = new Set<string>();
   for (const name of Object.keys(zip.files).filter(name => name.endsWith('.xhtml'))) {
     const xhtml = await zip.file(name)!.async('string');
     const complete = restoreDocumentVocabulary(xhtml);
     if (complete !== xhtml) zip.file(name, complete);
+    if (complete.includes('http://www.w3.org/2000/svg')) {
+      const doc = new DOMParser().parseFromString(complete, 'application/xhtml+xml');
+      if (doc.getElementsByTagNameNS('http://www.w3.org/2000/svg', 'svg').length) svgDocuments.add(name.slice('OEBPS/'.length));
+    }
+  }
+  // Declare what the generated documents actually contain, including SVG in
+  // imported chapters, title pages, copyright pages, and No Matter sections.
+  if (svgDocuments.size) {
+    const opf = new DOMParser().parseFromString(contentOPF, 'application/xml');
+    for (const item of Array.from(opf.querySelectorAll('manifest > item'))) {
+      if (!svgDocuments.has(item.getAttribute('href') || '')) continue;
+      const properties = new Set((item.getAttribute('properties') || '').split(/\s+/).filter(Boolean));
+      properties.add('svg');
+      item.setAttribute('properties', [...properties].join(' '));
+    }
+    zip.file('OEBPS/content.opf', new XMLSerializer().serializeToString(opf));
   }
 
   // Generate and return the EPUB

@@ -5,7 +5,7 @@
 // PlateJS conversion happens only when editor loads a section.
 
 import JSZip from 'jszip';
-import { extractEpubBody } from '@/lib/epub-content';
+import { extractEpubBody, containsOnlyNavigation, rewriteResourceReferences } from '@/lib/epub-content';
 import { ElementType, normalizeElementType } from '@/app/authors/elementTypes';
 import type { SceneCraftConfig } from '@/services/manuscriptStorage';
 
@@ -198,6 +198,9 @@ export async function parseEpub(file: File): Promise<ParsedEpub> {
         ? normalizeElementType(metaMatch.type)
         : inferSectionType(sectionTitle);
     }
+    // A TOC link may point into a document that also holds a title, credits,
+    // or prose. Keep that entire document when Authors filters navigation.
+    if (sectionType === 'table-of-contents' && !containsOnlyNavigation(xhtml)) sectionType = 'chapter';
 
     // Match SceneCraft config from meta.json by section id or title
     let sectionSceneCraft: SceneCraftConfig | undefined;
@@ -226,6 +229,24 @@ export async function parseEpub(file: File): Promise<ParsedEpub> {
       type: sectionType,
       sceneCraftConfig: sectionSceneCraft,
     });
+  }
+
+  // Some EPUBs display the cover through an SVG/HTML document in the spine.
+  // EE's separate cover.jpg cannot replace a reference to the original asset.
+  const sourceCover = coverImageId ? manifest.get(coverImageId) : undefined;
+  if (sourceCover && coverImage) {
+    const originalName = decodeURIComponent(sourceCover.href.split('/').pop() || 'cover.jpg');
+    let filename = `imported-${originalName}`;
+    let suffix = 2;
+    while (images.some(image => image.filename === filename)) filename = `imported-${suffix++}-${originalName}`;
+    const resources = new Map([[sourceCover.href, `images/${filename}`]]);
+    let referenced = false;
+    for (const section of sections) {
+      if (section.type === 'cover') continue; // EE regenerates its own cover page.
+      const updated = rewriteResourceReferences(section.xhtml, section.href, resources);
+      if (updated !== section.xhtml) { section.xhtml = updated; referenced = true; }
+    }
+    if (referenced) images.push({ filename, blob: coverImage });
   }
 
   // Enforce first 2 sections: Title Page, Copyright (in that order)
@@ -474,7 +495,7 @@ async function parseToc(
         href = href.substring(3);
       }
 
-      if (href && title) {
+      if (href && title && !tocTitles.has(href)) {
         tocTitles.set(href, title);
       }
     });
@@ -496,7 +517,7 @@ async function parseToc(
         href = href.split('#')[0] ?? '';
       }
 
-      if (href && title) {
+      if (href && title && !tocTitles.has(href)) {
         tocTitles.set(href, title);
       }
     });
