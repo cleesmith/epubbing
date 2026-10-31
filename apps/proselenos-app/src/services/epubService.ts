@@ -5,11 +5,13 @@
 // PlateJS conversion happens only when editor loads a section.
 
 import JSZip from 'jszip';
+import { extractEpubBody } from '@/lib/epub-content';
 import { ElementType, normalizeElementType } from '@/app/authors/elementTypes';
 import type { SceneCraftConfig } from '@/services/manuscriptStorage';
 
 // XHTML-Native: Section now stores raw XHTML as single source of truth
 export interface ParsedSection {
+  sourceHref?: string;
   id: string;
   title: string;
   href: string;
@@ -24,6 +26,7 @@ export interface ParsedEpub {
   language: string;
   publisher?: string;
   subtitle?: string;
+  rights?: string;
   coverImage: Blob | null;
   sections: ParsedSection[];
   images?: Array<{filename: string, blob: Blob}>;  // Inline images (not cover), optional for backwards compatibility
@@ -41,9 +44,9 @@ function inferSectionType(title: string): ElementType {
   // Only truly structural/metadata sections are non-chapters
   // (these don't need markdown formatting)
   if (lowerTitle === 'cover') return 'cover';
-  if (lowerTitle.includes('title page')) return 'title-page';
-  if (lowerTitle.includes('copyright')) return 'copyright';
-  if (lowerTitle.includes('table of contents') || lowerTitle === 'contents') return 'table-of-contents';
+  if (lowerTitle === 'title page') return 'title-page';
+  if (lowerTitle === 'copyright' || lowerTitle === 'copyright page') return 'copyright';
+  if (lowerTitle === 'table of contents' || lowerTitle === 'contents') return 'table-of-contents';
   if (lowerTitle.includes('about the author')) return 'about-the-author';
   if (lowerTitle.includes('also by')) return 'also-by';
 
@@ -80,7 +83,7 @@ export async function parseEpub(file: File): Promise<ParsedEpub> {
     throw new Error(`Invalid epub: missing ${rootfilePath}`);
   }
 
-  const { title, author, language, publisher, subtitle: opfSubtitle, manifest, spine, coverImageId } = parseContentOpf(contentOpf);
+  const { title, author, language, publisher, rights, subtitle: opfSubtitle, manifest, spine, coverImageId } = parseContentOpf(contentOpf);
 
   // Extract SceneCraft meta.json if present (embedded by generateEPUB)
   let sceneCraftMeta: { sections: Array<{ id: string; title: string; type?: string; sceneCraftConfig?: SceneCraftConfig }> } | null = null;
@@ -155,19 +158,25 @@ export async function parseEpub(file: File): Promise<ParsedEpub> {
   // XHTML-Native: Keep raw XHTML, no conversion during import
   const sections: ParsedSection[] = [];
 
-  for (const spineItem of spine) {
+  // Notes/appendices can be linked XHTML resources outside the reading spine.
+  // Keep them as No Matter rather than dropping their text and link targets.
+  const spineIds = new Set(spine.map(item => item.idref));
+  const contentItems = [...spine, ...Array.from(manifest.values())
+    .filter(item => item.mediaType === 'application/xhtml+xml' && !spineIds.has(item.id) && !item.properties.split(/\s+/).includes('nav'))
+    .map(item => ({ idref: item.id, linear: false }))];
+  for (const spineItem of contentItems) {
     const manifestItem = manifest.get(spineItem.idref);
-    if (!manifestItem) continue;
+    if (!manifestItem) throw new Error(`Cannot load this EPUB: section "${spineItem.idref}" is missing from its manifest.`);
 
     const href = manifestItem.href;
     const fullPath = baseDir + href;
 
     // Read the HTML file
-    const html = await zip.file(fullPath)?.async('string');
-    if (!html) continue;
+    const html = await (zip.file(fullPath) || zip.file(decodeURIComponent(fullPath)))?.async('string');
+    if (html === undefined) throw new Error(`Cannot load the complete EPUB: "${href}" is missing.`);
 
     // XHTML-Native: Extract body content, keep as raw XHTML
-    const xhtml = extractXhtmlBody(html);
+    const xhtml = extractEpubBody(html);
 
     // Get title from TOC, or fall back to HTML <title> or generate one
     let sectionTitle = tocTitles.get(href) || '';
@@ -212,7 +221,8 @@ export async function parseEpub(file: File): Promise<ParsedEpub> {
       id: spineItem.idref,
       title: sectionTitle,
       href: href,
-      xhtml: stripLeadingTitle(xhtml, sectionTitle),  // Remove duplicate title from content
+      sourceHref: href,
+      xhtml, // Keep all source headings, IDs, text, and inline spacing.
       type: sectionType,
       sceneCraftConfig: sectionSceneCraft,
     });
@@ -279,6 +289,7 @@ export async function parseEpub(file: File): Promise<ParsedEpub> {
     language: language || 'en',
     publisher: publisher || undefined,
     subtitle,
+    rights: rights || undefined,
     coverImage,
     sections: orderedSections,
     images,
@@ -311,6 +322,7 @@ function parseContentOpf(opfContent: string): {
   author: string;
   language: string;
   publisher: string;
+  rights: string;
   manifest: Map<string, { id: string; href: string; mediaType: string; properties: string }>;
   spine: { idref: string; linear: boolean }[];
   coverImageId: string | null;
@@ -345,6 +357,7 @@ function parseContentOpf(opfContent: string): {
   const author = text(dcElements('creator')[0]);
   const language = text(dcElements('language')[0]) || 'en';
   const publisher = text(dcElements('publisher')[0]);
+  const rights = dcElements('rights').map(text).filter(Boolean).join('\n');
 
   // Extract manifest (including properties for cover-image detection)
   const manifest = new Map<string, { id: string; href: string; mediaType: string; properties: string }>();
@@ -384,7 +397,7 @@ function parseContentOpf(opfContent: string): {
     }
   });
 
-  return { title, subtitle, author, language, publisher, manifest, spine, coverImageId };
+  return { title, subtitle, author, language, publisher, rights, manifest, spine, coverImageId };
 }
 
 /**
@@ -499,65 +512,6 @@ function extractHtmlTitle(html: string): string {
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, 'text/html');
   return doc.querySelector('title')?.textContent?.trim() || '';
-}
-
-/**
- * Extract the body content from an XHTML document.
- * Returns the inner HTML of the body element, or empty paragraph if not found.
- */
-function extractXhtmlBody(html: string): string {
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(html, 'text/html');
-  const body = doc.body;
-
-  if (!body) {
-    return '<p></p>';
-  }
-
-  // Get the inner HTML of the body
-  // This preserves all the formatting tags like <p>, <em>, <strong>, etc.
-  const innerHTML = body.innerHTML;
-
-  // Clean up: remove excessive whitespace between tags while preserving content
-  return innerHTML
-    .replace(/>\s+</g, '>\n<')  // Normalize whitespace between tags
-    .trim();
-}
-
-/**
- * Strip the leading title element from XHTML body content if it matches the TOC title.
- * This prevents duplicate titles: one in the UI header, one in the editor content.
- * Handles both direct headings and headings wrapped in article/section/div elements.
- */
-function stripLeadingTitle(xhtml: string, title: string): string {
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(`<body>${xhtml}</body>`, 'text/html');
-  const body = doc.body;
-  const trimmedTitle = title.trim();
-  if (!trimmedTitle) return xhtml;
-
-  const isHeading = (el: Element) => /^H[1-6]$/.test(el.tagName);
-
-  const firstEl = body.firstElementChild;
-  if (!firstEl) return xhtml;
-
-  // Case 1: Direct heading child of body
-  if (isHeading(firstEl) && firstEl.textContent?.trim() === trimmedTitle) {
-    firstEl.remove();
-    return body.innerHTML.trim() || '<p></p>';
-  }
-
-  // Case 2: Heading inside a wrapper element (article, section, div)
-  const wrapperTags = ['ARTICLE', 'SECTION', 'DIV'];
-  if (wrapperTags.includes(firstEl.tagName)) {
-    const innerFirst = firstEl.firstElementChild;
-    if (innerFirst && isHeading(innerFirst) && innerFirst.textContent?.trim() === trimmedTitle) {
-      innerFirst.remove();
-      return body.innerHTML.trim() || '<p></p>';
-    }
-  }
-
-  return xhtml;
 }
 
 /**

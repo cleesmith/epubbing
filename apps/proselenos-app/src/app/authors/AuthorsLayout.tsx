@@ -29,7 +29,9 @@ function reorderSectionsByVisualGroup<T extends { type?: ElementType }>(sections
 
   const groups = new Map<number, T[]>();
   for (const s of rest) {
-    const num = getEffectiveSectionNumber(s.type);
+    // Extra imported front pages must not disappear because their type is
+    // normally reserved for the first two protected sections.
+    const num = Math.max(2, getEffectiveSectionNumber(s.type));
     if (!groups.has(num)) groups.set(num, []);
     groups.get(num)!.push(s);
   }
@@ -65,7 +67,6 @@ import {
   loadManuscriptMeta,
   saveManuscriptMeta,
   WorkingCopyMeta,
-  WorkingCopySection,
   saveManuscriptImage,
   deleteManuscriptImage,
   getAllManuscriptImages,
@@ -157,7 +158,7 @@ export default function AuthorsLayout({
   // Unsaved changes tracking
   // XHTML-Native: Now tracks pendingXhtml instead of content/plateValue
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const [pendingXhtml, setPendingXhtml] = useState<string>('');
+  const [pendingXhtml, setPendingXhtml] = useState<string | null>(null);
   const [pendingTitle, setPendingTitle] = useState<string>('');
   // Removed: pendingSectionSwitch and showUnsavedDialog - now auto-saves on section switch
 
@@ -379,6 +380,7 @@ export default function AuthorsLayout({
               .filter((s) => s.type !== 'cover')
               .map((s) => ({
                 id: s.id,
+                sourceHref: s.sourceHref,
                 title: s.title,
                 href: `${s.id}.xhtml`,
                 xhtml: s.xhtml,
@@ -419,6 +421,7 @@ export default function AuthorsLayout({
             coverImage: newSaved.coverImage,
             sections: newSaved.sections.map((s) => ({
               id: s.id,
+              sourceHref: s.sourceHref,
               title: s.title,
               href: `${s.id}.xhtml`,
               xhtml: s.xhtml,
@@ -464,6 +467,7 @@ export default function AuthorsLayout({
               .filter((s) => s.type !== 'cover')
               .map((s) => ({
                 id: s.id,
+                sourceHref: s.sourceHref,
                 title: s.title,
                 href: `${s.id}.xhtml`,
                 xhtml: s.xhtml,
@@ -659,11 +663,13 @@ export default function AuthorsLayout({
             language: parsed.language,
             subtitle: parsed.subtitle,
             publisher: parsed.publisher,
+            rights: parsed.rights,
             coverImage: parsed.coverImage,
             sections: parsed.sections
               .filter((s) => s.type !== 'table-of-contents')
               .map((s) => ({
                 id: s.id,
+                sourceHref: s.sourceHref,
                 title: s.title,
                 xhtml: s.xhtml,
                 type: s.type,
@@ -690,6 +696,7 @@ export default function AuthorsLayout({
                 .filter((s) => s.type !== 'cover')
                 .map((s) => ({
                   id: s.id,
+                  sourceHref: s.sourceHref,
                   title: s.title,
                   href: `${s.id}.xhtml`,
                   xhtml: s.xhtml,
@@ -763,6 +770,7 @@ export default function AuthorsLayout({
                 .filter((s) => s.type !== 'cover')
                 .map((s) => ({
                   id: s.id,
+                  sourceHref: s.sourceHref,
                   title: s.title,
                   href: `${s.id}.xhtml`,
                   xhtml: s.xhtml,
@@ -827,7 +835,7 @@ export default function AuthorsLayout({
           sectionIds: saved.sections.map(section => section.id),
         });
         setHasUnsavedChanges(false);
-        setPendingXhtml('');
+        setPendingXhtml(null);
         setPendingTitle('');
         setWritingMode(false);
         handleSearchClose();
@@ -877,6 +885,7 @@ export default function AuthorsLayout({
                 .filter((s) => s.type !== 'cover')
                 .map((s) => ({
                   id: s.id,
+                  sourceHref: s.sourceHref,
                   title: s.title,
                   href: `${s.id}.xhtml`,
                   xhtml: s.xhtml,
@@ -1144,6 +1153,7 @@ export default function AuthorsLayout({
                 .filter((s) => s.type !== 'cover')
                 .map((s) => ({
                   id: s.id,
+                  sourceHref: s.sourceHref,
                   title: s.title,
                   href: `${s.id}.xhtml`,
                   xhtml: s.xhtml,
@@ -1241,6 +1251,7 @@ export default function AuthorsLayout({
         coverImage: saved.coverImage,
         sections: saved.sections.map((s) => ({
           id: s.id,
+          sourceHref: s.sourceHref,
           title: s.title,
           href: `${s.id}.xhtml`,
           xhtml: s.xhtml,
@@ -1366,6 +1377,7 @@ export default function AuthorsLayout({
     if (manuscriptMeta) {
       manuscriptMeta.sections = reorderedSections.map(s => ({
         id: s.id,
+        sourceHref: s.sourceHref,
         title: s.title,
         type: (s.type || 'chapter') as ElementType,
 
@@ -1380,7 +1392,7 @@ export default function AuthorsLayout({
     });
     setSelectedSectionId(newId);
     setHasUnsavedChanges(false);
-    setPendingXhtml('');
+    setPendingXhtml(null);
   };
 
   // Handle moving a section up (swap with previous)
@@ -1558,6 +1570,7 @@ export default function AuthorsLayout({
     if (manuscriptMeta) {
       manuscriptMeta.sections = reorderedSections.map(s => ({
         id: s.id,
+        sourceHref: s.sourceHref,
         title: s.title,
         type: (s.type || 'chapter') as ElementType,
 
@@ -1577,8 +1590,8 @@ export default function AuthorsLayout({
   // Handle content changes from EditorPanel
   // XHTML-Native: Now receives XHTML directly
   const handleContentChange = (hasChanges: boolean, xhtml: string) => {
-    setHasUnsavedChanges(hasChanges);
-    setPendingXhtml(xhtml);
+    setHasUnsavedChanges(hasChanges || (!!pendingTitle && pendingTitle !== selectedSection?.title));
+    setPendingXhtml(hasChanges ? xhtml : null);
   };
 
   // Handle title changes from EditorPanel
@@ -1656,8 +1669,11 @@ export default function AuthorsLayout({
       // This ensures EPUB matches exactly what the user sees, regardless of meta.json order
       const sectionOrder = epub!.sections.map(s => s.id);
       const orderedSections = sectionOrder
-        .map(id => workingCopy.sections.find(s => s.id === id))
-        .filter((s): s is WorkingCopySection => s !== undefined);
+        .map(id => {
+          const section = workingCopy.sections.find(s => s.id === id);
+          if (!section) throw new Error('A section could not be read. The book has not been published.');
+          return section;
+        });
 
       // 6. Fetch images fresh from IndexedDB to ensure we have any newly uploaded images
       const freshImages = await getAllManuscriptImages();
@@ -1800,7 +1816,7 @@ export default function AuthorsLayout({
 
     // Reset state for new section
     setHasUnsavedChanges(false);
-    setPendingXhtml('');
+    setPendingXhtml(null);
     setPendingTitle('');
     setSelectedSectionId(sectionId);
   };
@@ -1827,7 +1843,7 @@ export default function AuthorsLayout({
     // Use pending title if changed, otherwise original
     const titleToSave = pendingTitle || selectedSection.title;
     // XHTML-Native: Use pending xhtml if set, otherwise original
-    const xhtmlToSave = pendingXhtml || selectedSection.xhtml;
+    const xhtmlToSave = pendingXhtml ?? selectedSection.xhtml;
 
     // Save to IndexedDB (XHTML is single source of truth)
     await saveSection({
@@ -1849,7 +1865,7 @@ export default function AuthorsLayout({
 
     // Reset unsaved state
     setHasUnsavedChanges(false);
-    setPendingXhtml('');
+    setPendingXhtml(null);
     setPendingTitle('');
   };
 

@@ -329,6 +329,7 @@ export interface WorkingCopyMeta {
 
 // NEW: XHTML-Native section - single source of truth
 export interface WorkingCopySection {
+  sourceHref?: string;  // Original EPUB document path, used to resolve links on publication
   id: string;
   title: string;
   xhtml: string;        // XHTML body content (single source of truth)
@@ -398,6 +399,7 @@ export interface SceneCraftConfig {
 
 // NEW: SectionMeta - metadata only, content is in separate .xhtml file
 export interface SectionMeta {
+  sourceHref?: string;
   id: string;
   title: string;
   type: ElementType;
@@ -469,9 +471,9 @@ function inferSectionType(title: string): ElementType {
 
   // Only truly structural/metadata sections are non-chapters
   // Note: 'cover' removed - cover is handled via Menu > Cover, not as a section
-  if (lowerTitle.includes('title page')) return 'title-page';
-  if (lowerTitle.includes('copyright')) return 'copyright';
-  if (lowerTitle.includes('table of contents') || lowerTitle === 'contents') return 'table-of-contents';
+  if (lowerTitle === 'title page') return 'title-page';
+  if (lowerTitle === 'copyright' || lowerTitle === 'copyright page') return 'copyright';
+  if (lowerTitle === 'table of contents' || lowerTitle === 'contents') return 'table-of-contents';
   if (lowerTitle.includes('about the author')) return 'about-the-author';
   if (lowerTitle.includes('also by')) return 'also-by';
 
@@ -546,6 +548,7 @@ export async function loadSection(id: string): Promise<WorkingCopySection | null
         type: sectionMeta.type || inferSectionType(sectionMeta.title),
 
         sceneCraftConfig: sectionMeta.sceneCraftConfig,
+        sourceHref: sectionMeta.sourceHref,
       };
     }
   }
@@ -899,6 +902,7 @@ export interface FullWorkingCopy {
   language: string;
   subtitle?: string;
   publisher?: string;
+  rights?: string;
   coverImage: Blob | null;
   sections: WorkingCopySection[];  // XHTML is the single source of truth
 }
@@ -911,14 +915,16 @@ export async function loadFullWorkingCopy(): Promise<FullWorkingCopy | null> {
     const sections: WorkingCopySection[] = [];
     for (const sectionMeta of newMeta.sections) {
       const xhtml = await loadSectionXhtml(sectionMeta.id);
+      if (xhtml === null) throw new Error(`Cannot load the complete manuscript: "${sectionMeta.title}" could not be read. Your saved manuscript has not been changed.`);
       if (xhtml !== null) {
         sections.push({
           id: sectionMeta.id,
           title: sectionMeta.title,
           xhtml,
           type: sectionMeta.type || inferSectionType(sectionMeta.title),
-  
+
           sceneCraftConfig: sectionMeta.sceneCraftConfig,
+          sourceHref: sectionMeta.sourceHref,
         });
       }
     }
@@ -935,6 +941,7 @@ export async function loadFullWorkingCopy(): Promise<FullWorkingCopy | null> {
       language: newMeta.language,
       subtitle: newMeta.subtitle,
       publisher: newMeta.publisher,
+      rights: newMeta.rights,
       coverImage,
       sections,
     };
@@ -948,6 +955,7 @@ export async function loadFullWorkingCopy(): Promise<FullWorkingCopy | null> {
   const sections: WorkingCopySection[] = [];
   for (const id of oldMeta.sectionIds) {
     const section = await loadSection(id);
+    if (!section) throw new Error(`Cannot load the complete manuscript: section "${id}" could not be read. Your saved manuscript has not been changed.`);
     if (section) {
       sections.push(section);
     }
@@ -965,6 +973,7 @@ export async function loadFullWorkingCopy(): Promise<FullWorkingCopy | null> {
     language: oldMeta.language,
     subtitle: oldMeta.subtitle,
     publisher: oldMeta.publisher,
+    rights: oldMeta.rights,
     coverImage,
     sections,
   };
@@ -983,9 +992,11 @@ export async function saveFullWorkingCopy(epub: {
   language: string;
   subtitle?: string;
   publisher?: string;
+  rights?: string;
   coverImage: Blob | null;
   libraryBookHash?: string;
   sections: Array<{
+    sourceHref?: string;
     id: string;
     title: string;
     // NEW: XHTML format
@@ -1033,6 +1044,7 @@ export async function saveFullWorkingCopy(epub: {
     // Build section meta
     sectionMetas.push({
       id: normalizedId,
+      sourceHref: section.sourceHref,
       title: section.title,
       type: sectionType as ElementType,
       sceneCraftConfig: section.sceneCraftConfig,
@@ -1054,6 +1066,7 @@ export async function saveFullWorkingCopy(epub: {
     language: epub.language,
     subtitle: epub.subtitle,
     publisher: epub.publisher,
+    rights: epub.rights,
     coverImageId,
     sections: sectionMetas,
     libraryBookHash: epub.libraryBookHash,
@@ -1067,6 +1080,7 @@ export async function saveFullWorkingCopy(epub: {
     language: epub.language,
     subtitle: epub.subtitle,
     publisher: epub.publisher,
+    rights: epub.rights,
     sectionIds: sectionMetas.map(s => s.id),
     coverImageId,
     libraryBookHash: epub.libraryBookHash,

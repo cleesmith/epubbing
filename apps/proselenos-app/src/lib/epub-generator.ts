@@ -7,7 +7,8 @@
 
 import JSZip from 'jszip';
 import { ManuscriptSettings, WorkingCopyMeta, WorkingCopySection, SceneCraftConfig } from '@/services/manuscriptStorage';
-import { xhtmlToPlainText, plateToXhtml, xhtmlToPlate } from './plateXhtml';
+import { xhtmlToPlainText } from './plateXhtml';
+import { rewriteSectionReferences, restoreDocumentVocabulary, parseXhtmlFragment, serializeChildren } from './epub-content';
 import { VISUAL_NARRATIVE_CSS } from './visual-narrative-css';
 
 // TypeScript Interfaces
@@ -19,6 +20,7 @@ export interface Chapter {
   content: string[];     // Plain text paragraphs (for fallback/legacy)
   paragraphs: string[];  // Same as content (legacy)
   xhtml?: string;        // XHTML content (single source of truth)
+  sourceHref?: string;
   sceneCraftConfig?: SceneCraftConfig;  // SceneCraft immersive scene config
   type?: string;
 }
@@ -86,12 +88,18 @@ export async function generateEpubFromWorkingCopy(
   images?: ManuscriptImage[],
   audioFiles?: ManuscriptAudioFile[]
 ): Promise<Uint8Array> {
+  const titlePageSection = sections.find(s => s.id === 'title-page' || s.title.toLowerCase() === 'title page');
+  const titlePageXhtml = titlePageSection?.sourceHref && titlePageSection.xhtml
+    ? rewriteSectionReferences(titlePageSection.xhtml, titlePageSection, sections, images?.map(i => i.filename), audioFiles?.map(a => a.filename))
+    : '';
   // Find Copyright section content (if exists)
   const copyrightSection = sections.find(s =>
     s.id === 'copyright' || s.title.toLowerCase() === 'copyright'
   );
   // XHTML-Native: Use raw XHTML directly to preserve paragraph structure
-  const copyrightXhtml = copyrightSection?.xhtml || '';
+  const copyrightXhtml = copyrightSection?.xhtml
+    ? rewriteSectionReferences(copyrightSection.xhtml, copyrightSection, sections, images?.map(i => i.filename), audioFiles?.map(a => a.filename))
+    : '';
   // Fallback plain text (for legacy data without XHTML)
   const copyrightContent = copyrightXhtml
     ? xhtmlToPlainText(copyrightXhtml)
@@ -136,10 +144,10 @@ export async function generateEpubFromWorkingCopy(
       continue;
     }
 
-    // Normalize stored XHTML through round-trip to ensure latest serialization
-    // (e.g. sticky-image checkbox+label structure added after initial save)
+    // Publishing must not simplify unedited content through the editor.
+    // Resolve links against the original document path and serialize as XHTML.
     const normalizedXhtml = section.xhtml
-      ? plateToXhtml(xhtmlToPlate(section.xhtml))
+      ? rewriteSectionReferences(section.xhtml, section, sections, images?.map(i => i.filename), audioFiles?.map(a => a.filename))
       : '';
 
     // XHTML-Native: Get plain text for fallback, but keep XHTML as source of truth
@@ -151,6 +159,7 @@ export async function generateEpubFromWorkingCopy(
 
     const chapterData: Chapter = {
       id: section.id,
+      sourceHref: section.sourceHref,
       number: 0, // Will be set below for regular chapters
       title: section.title,
       content: paragraphs,     // Plain text fallback
@@ -181,6 +190,7 @@ export async function generateEpubFromWorkingCopy(
     language: meta.language || 'en',
     description: meta.description || 'Created with EverythingEbooks',
     rights: meta.rights || '',
+    titlePageXhtml,
     copyrightXhtml: copyrightXhtml, // Raw XHTML for direct use (preserves formatting)
     copyrightContent: copyrightContent, // Plain text fallback
   };
@@ -372,7 +382,7 @@ async function generateEPUB(
 
   // 9. Create content.opf (EPUB 3.0 format) with all new items
   // Pass the shared UUID and cover image info for correct media-type
-  const contentOPF = createEpub3ContentOPF(chapters, metadata, hasCover ? 'cover-image' : null, inlineImages, noMatterSections, bookUUID, coverImageInfo, inlineAudios, hasVnContent);
+  const contentOPF = createEpub3ContentOPF(chapters, metadata, hasCover ? 'cover-image' : null, inlineImages, noMatterSections, bookUUID, coverImageInfo, inlineAudios, hasVnContent || allChapters.some(ch => chapterHasVnContent(ch.xhtml)));
   zip.file('OEBPS/content.opf', contentOPF);
 
   // 10. Create nav.xhtml (EPUB 3.0 navigation, includes No Matter sections)
@@ -389,8 +399,16 @@ async function generateEPUB(
   zip.file('OEBPS/css/style.css', styleCSS);
 
   // 12b. Add Visual Narrative CSS (if VN content detected)
-  if (hasVnContent) {
+  if (hasVnContent || allChapters.some(ch => chapterHasVnContent(ch.xhtml))) {
     zip.file('OEBPS/css/visual-narrative.css', VISUAL_NARRATIVE_CSS);
+  }
+
+  // Imported content retains its vocabulary declarations during editing.
+  // Put those declarations back on html when writing a complete EPUB document.
+  for (const name of Object.keys(zip.files).filter(name => name.endsWith('.xhtml'))) {
+    const xhtml = await zip.file(name)!.async('string');
+    const complete = restoreDocumentVocabulary(xhtml);
+    if (complete !== xhtml) zip.file(name, complete);
   }
 
   // Generate and return the EPUB
@@ -631,6 +649,35 @@ function createTitlePage(metadata: any): string {
     ? `\n    <p class="book-subtitle">${escapeHtml(metadata.subtitle)}</p>`
     : '';
 
+  let content = `    <h1 class="book-title">${escapeHtml(upperTitle)}</h1>${subtitleHTML}
+    <p class="book-author">${escapeHtml(metadata.author)}</p>
+    <p class="book-publisher">${escapeHtml(metadata.publisher || 'Independent Publisher')}</p>`;
+  if (metadata.titlePageXhtml) {
+    // Keep imported title-page text such as translator/edition credits. For
+    // EE's own template, continue reflecting explicit metadata-form changes.
+    const root = parseXhtmlFragment(metadata.titlePageXhtml);
+    const ownTitle = root.querySelector('section.title-page > .book-title');
+    if (ownTitle) {
+      ownTitle.textContent = upperTitle;
+      const page = ownTitle.parentElement!;
+      for (const [selector, value] of [
+        ['.book-author', metadata.author],
+        ['.book-publisher', metadata.publisher || 'Independent Publisher'],
+        ['.book-subtitle', metadata.subtitle || ''],
+      ]) {
+        const element = page.querySelector(selector);
+        if (element) element.textContent = value;
+        else if (selector === '.book-subtitle' && value) {
+          const subtitle = root.ownerDocument.createElementNS('http://www.w3.org/1999/xhtml', 'p');
+          subtitle.setAttribute('class', 'book-subtitle');
+          subtitle.textContent = value;
+          ownTitle.after(subtitle);
+        }
+      }
+    }
+    content = serializeChildren(root);
+  }
+
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
@@ -640,9 +687,7 @@ function createTitlePage(metadata: any): string {
 </head>
 <body>
   <section class="title-page" epub:type="titlepage">
-    <h1 class="book-title">${escapeHtml(upperTitle)}</h1>${subtitleHTML}
-    <p class="book-author">${escapeHtml(metadata.author)}</p>
-    <p class="book-publisher">${escapeHtml(metadata.publisher || 'Independent Publisher')}</p>
+${content}
   </section>
 </body>
 </html>`;
@@ -790,7 +835,7 @@ function createChapterHTML(chapter: Chapter, _metadata: any, isNoMatter: boolean
 </head>
 <body>
   <article class="scene" epub:type="chapter">
-    <h1 class="scene-title">${escapeHtml(chapter.title)}</h1>
+${chapter.sourceHref ? '' : `    <h1 class="scene-title">${escapeHtml(chapter.title)}</h1>`}
 ${bodyContent}
   </article>
 </body>
@@ -807,7 +852,7 @@ ${bodyContent}
 </head>
 <body>
   <section class="chapter" epub:type="chapter">
-    <h1>${escapeHtml(chapter.title)}</h1>
+${chapter.sourceHref ? '' : `    <h1>${escapeHtml(chapter.title)}</h1>`}
 ${bodyContent}
   </section>
 </body>

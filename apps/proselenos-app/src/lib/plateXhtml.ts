@@ -12,6 +12,7 @@ import type { Value } from 'platejs';
 // PlateJS node types we support
 interface PlateText {
   text: string;
+  epubParagraphBreak?: boolean;
   bold?: boolean;
   italic?: boolean;
   underline?: boolean;
@@ -26,6 +27,18 @@ interface PlateElement {
   url?: string;  // For links
   alt?: string;  // For images
   [key: string]: unknown;
+}
+
+// IDs and semantic attributes are author content, not editor implementation data.
+function sourceAttributes(el: Element): Record<string, string> {
+  return Object.fromEntries(Array.from(el.attributes)
+    .filter(a => /^(id|class|role|epub:type|epub:prefix|lang|xml:lang|aria-[\w-]+)$/.test(a.name))
+    .map(a => [a.name, a.value]));
+}
+
+function attributes(node: PlateElement): string {
+  const attrs = node.epubAttributes as Record<string, string> | undefined;
+  return Object.entries(attrs || {}).map(([name, value]) => ` ${name}="${escapeAttr(value)}"`).join('');
 }
 
 // Counter for unique sticky-image enlarge checkbox IDs
@@ -46,7 +59,9 @@ export function plateToXhtml(value: Value): string {
 
   stickyEnlargeCounter = 0;
   const html = serializeNodes(value as (PlateElement | PlateText)[]);
-  return html;
+  const context = (value as PlateElement[]).find(node => node.epubContext)?.epubContext as Record<string, string> | undefined;
+  const contextAttrs = Object.entries(context || {}).map(([name, v]) => ` ${name}="${escapeAttr(v)}"`).join('');
+  return contextAttrs ? `<div${contextAttrs}>${html}</div>` : html;
 }
 
 /**
@@ -58,6 +73,10 @@ function serializeNodes(nodes: (PlateElement | PlateText)[]): string {
 
   while (i < nodes.length) {
     const node = nodes[i]!;
+    if ('type' in node) {
+      const ids = node.epubAnchors as string[] | undefined;
+      for (const id of ids || []) parts.push(`<span id="${escapeAttr(id)}"></span>`);
+    }
     if ('type' in node && node.type === 'p' && (node as any).listStyleType) {
       // Collect consecutive list items with same listStyleType
       const listStyleType = (node as any).listStyleType;
@@ -69,9 +88,16 @@ function serializeNodes(nodes: (PlateElement | PlateText)[]): string {
         const current = nodes[i]!;
         if (!('type' in current) || current.type !== 'p' || (current as any).listStyleType !== listStyleType) break;
         const children = (current as PlateElement).children
-          .map(child => serializeNode(child as PlateElement | PlateText))
+          .map(child => serializeNode(child as PlateElement | PlateText, true))
           .join('');
-        items.push(`<li>${children}</li>\n`);
+        const paragraphs = [''];
+        for (const child of (current as PlateElement).children) {
+          if ('text' in child && child.epubParagraphBreak) paragraphs.push('');
+          else paragraphs[paragraphs.length - 1] += serializeNode(child, true);
+        }
+        const content = (current as PlateElement).epubListParagraphs
+          ? paragraphs.map(paragraph => `<p>${paragraph}</p>`).join('\n') : children;
+        items.push(`<li${attributes(current as PlateElement)}>${content}</li>\n`);
         i++;
       }
 
@@ -88,7 +114,7 @@ function serializeNodes(nodes: (PlateElement | PlateText)[]): string {
 /**
  * Serialize a single PlateJS node to XHTML
  */
-function serializeNode(node: PlateElement | PlateText): string {
+function serializeNode(node: PlateElement | PlateText, inline = false): string {
   // Text node
   if ('text' in node) {
     return serializeText(node as PlateText);
@@ -96,8 +122,9 @@ function serializeNode(node: PlateElement | PlateText): string {
 
   // Element node
   const element = node as PlateElement;
+  const inlineChildren = inline || /^(p|h[1-6]|a|link)$/.test(element.type);
   const children = element.children
-    .map(child => serializeNode(child as PlateElement | PlateText))
+    .map(child => serializeNode(child as PlateElement | PlateText, inlineChildren))
     .join('');
 
   switch (element.type) {
@@ -118,7 +145,7 @@ function serializeNode(node: PlateElement | PlateText): string {
       }
 
       // Standard paragraph (with Fountain and alignment support)
-      let pAttrs = '';
+      let pAttrs = attributes(element);
       const ft = (element as any).fountainType;
       if (ft) pAttrs += ` data-fountain="${ft}"`;
       const fd = (element as any).fountainDual;
@@ -133,22 +160,22 @@ function serializeNode(node: PlateElement | PlateText): string {
     }
 
     case 'h1':
-      return `<h1>${children}</h1>\n`;
+      return `<h1${attributes(element)}>${children}</h1>\n`;
 
     case 'h2':
-      return `<h2>${children}</h2>\n`;
+      return `<h2${attributes(element)}>${children}</h2>\n`;
 
     case 'h3':
-      return `<h3>${children}</h3>\n`;
+      return `<h3${attributes(element)}>${children}</h3>\n`;
 
     case 'h4':
-      return `<h4>${children}</h4>\n`;
+      return `<h4${attributes(element)}>${children}</h4>\n`;
 
     case 'h5':
-      return `<h5>${children}</h5>\n`;
+      return `<h5${attributes(element)}>${children}</h5>\n`;
 
     case 'h6':
-      return `<h6>${children}</h6>\n`;
+      return `<h6${attributes(element)}>${children}</h6>\n`;
 
     case 'blockquote': {
       // Visual Narrative dialogue
@@ -184,13 +211,13 @@ function serializeNode(node: PlateElement | PlateText): string {
         stickyHtml += `</div>\n`;
         return stickyHtml;
       }
-      return `<blockquote>${children}</blockquote>\n`;
+      return `<blockquote${attributes(element)}>${children}</blockquote>\n`;
     }
 
     case 'a':
     case 'link':
       const href = element.url || '';
-      return `<a href="${escapeAttr(href)}">${children}</a>`;
+      return `<a${attributes(element)} href="${escapeAttr(href)}">${children}</a>`;
 
     case 'audio': {
       const audioSrc = (element.url || '') as string;
@@ -216,6 +243,9 @@ function serializeNode(node: PlateElement | PlateText): string {
       const imgWidth = element.width as string | number | undefined;
       // Caption is stored as array of text nodes: [{ text: 'caption' }]
       const imgCaption = (element.caption as Array<{text: string}> | undefined)?.[0]?.text || '';
+
+      // An image inside a paragraph/link must remain inline; a figure is a block.
+      if (inline) return `<img${attributes(element)} src="images/${escapeAttr(imgFilename)}" alt="${escapeAttr(imgAlt)}"/>${imgCaption ? `<span>${escapeHtml(imgCaption)}</span>` : ''}`;
 
       // Visual Narrative image layout
       const vnLayout = (element as any).vnLayout as string | undefined;
@@ -253,7 +283,7 @@ function serializeNode(node: PlateElement | PlateText): string {
       // Add data-align for round-trip deserialization (only non-default)
       const alignAttr = imgAlign && imgAlign !== 'center' ? ` data-align="${escapeAttr(imgAlign)}"` : '';
 
-      let figureHtml = `<figure${alignAttr}${styleAttr}>\n`;
+      let figureHtml = `<figure${attributes(element)}${alignAttr}${styleAttr}>\n`;
       figureHtml += `  <img src="images/${escapeAttr(imgFilename)}" alt="${escapeAttr(imgAlt)}"/>\n`;
       if (imgCaption) {
         figureHtml += `  <figcaption>${escapeHtml(imgCaption)}</figcaption>\n`;
@@ -346,6 +376,14 @@ export function xhtmlToPlate(xhtml: string): Value {
   if (blocks.length === 0) {
     return createEmptyValue();
   }
+  // Vocabulary declarations must remain in scope after editing a section.
+  const context: Record<string, string> = {};
+  for (const el of [body, ...Array.from(body.querySelectorAll('[epub\\:prefix], [xml\\:lang], [lang]'))]) {
+    for (const a of Array.from(el.attributes)) {
+      if (/^(epub:prefix|lang|xml:lang|xmlns(?::.*)?)$/.test(a.name) && !(a.name in context)) context[a.name] = a.value;
+    }
+  }
+  if (Object.keys(context).length) (blocks[0] as PlateElement).epubContext = context;
   return blocks as Value;
 }
 
@@ -357,9 +395,14 @@ function processBlockChildren(container: Element): (PlateElement | PlateText)[] 
   const blocks: (PlateElement | PlateText)[] = [];
 
   container.childNodes.forEach(node => {
+    if (node.nodeType === Node.TEXT_NODE && node.textContent?.trim()) {
+      blocks.push({ type: 'p', children: [{ text: node.textContent }] });
+      return;
+    }
     if (node.nodeType !== Node.ELEMENT_NODE) return;
     const el = node as Element;
     const tag = el.tagName.toLowerCase();
+    const firstBlock = blocks.length;
 
     switch (tag) {
       case 'p': {
@@ -408,6 +451,7 @@ function processBlockChildren(container: Element): (PlateElement | PlateText)[] 
 
       case 'h1': case 'h2': case 'h3': case 'h4': case 'h5': case 'h6':
       case 'hr':
+      case 'img':
       case 'figure': {
         const parsed = parseElement(el);
         if (parsed) blocks.push(parsed);
@@ -432,6 +476,10 @@ function processBlockChildren(container: Element): (PlateElement | PlateText)[] 
       }
 
       case 'section':
+      case 'header':
+      case 'hgroup':
+      case 'aside':
+      case 'footer':
       case 'article': {
         // Structural wrappers (sections, VN scene articles) — recurse into children
         const innerBlocks = processBlockChildren(el);
@@ -446,6 +494,11 @@ function processBlockChildren(container: Element): (PlateElement | PlateText)[] 
           blocks.push({ type: 'p', children: content });
         }
         break;
+    }
+    // Structural containers do not have a Plate node; keep their link targets.
+    const first = blocks[firstBlock] as PlateElement | undefined;
+    if (first && el.id && !['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'img', 'figure', 'blockquote'].includes(tag)) {
+      first.epubAnchors = [...((first.epubAnchors as string[]) || []), el.id];
     }
   });
 
@@ -707,6 +760,12 @@ function handleDiv(el: Element, blocks: (PlateElement | PlateText)[]): void {
  * Parse an HTML element to PlateJS node
  */
 function parseElement(el: Element): PlateElement | null {
+  const node = parseElementContent(el);
+  if (node) node.epubAttributes = sourceAttributes(el);
+  return node;
+}
+
+function parseElementContent(el: Element): PlateElement | null {
   const tag = el.tagName.toLowerCase();
   const children = parseChildren(el);
 
@@ -830,6 +889,8 @@ function parseListToFlatParagraphs(el: Element): PlateElement[] {
       type: 'p',
       indent: 1,
       listStyleType,
+      epubAttributes: sourceAttributes(li),
+      epubListParagraphs: Array.from(li.children).some(child => child.tagName.toLowerCase() === 'p'),
       children: children.length > 0 ? children : [{ text: '' }]
     };
     if (index > 0) {
@@ -860,6 +921,7 @@ function parseImageElement(el: Element): PlateElement {
 
   return {
     type: 'img',
+    epubAttributes: sourceAttributes(el),
     url: url,
     alt: alt,
     children: [{ text: '' }]
@@ -964,7 +1026,7 @@ function parseChildren(el: Element): (PlateElement | PlateText)[] {
     if (node.nodeType === Node.TEXT_NODE) {
       const text = node.textContent || '';
       // Skip whitespace-only text nodes between elements
-      if (text.trim() || (text.includes(' ') && children.length > 0)) {
+      if (text.trim() || children.length > 0) {
         children.push({ text });
       }
     } else if (node.nodeType === Node.ELEMENT_NODE) {
@@ -1032,6 +1094,7 @@ function parseChildren(el: Element): (PlateElement | PlateText)[] {
         children.push({
           type: 'a',
           url: href,
+          epubAttributes: sourceAttributes(childEl),
           children: linkChildren.length > 0 ? linkChildren : [{ text: '' }]
         });
       } else if (tag === 'img') {
@@ -1043,11 +1106,11 @@ function parseChildren(el: Element): (PlateElement | PlateText)[] {
         const spanChildren = parseChildren(childEl);
         children.push(...spanChildren);
       } else {
-        // Unknown inline element - extract text
-        const text = childEl.textContent || '';
-        if (text) {
-          children.push({ text });
-        }
+        // Recurse so nested links/emphasis survive, and separate block text.
+        // textContent alone merged endnote paragraphs and discarded backlinks.
+        const inner = parseChildren(childEl);
+        if (['p', 'div', 'li', 'tr', 'td', 'th', 'section'].includes(tag) && children.length) children.push({ text: '\n\n', epubParagraphBreak: true });
+        children.push(...inner);
       }
     }
   });

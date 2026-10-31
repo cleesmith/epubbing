@@ -178,11 +178,13 @@ export default function AuthorsClient() {
         language: parsed.language,
         subtitle: parsed.subtitle,
         publisher: parsed.publisher,
+        rights: parsed.rights,
         coverImage: parsed.coverImage,
         sections: parsed.sections
           .filter((s) => s.type !== 'table-of-contents')
           .map((s) => ({
             id: s.id,
+            sourceHref: s.sourceHref,
             title: s.title,
             xhtml: s.xhtml,
             type: s.type,
