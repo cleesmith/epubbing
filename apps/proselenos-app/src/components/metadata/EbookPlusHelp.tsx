@@ -7,7 +7,7 @@ import {
   MdOutlineHeadphones,
   MdOutlineLanguage,
   MdOutlinePictureAsPdf,
-  MdOutlineStorefront,
+  MdOutlineAutoStories,
   MdPictureAsPdf,
 } from 'react-icons/md';
 import { GiBoxUnpacking } from 'react-icons/gi';
@@ -42,13 +42,13 @@ const topRowItems: HelpItem[] = [
   },
   {
     icon: <MdOutlineFileDownload size={ICON_SIZE} className="fill-green-500" />,
-    name: 'Download authors epub',
-    description: 'Save a copy of your EPUB file to your device.',
+    name: 'Download Booksellers EPUB',
+    description: 'Save the edition you can send to a bookseller.',
   },
   {
-    icon: <MdOutlineStorefront size={ICON_SIZE} className="fill-orange-500" />,
-    name: 'Download for booksellers',
-    description: 'Download an EPUB with authoring extras and paperback settings removed.',
+    icon: <MdOutlineAutoStories size={ICON_SIZE} className="fill-blue-500" />,
+    name: 'Download Authors EPUB',
+    description: 'Save your editable EE copy, including its authoring extras and any paperback settings.',
   },
   {
     icon: <MdOutlineFactCheck size={ICON_SIZE} className="fill-emerald-500" />,

@@ -9,7 +9,7 @@ import {
   MdOutlineHeadphones,
   MdOutlineLanguage,
   MdOutlinePictureAsPdf,
-  MdOutlineStorefront,
+  MdOutlineAutoStories,
   MdPictureAsPdf,
 } from 'react-icons/md';
 import { GiBoxUnpacking } from 'react-icons/gi';
@@ -121,14 +121,14 @@ const BookDetailView: React.FC<BookDetailViewProps> = ({
                     <MdOutlineCloudUpload className='fill-base-content' />
                   </button>
                 )}
-                {onDownloadLocal && (
-                  <button onClick={onDownloadLocal} title={_('Download authors epub')}>
-                    <MdOutlineFileDownload className='fill-base-content hover:fill-green-500' />
+                {onDownloadBookseller && (
+                  <button onClick={onDownloadBookseller} title={_('Download Booksellers EPUB')} aria-label={_('Download Booksellers EPUB')}>
+                    <MdOutlineFileDownload className='fill-green-500 hover:fill-green-600' />
                   </button>
                 )}
-                {onDownloadBookseller && (
-                  <button onClick={onDownloadBookseller} title={_('Download for booksellers')}>
-                    <MdOutlineStorefront className='fill-base-content hover:fill-orange-500' />
+                {onDownloadLocal && (
+                  <button onClick={onDownloadLocal} title={_('Download Authors EPUB')} aria-label={_('Download Authors EPUB')}>
+                    <MdOutlineAutoStories className='fill-blue-500 hover:fill-blue-600' />
                   </button>
                 )}
                 {onCheckEpub && (

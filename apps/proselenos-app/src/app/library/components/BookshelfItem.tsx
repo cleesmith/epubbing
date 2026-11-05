@@ -10,9 +10,8 @@ import { useThemeStore } from '@/store/themeStore';
 import { parseEpub } from '@/services/epubService';
 import { saveLibraryManuscript } from '@/services/libraryManuscriptService';
 import Swal from 'sweetalert2';
-import JSZip from 'jszip';
+import { prepareEpubExport } from '@/services/epubExport';
 import { getLocalBookFilename } from '@/utils/book';
-import { stripEpubForBookseller } from '@/lib/bookseller-strip';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useLongPress } from '@/hooks/useLongPress';
 import { Menu, MenuItem, revealItemInDir } from '@/utils/desktop-stubs';
@@ -110,42 +109,32 @@ const BookshelfItem: React.FC<BookshelfItemProps> = ({
 
   const handleReadBookseller = useCallback(async (book: Book) => {
     if (!onOpenReader) return;
-    try {
-      const appService = await envConfig.getAppService();
-      const epubFile = await appService.openFile(getLocalBookFilename(book), 'Books');
-      const arrayBuffer = await epubFile.arrayBuffer();
+    const appService = await envConfig.getAppService();
+    const { blob } = await prepareEpubExport(appService, book, 'booksellers');
+    const tempFilePath = `${BOOKSELLER_TEMP_HASH}/bookseller.epub`;
 
-      const zip = await JSZip.loadAsync(arrayBuffer);
-      await stripEpubForBookseller(zip);
+    // Write modified epub to IndexedDB
+    await appService.writeFile(tempFilePath, 'Books', new File([blob], 'bookseller.epub'));
 
-      const blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/epub+zip' });
-      const tempFilePath = `${BOOKSELLER_TEMP_HASH}/bookseller.epub`;
+    // Upsert temp book in library store (in-memory only, not persisted)
+    const { library } = useLibraryStore.getState();
+    const tempBook: Book = {
+      hash: BOOKSELLER_TEMP_HASH,
+      format: 'EPUB',
+      title: `${book.title} (Bookseller)`,
+      sourceTitle: 'bookseller',
+      author: book.author,
+      coverImageUrl: book.coverImageUrl,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    const filtered = library.filter(b => b.hash !== BOOKSELLER_TEMP_HASH);
+    useLibraryStore.setState({ library: [...filtered, tempBook] });
 
-      // Write modified epub to IndexedDB
-      await appService.writeFile(tempFilePath, 'Books', new File([blob], 'bookseller.epub'));
-
-      // Upsert temp book in library store (in-memory only, not persisted)
-      const { library } = useLibraryStore.getState();
-      const tempBook: Book = {
-        hash: BOOKSELLER_TEMP_HASH,
-        format: 'EPUB',
-        title: `${book.title} (Bookseller)`,
-        sourceTitle: 'bookseller',
-        author: book.author,
-        coverImageUrl: book.coverImageUrl,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      };
-      const filtered = library.filter(b => b.hash !== BOOKSELLER_TEMP_HASH);
-      useLibraryStore.setState({ library: [...filtered, tempBook] });
-
-      onOpenReader(BOOKSELLER_TEMP_HASH);
-    } catch (error) {
-      console.error('Failed to open bookseller epub:', error);
-    }
+    onOpenReader(BOOKSELLER_TEMP_HASH);
   }, [envConfig, onOpenReader]);
 
-  const makeBookAvailable = async (book: Book) => {
+  const makeBookAvailable = useCallback(async (book: Book) => {
     if (book.uploadedAt && !book.downloadedAt) {
       if (await appService?.isBookAvailable(book)) {
         if (!book.downloadedAt || !book.coverDownloadedAt) {
@@ -167,51 +156,49 @@ const BookshelfItem: React.FC<BookshelfItemProps> = ({
       }
     }
     return true;
-  };
+  }, [appService, envConfig, handleBookDownload, setLoading, updateBook]);
 
   const handleBookClick = useCallback(
-    async (book: Book) => {
+    async (book: Book, reader: 'booksellers' | 'enhanced') => {
       if (isSelectMode) {
         toggleSelection(book.hash);
-      } else {
-        if (isOpening.current) return;
-        const available = await makeBookAvailable(book);
-        if (!available) return;
-        isOpening.current = true;
-        setOpening(true);
-        try {
-          // Extract manuscript for enhanced reading (overwrite any previous)
+        return;
+      }
+      if (isOpening.current) return;
+      isOpening.current = true;
+      setOpening(true);
+      try {
+        if (!(await makeBookAvailable(book))) return;
+        Swal.fire({
+          title: 'Processing...',
+          text: reader === 'booksellers' ? 'Opening the Booksellers EPUB…' : 'Preparing enhanced HTML reading...',
+          allowOutsideClick: false,
+          allowEscapeKey: false,
+          showConfirmButton: false,
+          background: isDarkMode ? '#222' : '#fff',
+          color: isDarkMode ? '#fff' : '#333',
+          didOpen: () => { Swal.showLoading(); },
+        });
+
+        if (reader === 'booksellers') {
+          await handleReadBookseller(book);
+        } else {
           const appService = await envConfig.getAppService();
           const epubFile = await appService.openFile(getLocalBookFilename(book), 'Books');
-
-          // Show blocking "please wait" spinner during EPUB processing
-          Swal.fire({
-            title: 'Processing...',
-            text: 'Preparing enhanced HTML reading...',
-            allowOutsideClick: false,
-            allowEscapeKey: false,
-            showConfirmButton: false,
-            background: isDarkMode ? '#222' : '#fff',
-            color: isDarkMode ? '#fff' : '#333',
-            didOpen: () => { Swal.showLoading(); },
-          });
-
           const parsed = await parseEpub(epubFile);
           await saveLibraryManuscript(parsed);
-
-          Swal.close();
           window.open(appPath('/reader/view/'), '_blank');
-        } catch (error) {
-          console.error('Failed to open book as HTML:', error);
-          alert(`Failed to open book: ${(error as Error).message || 'Unknown error'}`);
-        } finally {
-          isOpening.current = false;
-          setOpening(false);
         }
+      } catch (error) {
+        console.error('Failed to open book:', error);
+        alert(`Failed to open book: ${(error as Error).message || 'Unknown error'}`);
+      } finally {
+        Swal.close();
+        isOpening.current = false;
+        setOpening(false);
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isSelectMode, envConfig, isDarkMode],
+    [isSelectMode, toggleSelection, makeBookAvailable, isDarkMode, handleReadBookseller, envConfig],
   );
 
   const handleGroupClick = useCallback(
@@ -314,6 +301,7 @@ const BookshelfItem: React.FC<BookshelfItemProps> = ({
     [isSelectMode, item],
   );
 
+  const coverOpensBooksellers = onOpenReader && 'format' in item && item.format === 'EPUB';
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const handleOpenItem = useCallback(
     throttle(() => {
@@ -322,12 +310,12 @@ const BookshelfItem: React.FC<BookshelfItemProps> = ({
         return;
       }
       if ('format' in item) {
-        handleBookClick(item as Book);
+        handleBookClick(item, coverOpensBooksellers ? 'booksellers' : 'enhanced');
       } else {
         handleGroupClick(item as BooksGroup);
       }
     }, 100),
-    [handleSelectItem, handleBookClick, handleGroupClick, item],
+    [isSelectMode, handleSelectItem, handleBookClick, handleGroupClick, item, coverOpensBooksellers],
   );
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -361,6 +349,7 @@ const BookshelfItem: React.FC<BookshelfItemProps> = ({
   );
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.target !== e.currentTarget) return;
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       handleOpenItem();
@@ -383,7 +372,7 @@ const BookshelfItem: React.FC<BookshelfItemProps> = ({
           opening && 'pointer-events-none cursor-wait opacity-60',
         )}
         role='button'
-        title={'format' in item ? 'Read enhanced HTML' : item.name}
+        title={'format' in item ? _(coverOpensBooksellers ? 'Read Booksellers EPUB' : 'Open enhanced reader') : item.name}
         tabIndex={0}
         aria-label={'format' in item ? item.title : item.name}
         style={{
@@ -403,7 +392,7 @@ const BookshelfItem: React.FC<BookshelfItemProps> = ({
               transferProgress={transferProgress}
               showBookDetailsModal={showBookDetailsModal}
               onReadBook={onOpenReader ? (book: Book) => onOpenReader(book.hash) : undefined}
-              onReadBookseller={onOpenReader ? handleReadBookseller : undefined}
+              onReadEnhanced={(book) => handleBookClick(book, 'enhanced')}
             />
           ) : (
             <GroupItem

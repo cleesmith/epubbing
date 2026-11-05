@@ -20,7 +20,7 @@ interface BookItemProps {
   transferProgress: number | null;
   showBookDetailsModal: (book: Book) => void;
   onReadBook?: (book: Book) => void;
-  onReadBookseller?: (book: Book) => void;
+  onReadEnhanced?: (book: Book) => void;
 }
 
 const BookItem: React.FC<BookItemProps> = ({
@@ -32,7 +32,7 @@ const BookItem: React.FC<BookItemProps> = ({
   transferProgress,
   showBookDetailsModal,
   onReadBook,
-  onReadBookseller,
+  onReadEnhanced,
 }) => {
   const _ = useTranslation();
   const { appService } = useEnv();
@@ -47,7 +47,6 @@ const BookItem: React.FC<BookItemProps> = ({
         mode === 'list' && 'h-28 flex-row gap-4 overflow-hidden',
         appService?.hasContextMenu ? 'cursor-pointer' : '',
       )}
-      onClick={(e) => e.stopPropagation()}
     >
       <div
         className={clsx(
@@ -95,7 +94,7 @@ const BookItem: React.FC<BookItemProps> = ({
           )}
         </div>
         <div>
-          <div className='flex items-center justify-center gap-x-3'>
+          <div className='flex items-center justify-center gap-x-3' onClick={(e) => e.stopPropagation()}>
             {book.progress && <ReadingProgress book={book} />}
             {onReadBook && (
               <button
@@ -112,14 +111,14 @@ const BookItem: React.FC<BookItemProps> = ({
                 </div>
               </button>
             )}
-            {onReadBookseller && (
+            {onReadEnhanced && (
               <button
-                aria-label={_('Read Bookseller Ebook')}
-                title={_('Read Bookseller Ebook')}
+                aria-label={_('Open enhanced reader')}
+                title={_('Open enhanced reader')}
                 className='-m-2 p-2'
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={() => {
-                  onReadBookseller(book);
+                  onReadEnhanced(book);
                 }}
               >
                 <div className='pt-[2px] sm:pt-[1px]'>
