@@ -4,6 +4,7 @@
 
 'use client';
 
+import { saveBackupPreference } from '@/services/backupReminder';
 import { useState, useEffect, useCallback, useRef } from 'react';
 
 export interface UseReadAloudReturn {
@@ -36,7 +37,7 @@ export function useReadAloud(): UseReadAloudReturn {
   const setSelectedVoice = useCallback((voice: SpeechSynthesisVoice) => {
     setSelectedVoiceState(voice);
     if (typeof window !== 'undefined') {
-      localStorage.setItem(VOICE_STORAGE_KEY, voice.name);
+      saveBackupPreference(VOICE_STORAGE_KEY, voice.name);
     }
   }, []);
 

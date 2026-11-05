@@ -1,3 +1,4 @@
+import { saveBackupPreference } from '@/services/backupReminder';
 import { create } from 'zustand';
 import { AppService } from '@/types/system';
 import { getThemeCode, ThemeCode } from '@/utils/style';
@@ -77,7 +78,7 @@ export const useThemeStore = create<ThemeState>((set, get) => {
     getIsDarkMode: () => get().isDarkMode,
     setThemeMode: (mode) => {
       if (typeof window !== 'undefined' && localStorage) {
-        localStorage.setItem('themeMode', mode);
+        saveBackupPreference('themeMode', mode);
       }
       const isDarkMode = mode === 'dark' || (mode === 'auto' && get().systemIsDarkMode);
       document.documentElement.setAttribute(
@@ -89,7 +90,7 @@ export const useThemeStore = create<ThemeState>((set, get) => {
     },
     setThemeColor: (color) => {
       if (typeof window !== 'undefined' && localStorage) {
-        localStorage.setItem('themeColor', color);
+        saveBackupPreference('themeColor', color);
       }
       document.documentElement.setAttribute(
         'data-theme',
@@ -119,7 +120,7 @@ export const useThemeStore = create<ThemeState>((set, get) => {
         }
       }
       settings.globalReadSettings.customThemes = customThemes;
-      localStorage.setItem('customThemes', JSON.stringify(customThemes));
+      saveBackupPreference('customThemes', JSON.stringify(customThemes));
       const appService = await envConfig.getAppService();
       await appService.saveSettings(settings);
     },

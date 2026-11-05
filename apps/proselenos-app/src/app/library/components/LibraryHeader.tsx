@@ -30,8 +30,6 @@ interface LibraryHeaderProps {
   onToggleSelectMode: () => void;
   onSelectAll: () => void;
   onDeselectAll: () => void;
-  trafficLightStatus: 'green' | 'yellow' | 'red';
-  trafficTooltip: string;
   onStorageClick?: () => void;
 }
 
@@ -44,8 +42,6 @@ const LibraryHeader: React.FC<LibraryHeaderProps> = ({
   onToggleSelectMode: _onToggleSelectMode, // disabled: multi-select mode
   onSelectAll,
   onDeselectAll,
-  trafficLightStatus,
-  trafficTooltip,
   onStorageClick,
 }) => {
   const _ = useTranslation();
@@ -182,10 +178,8 @@ const LibraryHeader: React.FC<LibraryHeaderProps> = ({
           {onStorageClick && (
             <div className='mr-4 flex items-center'>
               <TrafficLightIcon
-                status={trafficLightStatus}
                 isDarkMode={themeMode === 'dark' || (themeMode === 'auto' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches)}
                 onClick={onStorageClick}
-                tooltip={trafficTooltip}
               />
             </div>
           )}

@@ -2,6 +2,7 @@
 
 'use client';
 
+import { saveBackupPreference } from '@/services/backupReminder';
 import { useState, useEffect, useLayoutEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { getTheme } from '../shared/theme';
@@ -215,7 +216,7 @@ export default function AuthorsClient() {
     const newDarkMode = !isDarkMode;
     setIsDarkMode(newDarkMode);
     if (typeof window !== 'undefined' && localStorage) {
-      localStorage.setItem('authorsDarkMode', String(newDarkMode));
+      saveBackupPreference('authorsDarkMode', String(newDarkMode));
     }
   };
 

@@ -36,8 +36,6 @@ interface AuthorsHeaderProps {
   onFountainExportClick?: () => void;
   onXrayClick?: () => void;
   hasUnsavedChanges?: boolean;
-  trafficLightStatus: 'green' | 'yellow' | 'red';
-  trafficTooltip: string;
 }
 
 export default function AuthorsHeader({
@@ -63,8 +61,6 @@ export default function AuthorsHeader({
   onFountainExportClick: _onFountainExportClick,
   onXrayClick,
   hasUnsavedChanges = false,
-  trafficLightStatus,
-  trafficTooltip,
 }: AuthorsHeaderProps) {
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -150,10 +146,9 @@ export default function AuthorsHeader({
         </button>
 
         <TrafficLightIcon
-          status={trafficLightStatus}
+          pending={hasUnsavedChanges}
           isDarkMode={isDarkMode}
           onClick={onStorageClick}
-          tooltip={trafficTooltip}
         />
         <div style={{ width: '8px' }} />
 

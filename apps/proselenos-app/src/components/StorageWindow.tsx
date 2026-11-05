@@ -93,10 +93,6 @@ export const StorageWindow = () => {
     setIsExporting(true);
     try {
       await exportAndDownload();
-      // Record export date for traffic light indicator (shared via localStorage across all tabs)
-      localStorage.setItem('last_export_date', new Date().toISOString());
-      // Notify the current tab — native storage events only fire in *other* tabs
-      window.dispatchEvent(new StorageEvent('storage', { key: 'last_export_date' }));
       showAlert(_('Your backup has been downloaded.'), 'success', _('Export Complete'));
     } catch (err) {
       console.error('Export failed:', err);

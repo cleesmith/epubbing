@@ -1,3 +1,4 @@
+import { saveBackupPreference } from '@/services/backupReminder';
 const DEFAULT_SHORTCUTS = {
   onSwitchSideBar: ['ctrl+Tab', 'opt+Tab', 'alt+Tab'],
   onToggleSideBar: ['s', 'F9'],
@@ -50,5 +51,5 @@ export const loadShortcuts = (): ShortcutConfig => {
 
 // Save custom shortcuts to localStorage
 export const saveShortcuts = (shortcuts: ShortcutConfig) => {
-  localStorage.setItem('customShortcuts', JSON.stringify(shortcuts));
+  saveBackupPreference('customShortcuts', JSON.stringify(shortcuts));
 };

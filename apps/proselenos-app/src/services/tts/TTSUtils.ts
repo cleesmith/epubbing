@@ -1,3 +1,4 @@
+import { saveBackupPreference } from '@/services/backupReminder';
 import { TTSVoice } from './types';
 
 export class TTSUtils {
@@ -13,7 +14,7 @@ export class TTSUtils {
     if (!engine) return;
     const preferences = this.getPreferences();
     preferences[this.PREFERRED_CLIENT_KEY] = engine;
-    localStorage.setItem(this.LOCAL_STORAGE_KEY, JSON.stringify(preferences));
+    saveBackupPreference(this.LOCAL_STORAGE_KEY, JSON.stringify(preferences));
   }
 
   static setPreferredVoice(engine: string, language: string, voiceId: string): void {
@@ -21,7 +22,7 @@ export class TTSUtils {
     const preferences = this.getPreferences();
     const lang = this.normalizeLanguage(language);
     preferences[`${engine}-${lang}`] = voiceId;
-    localStorage.setItem(this.LOCAL_STORAGE_KEY, JSON.stringify(preferences));
+    saveBackupPreference(this.LOCAL_STORAGE_KEY, JSON.stringify(preferences));
   }
 
   static getPreferredClient(): string | null {

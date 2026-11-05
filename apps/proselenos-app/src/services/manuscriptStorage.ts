@@ -8,6 +8,7 @@
 // - section-XXX.xhtml contains raw XHTML body content
 // - Conversions happen only at editor boundaries
 
+import { markBackupChanged } from './backupReminder';
 import { ElementType } from '@/app/authors/elementTypes';
 import { plateToXhtml, xhtmlToPlainText } from '@/lib/plateXhtml';
 
@@ -90,14 +91,27 @@ async function getValue<T>(storeName: string, key: string): Promise<T | null> {
   }
 }
 
-async function setValue<T>(storeName: string, key: string, value: T): Promise<void> {
+async function setValue<T>(storeName: string, key: string, value: T, track = true): Promise<void> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(storeName, 'readwrite');
     const store = tx.objectStore(storeName);
-    store.put({ key, value });
+    let changed = true;
+    if (track && !(value instanceof Blob) && !(value instanceof ArrayBuffer)) {
+      const previous = store.get(key);
+      previous.onsuccess = () => {
+        changed = !previous.result || JSON.stringify(previous.result.value) !== JSON.stringify(value);
+        if (changed) store.put({ key, value });
+      };
+    } else {
+      store.put({ key, value });
+    }
 
-    tx.oncomplete = () => resolve();
+    tx.oncomplete = () => {
+      if (track && changed) markBackupChanged();
+      resolve();
+    };
+    tx.onabort = () => reject(tx.error);
     tx.onerror = () => reject(tx.error);
   });
 }
@@ -186,9 +200,15 @@ async function deleteValue(storeName: string, key: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(storeName, 'readwrite');
     const store = tx.objectStore(storeName);
-    store.delete(key);
-
-    tx.oncomplete = () => resolve();
+    const previous = store.getKey(key);
+    previous.onsuccess = () => {
+      if (previous.result !== undefined) store.delete(key);
+    };
+    tx.oncomplete = () => {
+      if (previous.result !== undefined) markBackupChanged();
+      resolve();
+    };
+    tx.onabort = () => reject(tx.error);
     tx.onerror = () => reject(tx.error);
   });
 }
@@ -425,7 +445,11 @@ async function updateWorkingCopyMetadata(
     await new Promise<void>((resolve, reject) => {
       const tx = db.transaction(STORES.MANUSCRIPT, 'readwrite');
       const store = tx.objectStore(STORES.MANUSCRIPT);
-      tx.oncomplete = () => resolve();
+      let changed = false;
+      tx.oncomplete = () => {
+        if (changed) markBackupChanged();
+        resolve();
+      };
       tx.onabort = () => reject(tx.error || new Error('Could not update manuscript metadata.'));
       for (const key of ['working_copy_meta.json', 'meta.json']) {
         const request = store.get(key);
@@ -437,8 +461,12 @@ async function updateWorkingCopyMetadata(
             return;
           }
           const meta = request.result.value as WorkingCopyMeta | ManuscriptMeta;
+          const before = JSON.stringify(meta);
           update(meta);
-          store.put({ key, value: meta });
+          if (JSON.stringify(meta) !== before) {
+            changed = true;
+            store.put({ key, value: meta });
+          }
         };
       }
     });
@@ -659,7 +687,10 @@ export async function saveManuscriptCover(blob: Blob, filename: string, settings
     await new Promise<void>((resolve, reject) => {
       const tx = db.transaction(STORES.MANUSCRIPT, 'readwrite');
       const store = tx.objectStore(STORES.MANUSCRIPT);
-      tx.oncomplete = () => resolve();
+      tx.oncomplete = () => {
+        markBackupChanged();
+        resolve();
+      };
       tx.onabort = () => reject(tx.error || new Error('The cover could not be saved.'));
       store.put({ key: filename, value: blob });
       if (settings) store.put({ key: 'cover_settings.json', value: settings });
@@ -1007,7 +1038,8 @@ export async function saveFullWorkingCopy(epub: {
     type?: ElementType;
     sceneCraftConfig?: SceneCraftConfig;
   }>;
-}): Promise<void> {
+}, { initialBlank = false } = {}): Promise<void> {
+  const write = (key: string, value: unknown) => setValue(STORES.MANUSCRIPT, key, value, !initialBlank);
   // Normalize section IDs and convert to XHTML
   const sectionMetas: SectionMeta[] = [];
 
@@ -1039,7 +1071,7 @@ export async function saveFullWorkingCopy(epub: {
     }
 
     // Save XHTML file
-    await saveSectionXhtml(normalizedId, xhtmlContent);
+    await write(`${normalizedId}.xhtml`, xhtmlContent);
 
     // Build section meta
     sectionMetas.push({
@@ -1056,7 +1088,7 @@ export async function saveFullWorkingCopy(epub: {
   if (epub.coverImage) {
     const ext = epub.coverImage.type === 'image/png' ? 'png' : 'jpg';
     coverImageId = `cover.${ext}`;
-    await saveCoverImage(epub.coverImage, coverImageId);
+    await write(coverImageId, epub.coverImage);
   }
 
   // Save new ManuscriptMeta
@@ -1071,7 +1103,7 @@ export async function saveFullWorkingCopy(epub: {
     sections: sectionMetas,
     libraryBookHash: epub.libraryBookHash,
   };
-  await saveManuscriptMeta(meta);
+  await write('meta.json', meta);
 
   // Also save old format meta for backward compatibility
   const oldMeta: WorkingCopyMeta = {
@@ -1085,7 +1117,7 @@ export async function saveFullWorkingCopy(epub: {
     coverImageId,
     libraryBookHash: epub.libraryBookHash,
   };
-  await saveWorkingCopyMeta(oldMeta);
+  await write('working_copy_meta.json', oldMeta);
 }
 
 /** Replace a text import in one transaction, preserving the old book on failure. */
@@ -1117,7 +1149,10 @@ export async function replaceTextWorkingCopy(
       const store = tx.objectStore(STORES.MANUSCRIPT);
       const obsolete = new Set<string>();
       const request = store.openCursor();
-      tx.oncomplete = () => resolve();
+      tx.oncomplete = () => {
+        markBackupChanged();
+        resolve();
+      };
       tx.onabort = () => reject(tx.error || new Error('The manuscript could not be saved. The previous working copy was kept.'));
       request.onsuccess = () => {
         const cursor = request.result;

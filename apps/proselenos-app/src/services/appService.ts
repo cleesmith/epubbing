@@ -188,7 +188,7 @@ export abstract class BaseAppService implements AppService {
       settings.localBooksDir = await this.fs.getPrefix('Books');
       if (!settings.kosync.deviceId) {
         settings.kosync.deviceId = uuidv4();
-        await this.saveSettings(settings);
+        await this.saveSettings(settings, false);
       }
     } catch {
       settings = {
@@ -202,15 +202,15 @@ export abstract class BaseAppService implements AppService {
         },
         globalViewSettings: this.getDefaultViewSettings(),
       } as SystemSettings;
-      await this.saveSettings(settings);
+      await this.saveSettings(settings, false);
     }
 
     this.localBooksDir = settings.localBooksDir;
     return settings;
   }
 
-  async saveSettings(settings: SystemSettings): Promise<void> {
-    await this.fs.writeFile(SETTINGS_FILENAME, 'Settings', JSON.stringify(settings));
+  async saveSettings(settings: SystemSettings, trackBackup = true): Promise<void> {
+    await this.fs.writeFile(SETTINGS_FILENAME, 'Settings', JSON.stringify(settings), trackBackup);
   }
 
   async importFont(file?: string | File): Promise<CustomFontInfo | null> {
@@ -589,7 +589,7 @@ export abstract class BaseAppService implements AppService {
   }
 
   async saveLibraryBooks(books: Book[]): Promise<void> {
-    const libraryBooks = books.map(({ coverImageUrl, ...rest }) => rest);
+    const libraryBooks = books.filter(book => book.hash !== '__bookseller_temp__').map(({ coverImageUrl, ...rest }) => rest);
     const jsonData = JSON.stringify(libraryBooks, null, 2);
     const libraryFilename = getLibraryFilename();
     const backupFilename = getLibraryBackupFilename();

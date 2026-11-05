@@ -93,24 +93,6 @@ function escapeHtmlForLayout(text: string): string {
     .replace(/>/g, '&gt;');
 }
 
-// Traffic light: date-based export reminder
-function getExportTrafficLightStatus(): 'green' | 'yellow' | 'red' {
-  const stored = localStorage.getItem('last_export_date');
-  if (!stored) return 'green'; // New user, no data to export yet
-  const daysSince = (Date.now() - new Date(stored).getTime()) / (1000 * 60 * 60 * 24);
-  if (daysSince < 1) return 'green';
-  if (daysSince < 7) return 'yellow';
-  return 'red';
-}
-function getExportTooltip(): string {
-  const stored = localStorage.getItem('last_export_date');
-  if (!stored) return 'Click to Export a backup zip file';
-  const status = getExportTrafficLightStatus();
-  if (status === 'green') return `Exported on: ${new Date(stored).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`;
-  if (status === 'yellow') return 'Export needed';
-  return 'Export now';
-}
-
 interface AuthorsLayoutProps {
   theme: ThemeConfig;
   isDarkMode: boolean;
@@ -169,32 +151,6 @@ export default function AuthorsLayout({
   const [pendingTitle, setPendingTitle] = useState<string>('');
   // Removed: pendingSectionSwitch and showUnsavedDialog - now auto-saves on section switch
 
-  const [trafficLightStatus, setTrafficLightStatus] = useState<'green' | 'yellow' | 'red'>(() => {
-    if (typeof window === 'undefined') return 'green';
-    localStorage.removeItem('ee_authors_modified_sections_since_send');
-    return getExportTrafficLightStatus();
-  });
-  const [trafficTooltip, setTrafficTooltip] = useState<string>(() => {
-    if (typeof window === 'undefined') return 'Click to Export a backup zip file';
-    return getExportTooltip();
-  });
-
-  // Re-check traffic light status every minute and on storage events (cross-tab)
-  useEffect(() => {
-    const update = () => {
-      setTrafficLightStatus(getExportTrafficLightStatus());
-      setTrafficTooltip(getExportTooltip());
-    };
-    const interval = setInterval(update, 60_000);
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === 'last_export_date') update();
-    };
-    window.addEventListener('storage', onStorage);
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener('storage', onStorage);
-    };
-  }, []);
 
   // Editor panel ref (used by full-text search to scroll to matches)
   const editorPanelRef = useRef<EditorPanelRef>(null);
@@ -417,7 +373,7 @@ export default function AuthorsLayout({
             { id: 'chapter-1', title: 'Chapter 1', xhtml: '<p></p>', type: 'chapter' as const },
           ],
         };
-        await saveFullWorkingCopy(blank);
+        await saveFullWorkingCopy(blank, { initialBlank: true });
         // Reload from IndexedDB to get normalized IDs
         const newSaved = await loadFullWorkingCopy();
         if (newSaved) {
@@ -1945,8 +1901,6 @@ export default function AuthorsLayout({
         onFountainExportClick={handleFountainExport}
         onXrayClick={onXrayClick}
         hasUnsavedChanges={hasUnsavedChanges}
-        trafficLightStatus={trafficLightStatus}
-        trafficTooltip={trafficTooltip}
       />}
 
       {/* Main content: 2-panel layout */}

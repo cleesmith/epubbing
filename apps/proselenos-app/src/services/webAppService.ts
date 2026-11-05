@@ -1,3 +1,5 @@
+import { markBackupChanged } from './backupReminder';
+import { getLibraryFilename, getLibraryBackupFilename } from '@/utils/book';
 import { FileSystem, BaseDir, AppPlatform, ResolvedPath, FileItem } from '@/types/system';
 import { getOSPlatform, isValidURL } from '@/utils/misc';
 import { isPWA } from './environment';
@@ -65,6 +67,13 @@ async function openIndexedDB(): Promise<IDBDatabase> {
   });
 }
 
+// Reader previews and cache files are generated on demand. User books, book
+// settings, imported fonts and images belong to the ZIP backup.
+function isBackupFile(path: string, base: BaseDir): boolean {
+  return (base === 'Books' && !path.startsWith('__bookseller_temp__/') && path !== getLibraryBackupFilename())
+    || base === 'Fonts' || base === 'Images' || base === 'Settings';
+}
+
 const indexedDBFileSystem: FileSystem = {
   resolvePath,
   async getPrefix(base: BaseDir) {
@@ -109,12 +118,16 @@ const indexedDBFileSystem: FileSystem = {
         const data = getRequest.result;
         if (data) {
           store.put({ path: fp, content: data.content });
-          resolve();
+          transaction.oncomplete = () => {
+            if (isBackupFile(dstPath, base)) markBackupChanged();
+            resolve();
+          };
         } else {
           reject(new Error(`File not found: ${srcPath}`));
         }
       };
 
+      transaction.onabort = () => reject(transaction.error);
       getRequest.onerror = () => reject(getRequest.error);
     });
   },
@@ -151,7 +164,7 @@ const indexedDBFileSystem: FileSystem = {
       request.onerror = () => reject(request.error);
     });
   },
-  async writeFile(path: string, base: BaseDir, content: string | ArrayBuffer | File) {
+  async writeFile(path: string, base: BaseDir, content: string | ArrayBuffer | File, trackBackup = true) {
     const { fp } = this.resolvePath(path, base);
     const db = await openIndexedDB();
 
@@ -162,9 +175,28 @@ const indexedDBFileSystem: FileSystem = {
       const transaction = db.transaction('files', 'readwrite');
       const store = transaction.objectStore('files');
 
-      store.put({ path: fp, content });
+      let changed = trackBackup && isBackupFile(path, base);
+      if (changed && typeof content === 'string') {
+        const previous = store.get(fp);
+        previous.onsuccess = () => {
+          const oldValue = previous.result?.content;
+          if (content === oldValue) {
+            changed = false;
+            return;
+          }
+          // The first visit creates an empty shelf.
+          if (!previous.result && path === getLibraryFilename() && content === '[]') changed = false;
+          store.put({ path: fp, content });
+        };
+      } else {
+        store.put({ path: fp, content });
+      }
 
-      transaction.oncomplete = () => resolve();
+      transaction.oncomplete = () => {
+        if (changed) markBackupChanged();
+        resolve();
+      };
+      transaction.onabort = () => reject(transaction.error);
       transaction.onerror = () => reject(transaction.error);
     });
   },
@@ -176,9 +208,15 @@ const indexedDBFileSystem: FileSystem = {
       const transaction = db.transaction('files', 'readwrite');
       const store = transaction.objectStore('files');
 
-      store.delete(fp);
-
-      transaction.oncomplete = () => resolve();
+      const previous = store.getKey(fp);
+      previous.onsuccess = () => {
+        if (previous.result !== undefined) store.delete(fp);
+      };
+      transaction.oncomplete = () => {
+        if (previous.result !== undefined && isBackupFile(path, base)) markBackupChanged();
+        resolve();
+      };
+      transaction.onabort = () => reject(transaction.error);
       transaction.onerror = () => reject(transaction.error);
     });
   },

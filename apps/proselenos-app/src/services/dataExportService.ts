@@ -2,6 +2,7 @@
 // Exports and imports ALL browser storage for this app
 
 import JSZip from 'jszip';
+import { backupRevision, isBackupKey, markBackupChanged, recordZip } from './backupReminder';
 
 // ============================================
 // Database constants (matching existing services)
@@ -34,7 +35,7 @@ function exportLocalStorage(): Record<string, string> {
   const data: Record<string, string> = {};
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
-    if (key) {
+    if (key && !isBackupKey(key)) {
       data[key] = localStorage.getItem(key) || '';
     }
   }
@@ -45,88 +46,38 @@ function exportLocalStorage(): Record<string, string> {
 // Export E-Reader Database (AppFileSystem)
 // ============================================
 
-async function exportEreaderData(): Promise<Array<{ path: string; content: string | ArrayBuffer | Blob }>> {
-  try {
-    const db = await openDB(EREADER_DB_NAME, EREADER_DB_VERSION);
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction('files', 'readonly');
-      const store = tx.objectStore('files');
-      const request = store.getAll();
+// A first-time user may not have opened Authors or Library yet. Abort creation
+// of a missing database instead of leaving an empty database without its stores.
+function openForExport(name: string): Promise<IDBDatabase | null> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(name);
+    let missing = false;
+    request.onupgradeneeded = () => {
+      missing = true;
+      request.transaction!.abort();
+    };
+    request.onerror = () => missing ? resolve(null) : reject(request.error);
+    request.onsuccess = () => resolve(request.result);
+  });
+}
 
-      request.onsuccess = () => {
-        const files = request.result || [];
-        resolve(files);
-      };
-      request.onerror = () => reject(request.error);
+async function readBackupStore<T>(name: string, store: string): Promise<T[]> {
+  const db = await openForExport(name);
+  if (!db) return [];
+  try {
+    if (!db.objectStoreNames.contains(store)) return [];
+    return await new Promise<T[]>((resolve, reject) => {
+      const tx = db.transaction(store, 'readonly');
+      const request = tx.objectStore(store).getAll();
+      tx.oncomplete = () => resolve(request.result);
+      tx.onabort = () => reject(tx.error || new Error('Could not read ' + store + ' for the ZIP.'));
     });
-  } catch {
-    // Database doesn't exist or is empty
-    return [];
+  } finally {
+    db.close();
   }
 }
 
-// ============================================
-// Export E-Reader Manuscript Store
-// ============================================
-
-async function exportEreaderManuscript(): Promise<Array<{ key: string; value: string | ArrayBuffer | Blob }>> {
-  try {
-    const db = await openDB(EREADER_DB_NAME, EREADER_DB_VERSION);
-    if (!db.objectStoreNames.contains('manuscript')) return [];
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction('manuscript', 'readonly');
-      const store = tx.objectStore('manuscript');
-      const request = store.getAll();
-
-      request.onsuccess = () => {
-        const entries = request.result || [];
-        resolve(entries);
-      };
-      request.onerror = () => reject(request.error);
-    });
-  } catch {
-    return [];
-  }
-}
-
-// ============================================
-// Export Authors Database (ProselenosLocal)
-// ============================================
-
-interface AuthorsStoreData {
-  storeName: string;
-  entries: Array<{ key: string; value: unknown }>;
-}
-
-async function exportAuthorsData(): Promise<AuthorsStoreData[]> {
-  try {
-    const db = await openDB(AUTHORS_DB_NAME, AUTHORS_DB_VERSION);
-    const result: AuthorsStoreData[] = [];
-
-    for (const storeName of AUTHORS_STORES) {
-      if (!db.objectStoreNames.contains(storeName)) continue;
-
-      const entries = await new Promise<Array<{ key: string; value: unknown }>>((resolve, reject) => {
-        const tx = db.transaction(storeName, 'readonly');
-        const store = tx.objectStore(storeName);
-        const request = store.getAll();
-
-        request.onsuccess = () => {
-          const items = request.result || [];
-          resolve(items);
-        };
-        request.onerror = () => reject(request.error);
-      });
-
-      result.push({ storeName, entries });
-    }
-
-    return result;
-  } catch {
-    // Database doesn't exist or is empty
-    return [];
-  }
-}
+type FileContent = string | ArrayBuffer | Blob;
 
 // ============================================
 // Convert content to appropriate format for ZIP
@@ -160,7 +111,7 @@ export async function exportAllData(): Promise<Blob> {
   zip.file('localStorage.json', JSON.stringify(localStorageData, null, 2));
 
   // 3. Export E-Reader data
-  const ereaderFiles = await exportEreaderData();
+  const ereaderFiles = await readBackupStore<{ path: string; content: FileContent }>(EREADER_DB_NAME, 'files');
   if (ereaderFiles.length > 0) {
     manifest.contents.hasEreader = true;
     const ereaderFolder = zip.folder('ereader');
@@ -186,7 +137,7 @@ export async function exportAllData(): Promise<Blob> {
   }
 
   // 3b. Export E-Reader manuscript store
-  const ereaderManuscript = await exportEreaderManuscript();
+  const ereaderManuscript = await readBackupStore<{ key: string; value: FileContent }>(EREADER_DB_NAME, 'manuscript');
   if (ereaderManuscript.length > 0) {
     const manuscriptFolder = zip.folder('ereader-manuscript');
     if (manuscriptFolder) {
@@ -212,7 +163,9 @@ export async function exportAllData(): Promise<Blob> {
   }
 
   // 4. Export Authors data
-  const authorsData = await exportAuthorsData();
+  const authorsData = await Promise.all(AUTHORS_STORES.map(async storeName => ({
+    storeName, entries: await readBackupStore<{ key: string; value: unknown }>(AUTHORS_DB_NAME, storeName),
+  })));
   if (authorsData.some(s => s.entries.length > 0)) {
     manifest.contents.hasAuthors = true;
     const authorsFolder = zip.folder('authors');
@@ -278,9 +231,11 @@ export function downloadBlob(blob: Blob, filename: string): void {
 // ============================================
 
 export async function exportAndDownload(): Promise<void> {
+  const revision = backupRevision();
   const blob = await exportAllData();
   const date = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
   downloadBlob(blob, `everythingebooks_backup_${date}.zip`);
+  recordZip(revision, new Date().toISOString());
 }
 
 // ============================================
@@ -322,7 +277,9 @@ async function validateBackupZip(zip: JSZip): Promise<boolean> {
 
 // Clear localStorage
 function clearLocalStorage(): void {
-  localStorage.clear();
+  for (const key of Object.keys(localStorage)) {
+    if (!isBackupKey(key)) localStorage.removeItem(key);
+  }
 }
 
 // Clear E-Reader IndexedDB
@@ -380,7 +337,7 @@ async function importLocalStorage(zip: JSZip): Promise<void> {
     const content = await file.async('string');
     const data = JSON.parse(content) as Record<string, string>;
     for (const [key, value] of Object.entries(data)) {
-      localStorage.setItem(key, value);
+      if (!isBackupKey(key)) localStorage.setItem(key, value);
     }
   } catch (err) {
     console.error('Failed to import localStorage:', err);
@@ -576,7 +533,8 @@ export async function pickAndValidateBackup(): Promise<{ zip: JSZip; file: File 
 // Perform the actual import (call after user confirms)
 export async function performImport(zip: JSZip): Promise<{ success: boolean; error?: string }> {
   try {
-    // Clear existing data
+    // Restoring replaces this browser's data; it does not export a new ZIP.
+    markBackupChanged();
     clearLocalStorage();
     await clearEreaderDB();
     await clearAuthorsDB();
