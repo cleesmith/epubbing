@@ -49,6 +49,23 @@ export function recordZip(revision: string, date: string): void {
   notify();
 }
 
+// The ZIP contains a clean checkpoint for the content it backs up.
+export function backupStateForZip(revision: string, date: string): Record<string, string> {
+  return { [CHANGE]: revision, [EXPORTED]: revision, [DATE]: date };
+}
+
+export function restoreZip(date: unknown): void {
+  if (typeof date === 'string' && Number.isFinite(Date.parse(date))) {
+    localStorage.setItem(DATE, date);
+  } else {
+    localStorage.removeItem(DATE);
+  }
+  localStorage.removeItem(CHANGE);
+  localStorage.removeItem(EXPORTED);
+  sessionRevision = '';
+  notify();
+}
+
 export type BackupReminder = { status: 'green' | 'yellow' | 'red'; tooltip: string; dateLabel: string };
 
 export function getBackupReminder(pending = false, now = new Date()): BackupReminder {

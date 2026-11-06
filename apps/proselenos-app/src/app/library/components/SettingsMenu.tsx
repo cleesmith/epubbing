@@ -1,3 +1,4 @@
+import { resetLibraryAndAuthors } from '@/services/dataExportService';
 import clsx from 'clsx';
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -167,30 +168,9 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ setIsDropdownOpen }) => {
     setIsDropdownOpen?.(false);
 
     try {
-      // 1. Clear local storage
-      localStorage.clear();
-      sessionStorage.clear();
-
-      // 2. Delete IndexedDB databases and wait for completion
-      const deleteDB = (name: string) => new Promise<void>((resolve) => {
-        const request = indexedDB.deleteDatabase(name);
-        request.onsuccess = () => {
-          console.log(`IndexedDB '${name}' deleted`);
-          resolve();
-        };
-        request.onerror = () => {
-          console.error(`Failed to delete IndexedDB '${name}'`);
-          resolve(); // Continue anyway
-        };
-        request.onblocked = () => {
-          console.warn(`IndexedDB '${name}' delete blocked`);
-          resolve(); // Continue anyway
-        };
+      await resetLibraryAndAuthors(() => {
+        showAlert('Close the other EverythingEbooks tabs so the reset can finish.', 'info', 'Reset Library & Authors', isDark);
       });
-
-      // Delete the ebook storage database and Authors database
-      await deleteDB('AppFileSystem');
-      await deleteDB('ProselenosLocal');
 
       // 3. Reload the page
       window.location.reload();

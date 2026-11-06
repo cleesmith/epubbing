@@ -83,7 +83,7 @@ export interface AppService {
 
   getDefaultViewSettings(): ViewSettings;
   loadSettings(): Promise<SystemSettings>;
-  saveSettings(settings: SystemSettings): Promise<void>;
+  saveSettings(settings: SystemSettings, trackBackup?: boolean): Promise<void>;
   importFont(file?: string | File): Promise<CustomFontInfo | null>;
   deleteFont(font: CustomFont): Promise<void>;
   importImage(file?: string | File): Promise<CustomTextureInfo | null>;
@@ -105,7 +105,7 @@ export interface AppService {
   saveBookConfig(book: Book, config: BookConfig, settings?: SystemSettings): Promise<void>;
   loadBookContent(book: Book, settings: SystemSettings): Promise<BookContent>;
   loadLibraryBooks(): Promise<Book[]>;
-  saveLibraryBooks(books: Book[]): Promise<void>;
+  saveLibraryBooks(books: Book[], trackBackup?: boolean): Promise<void>;
   getCoverImageUrl(book: Book): string;
   getCoverImageBlobUrl(book: Book): Promise<string>;
   generateCoverImageUrl(book: Book): Promise<string>;

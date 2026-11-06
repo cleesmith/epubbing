@@ -23,7 +23,7 @@ export const useBookCoverAutoSave = (bookKey: string) => {
               await appService.copyFile(coverPath, 'last-book-cover.png', 'Images');
               settings.savedBookCoverForLockScreen = book.hash;
               useSettingsStore.getState().setSettings(settings);
-              useSettingsStore.getState().saveSettings(envConfig, settings);
+              useSettingsStore.getState().saveSettings(envConfig, settings, false);
             } catch (error) {
               console.error('Failed to auto-save book cover for lock screen:', error);
             }

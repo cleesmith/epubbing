@@ -588,15 +588,15 @@ export abstract class BaseAppService implements AppService {
     return books;
   }
 
-  async saveLibraryBooks(books: Book[]): Promise<void> {
+  async saveLibraryBooks(books: Book[], trackBackup = true): Promise<void> {
     const libraryBooks = books.filter(book => book.hash !== '__bookseller_temp__').map(({ coverImageUrl, ...rest }) => rest);
     const jsonData = JSON.stringify(libraryBooks, null, 2);
     const libraryFilename = getLibraryFilename();
     const backupFilename = getLibraryBackupFilename();
 
     const saveResults = await Promise.allSettled([
-      this.fs.writeFile(backupFilename, 'Books', jsonData),
-      this.fs.writeFile(libraryFilename, 'Books', jsonData),
+      this.fs.writeFile(backupFilename, 'Books', jsonData, trackBackup),
+      this.fs.writeFile(libraryFilename, 'Books', jsonData, trackBackup),
     ]);
     const backupSuccess = saveResults[0].status === 'fulfilled';
     const mainSuccess = saveResults[1].status === 'fulfilled';

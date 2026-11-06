@@ -62,16 +62,23 @@ async function openIndexedDB(): Promise<IDBDatabase> {
       }
     };
 
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => {
+      const db = request.result;
+      db.onversionchange = () => db.close();
+      resolve(db);
+    };
     request.onerror = () => reject(request.error);
   });
 }
 
-// Reader previews and cache files are generated on demand. User books, book
-// settings, imported fonts and images belong to the ZIP backup.
+// Track ebooks and global settings. Per-book reading configuration and
+// generated previews are excluded from the reminder.
 function isBackupFile(path: string, base: BaseDir): boolean {
-  return (base === 'Books' && !path.startsWith('__bookseller_temp__/') && path !== getLibraryBackupFilename())
-    || base === 'Fonts' || base === 'Images' || base === 'Settings';
+  return (base === 'Books'
+    && !path.startsWith('__bookseller_temp__/')
+    && !path.endsWith('/config.json')
+    && path !== getLibraryBackupFilename())
+    || base === 'Settings';
 }
 
 const indexedDBFileSystem: FileSystem = {

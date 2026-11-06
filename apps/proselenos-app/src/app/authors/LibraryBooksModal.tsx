@@ -13,6 +13,8 @@ interface LibraryBooksModalProps {
   onSelectBook: (book: Book) => void;
   theme: ThemeConfig;
   isDarkMode: boolean;
+  title?: string;
+  emptyHint?: string;
 }
 
 export default function LibraryBooksModal({
@@ -21,6 +23,8 @@ export default function LibraryBooksModal({
   onSelectBook,
   theme,
   isDarkMode,
+  title = 'Load from Library',
+  emptyHint = 'Add books to your Library first, then you can load them here for editing.',
 }: LibraryBooksModalProps) {
   const [books, setBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,6 +79,7 @@ export default function LibraryBooksModal({
         zIndex: 2000,
       }}
       onClick={onClose}
+      onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); onClose(); } }}
     >
       <div
         style={{
@@ -99,7 +104,7 @@ export default function LibraryBooksModal({
           marginBottom: '16px',
         }}>
           <h3 style={{ margin: 0, color: theme.text, fontSize: '16px' }}>
-            Load from Library
+            {title}
           </h3>
           <button
             onClick={onClose}
@@ -150,7 +155,7 @@ export default function LibraryBooksModal({
               No EPUB books in your Library.
               <br />
               <span style={{ fontSize: '12px' }}>
-                Add books to your Library first, then you can load them here for editing.
+                {emptyHint}
               </span>
             </div>
           ) : (

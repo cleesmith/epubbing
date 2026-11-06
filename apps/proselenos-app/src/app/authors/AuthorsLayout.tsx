@@ -1546,7 +1546,11 @@ export default function AuthorsLayout({
   // Preview and check a selected cover before the author saves it.
   const handleCoverClick = () => setShowCoverUpload(true);
   const handleSaveCover = async (file: File) => {
-    await saveManuscriptCover(file, 'cover.jpg');
+    const extensions: Record<string, string> = {
+      'image/png': 'png', 'image/gif': 'gif', 'image/webp': 'webp',
+      'image/svg+xml': 'svg', 'image/avif': 'avif', 'image/bmp': 'bmp',
+    };
+    await saveManuscriptCover(file, `cover.${extensions[file.type] || 'jpg'}`);
     setEpub(current => current ? { ...current, coverImage: file } : current);
   };
 
@@ -1873,6 +1877,7 @@ export default function AuthorsLayout({
     >
       {showCoverUpload && <EpubCoverUploadModal
         theme={theme}
+        isDarkMode={isDarkMode}
         currentCover={epub?.coverImage ?? null}
         onSave={handleSaveCover}
         onClose={() => setShowCoverUpload(false)}

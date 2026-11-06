@@ -70,7 +70,7 @@ export default function StorageModal({
 
       // 2. Confirm with user
       const confirmed = await showConfirm(
-        'This will replace ALL existing data with the backup. Make sure you have exported your current data if you want to keep it.',
+        'This will reset Library & Authors, then restore your backup. Export your current data first if you want to keep it.',
         isDarkMode,
         'Import Backup?',
         'Yes, Import',
@@ -82,7 +82,9 @@ export default function StorageModal({
       }
 
       // 3. Perform the import
-      const importResult = await performImport(result.zip);
+      const importResult = await performImport(result.zip, () => {
+        showAlert('Close the other EverythingEbooks tabs so the reset can finish.', 'info');
+      });
       if (!importResult.success) {
         showAlert(importResult.error || 'Import failed', 'error', undefined, isDarkMode);
         setIsImporting(false);

@@ -12,7 +12,7 @@ interface SettingsState {
   isSettingsGlobal: boolean;
   fontPanelView: FontPanelView;
   setSettings: (settings: SystemSettings) => void;
-  saveSettings: (envConfig: EnvConfigType, settings: SystemSettings) => void;
+  saveSettings: (envConfig: EnvConfigType, settings: SystemSettings, trackBackup?: boolean) => void;
   setSettingsDialogOpen: (open: boolean) => void;
   setSettingsGlobal: (global: boolean) => void;
   setFontPanelView: (view: FontPanelView) => void;
@@ -26,9 +26,9 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   isSettingsGlobal: true,
   fontPanelView: 'main-fonts',
   setSettings: (settings) => set({ settings }),
-  saveSettings: async (envConfig: EnvConfigType, settings: SystemSettings) => {
+  saveSettings: async (envConfig: EnvConfigType, settings: SystemSettings, trackBackup = true) => {
     const appService = await envConfig.getAppService();
-    await appService.saveSettings(settings);
+    await appService.saveSettings(settings, trackBackup);
   },
   setSettingsDialogOpen: (open) => set({ isSettingsDialogOpen: open }),
   setSettingsGlobal: (global) => set({ isSettingsGlobal: global }),

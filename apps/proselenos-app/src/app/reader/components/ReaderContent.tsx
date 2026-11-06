@@ -83,7 +83,7 @@ const ReaderContent: React.FC<{ ids?: string; settings: SystemSettings; onClose?
     if (bookKeys && bookKeys.length > 0) {
       const settings = useSettingsStore.getState().settings;
       settings.lastOpenBooks = bookKeys.map((key) => key.split('-')[0]!);
-      saveSettings(envConfig, settings);
+      saveSettings(envConfig, settings, false);
     }
 
     let unlistenOnCloseWindow: Promise<UnlistenFn>;
@@ -129,14 +129,14 @@ const ReaderContent: React.FC<{ ids?: string; settings: SystemSettings; onClose?
   };
 
   const saveSettingsAndGoToLibrary = () => {
-    saveSettings(envConfig, settings);
+    saveSettings(envConfig, settings, false);
     navigateToLibrary(router);
   };
 
   const handleCloseBooks = throttle(async () => {
     const settings = useSettingsStore.getState().settings;
     await Promise.all(bookKeys.map((key) => saveConfigAndCloseBook(key)));
-    await saveSettings(envConfig, settings);
+    await saveSettings(envConfig, settings, false);
   }, 200);
 
   const handleCloseBooksToLibrary = () => {
