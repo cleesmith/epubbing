@@ -2,7 +2,7 @@
 
 'use client';
 
-import { saveBackupPreference } from '@/services/backupReminder';
+import { useThemeStore } from '@/store/themeStore';
 import { useState, useEffect, useLayoutEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { getTheme } from '../shared/theme';
@@ -24,17 +24,13 @@ import Swal from 'sweetalert2';
 import { showAlert } from '../shared/alerts';
 
 export default function AuthorsClient() {
-  // Theme state
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    if (typeof window !== 'undefined' && localStorage) {
-      return localStorage.getItem('authorsDarkMode') !== 'false';
-    }
-    return true;
-  });
+  // Library and Authors use one saved light/dark preference.
+  const isDarkMode = useThemeStore(state => state.isDarkMode);
+  const setThemeMode = useThemeStore(state => state.setThemeMode);
 
   // Plate's toolbar and its body-portaled menus use the DaisyUI palette.
-  // Apply Authors' independent preference before paint, without changing the
-  // saved Library/Reader theme. A body scope also survives root-theme updates.
+  // Apply the shared light/dark choice before paint. Keep the editor's default
+  // palette on the body so its toolbar and portaled menus match the editor.
   useLayoutEffect(() => {
     const body = document.body;
     const previousTheme = body.getAttribute('data-theme');
@@ -213,11 +209,7 @@ export default function AuthorsClient() {
 
   // Toggle theme
   const toggleTheme = () => {
-    const newDarkMode = !isDarkMode;
-    setIsDarkMode(newDarkMode);
-    if (typeof window !== 'undefined' && localStorage) {
-      saveBackupPreference('authorsDarkMode', String(newDarkMode));
-    }
+    setThemeMode(isDarkMode ? 'light' : 'dark');
   };
 
   // Open cover modal (loads title/author from working copy)

@@ -390,7 +390,7 @@ const BookDetailModal: React.FC<BookDetailModalProps> = ({
       />
 
       <PdfOptionsDialog
-        key={book.hash}
+        key={`pdf-options:${book.hash}`}
         isOpen={pdfOptionsFor !== null}
         formatLabel={pdfOptionsFor === '5x8' ? '5x8 inch PDF (KDP)' : '6x9 inch PDF (KDP)'}
         onCancel={() => setPdfOptionsFor(null)}
@@ -416,7 +416,7 @@ const BookDetailModal: React.FC<BookDetailModalProps> = ({
       />
 
       <PaperbackCoverModal
-        key={book.hash}
+        key={`paperback-cover:${book.hash}`}
         book={book}
         bookMeta={bookMeta}
         isOpen={showPaperbackCover}

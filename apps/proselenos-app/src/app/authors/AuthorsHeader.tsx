@@ -5,13 +5,36 @@
 import { appPath } from '@/utils/app-path';
 
 import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
-import { PiFolderOpen, PiNotePencil, PiDatabase, PiInfo, PiFileDoc, PiFileText, PiImage, PiArrowRight } from 'react-icons/pi';
+import { PiFolderOpen, PiNotePencil, PiInfo, PiFileDoc, PiFileText, PiImage, PiArrowRight } from 'react-icons/pi';
 import { GiBoxUnpacking } from 'react-icons/gi';
 import { ThemeConfig } from '../shared/theme';
 import { showConfirm } from '../shared/alerts';
 import StyledSmallButton from '@/components/StyledSmallButton';
 import TrafficLightIcon from '@/components/TrafficLightIcon';
+
+// Check without changing the other tab. Exit leaves Library alone.
+function isLibraryTab(tab: Window | null): tab is Window {
+  if (!tab || tab.closed || tab === window) return false;
+  try {
+    const libraryUrl = new URL(appPath('/library/'), window.location.href);
+    return tab.location.origin === libraryUrl.origin &&
+      tab.location.pathname.replace(/\/$/, '') === libraryUrl.pathname.replace(/\/$/, '');
+  } catch {
+    // A tab that has moved to another origin cannot be inspected or reused.
+    return false;
+  }
+}
+
+function reloadLibraryTab(tab: Window | null): boolean {
+  if (!isLibraryTab(tab)) return false;
+  try {
+    tab.location.reload();
+    tab.focus();
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 interface AuthorsHeaderProps {
   theme: ThemeConfig;
@@ -62,11 +85,11 @@ export default function AuthorsHeader({
   onXrayClick,
   hasUnsavedChanges = false,
 }: AuthorsHeaderProps) {
-  const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const [openDropdownOpen, setOpenDropdownOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const openDropdownRef = useRef<HTMLDivElement>(null);
+  const libraryWindowRef = useRef<Window | null>(null);
 
   // Close menus when clicking outside
   useEffect(() => {
@@ -96,24 +119,23 @@ export default function AuthorsHeader({
       );
       if (!confirmed) return;
     }
-    if (window.opener && !window.opener.closed) {
+    if (isLibraryTab(window.opener) || isLibraryTab(libraryWindowRef.current)) {
+      // The Library Authors button opens this tab with window.open, allowing
+      // it to close itself. Do not focus, reload, or replace the Library tab.
       window.close();
     } else {
-      router.push('/library');
+      // Use the same cached /library/ document as Reload Page. Do not restore
+      // a previously visited Library through the client router's page state.
+      window.location.assign(appPath('/library/'));
     }
   };
 
-  // Track Library window that Authors opens (so we can focus it later)
-  const libraryWindowRef = useRef<Window | null>(null);
-
   const handleLibraryClick = () => {
-    // If we have a reference to an open Library tab, focus it
-    if (libraryWindowRef.current && !libraryWindowRef.current.closed) {
-      libraryWindowRef.current.focus();
-    } else {
-      // Open new Library tab and save reference (Authors can control tabs it opens)
-      libraryWindowRef.current = window.open(appPath('/library/'), '_blank');
-    }
+    if (reloadLibraryTab(window.opener)) return;
+    if (reloadLibraryTab(libraryWindowRef.current)) return;
+    // Opening a new document also reads the saved Library. Keep the normal URL
+    // (no cache-busting query) so EE's existing offline cache can serve it.
+    libraryWindowRef.current = window.open(appPath('/library/'), '_blank');
   };
 
   return (
@@ -486,25 +508,6 @@ export default function AuthorsHeader({
             >
               <GiBoxUnpacking size={16} />
               X-Ray
-            </button>
-            <button
-              onClick={() => { onStorageClick(); setMenuOpen(false); }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                width: '100%',
-                padding: '8px 12px',
-                background: 'rgba(100, 116, 139, 0.2)',
-                border: 'none',
-                textAlign: 'left',
-                cursor: 'pointer',
-                color: theme.text,
-                fontSize: '13px',
-              }}
-            >
-              <PiDatabase size={16} />
-              Storage
             </button>
             <button
               onClick={() => { onAboutClick(); setMenuOpen(false); }}

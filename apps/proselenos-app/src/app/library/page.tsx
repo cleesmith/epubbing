@@ -33,6 +33,7 @@ import { AboutWindow } from '@/components/AboutWindow';
 import { StorageWindow, setStorageDialogVisible } from '@/components/StorageWindow';
 import { BookDetailModal } from '@/components/metadata';
 import { useDragDropImport } from './hooks/useDragDropImport';
+import { useLibraryRefresh } from './hooks/useLibraryRefresh';
 import { Toast } from '@/components/Toast';
 import WelcomeModal from '@/components/WelcomeModal';
 import { getTheme } from '@/app/shared/theme';
@@ -54,6 +55,11 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
   const router = useRouter();
   const { envConfig, appService } = useEnv();
   const {
+    ready: libraryLoaded,
+    refresh: handleRefreshLibrary,
+    cancel: cancelLibraryRefresh,
+  } = useLibraryRefresh(envConfig);
+  const {
     library: libraryBooks,
     isSyncing,
     syncProgress,
@@ -68,7 +74,6 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
   const { settings, setSettings, saveSettings } = useSettingsStore();
   const { isSettingsDialogOpen, setSettingsDialogOpen } = useSettingsStore();
   const [loading, setLoading] = useState(false);
-  const [libraryLoaded, setLibraryLoaded] = useState(false);
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [isSelectAll, setIsSelectAll] = useState(false);
   const [isSelectNone, setIsSelectNone] = useState(false);
@@ -124,24 +129,6 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
       window.name = '';
     }
   }, []);
-
-  const handleRefreshLibrary = useCallback(async () => {
-    const appService = await envConfig.getAppService();
-    const settings = await appService.loadSettings();
-    const library = await appService.loadLibraryBooks();
-    setSettings(settings);
-    setLibrary(library);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [envConfig, appService]);
-
-  // Listen for Authors tab sending a new ebook
-  useEffect(() => {
-    const channel = new BroadcastChannel('everythingebooks-library');
-    channel.onmessage = () => {
-      handleRefreshLibrary();
-    };
-    return () => channel.close();
-  }, [handleRefreshLibrary]);
 
   // Prefetch other routes for offline support
   useEffect(() => {
@@ -249,25 +236,18 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
   useEffect(() => {
     if (isInitiating.current) return;
     isInitiating.current = true;
+    let active = true;
 
     const loadingTimeout = setTimeout(() => setLoading(true), 300);
     const initLibrary = async () => {
-      const appService = await envConfig.getAppService();
-      const settings = await appService.loadSettings();
-      setSettings(settings);
-
-      // Reuse the library from the store when we return from the reader
-      const library = libraryBooks.length > 0 ? libraryBooks : await appService.loadLibraryBooks();
+      const snapshot = await handleRefreshLibrary();
+      if (!active || !snapshot) return;
+      const { appService, settings, library } = snapshot;
       let opened = false;
       opened = await handleOpenWithBooks(appService, library);
-      if (!opened && settings.openLastBooks) {
+      if (active && !opened && settings.openLastBooks) {
         opened = await handleOpenLastBooks(appService, settings.lastOpenBooks, library);
       }
-
-      setLibrary(library);
-      setLibraryLoaded(true);
-      if (loadingTimeout) clearTimeout(loadingTimeout);
-      setLoading(false);
     };
 
     const handleOpenWithBooks = async (appService: AppService, library: Book[]) => {
@@ -279,8 +259,16 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
       return false;
     };
 
-    initLibrary();
+    void initLibrary()
+      .catch(error => console.error('Could not initialize Library:', error))
+      .finally(() => {
+        clearTimeout(loadingTimeout);
+        if (active) setLoading(false);
+      });
     return () => {
+      active = false;
+      clearTimeout(loadingTimeout);
+      cancelLibraryRefresh();
       isInitiating.current = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -498,7 +486,7 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
     return <div className={clsx('h-[100vh]', !appService?.isLinuxApp && 'bg-base-200')} />;
   }
 
-  const showBookshelf = libraryLoaded || libraryBooks.length > 0;
+  const showBookshelf = libraryLoaded;
 
   return (
     <div

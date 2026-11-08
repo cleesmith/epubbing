@@ -155,7 +155,7 @@ export const StorageWindow = () => {
     <Dialog
       id='storage_window'
       isOpen={isOpen}
-      title={_('Storage')}
+      title={_('Storage: Export & Import')}
       onClose={handleClose}
       boxClassName='sm:!w-[400px] sm:!max-w-screen-sm sm:h-auto'
     >

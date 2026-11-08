@@ -8,12 +8,12 @@ import { IoMdCloseCircle } from 'react-icons/io';
 
 import { useEnv } from '@/context/EnvContext';
 import { useThemeStore } from '@/store/themeStore';
-import { showAlert } from '@/app/shared/alerts';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useLibraryStore } from '@/store/libraryStore';
 import { useResponsiveSize } from '@/hooks/useResponsiveSize';
 import { useTrafficLightStore } from '@/store/trafficLightStore';
 import { navigateToLibrary } from '@/utils/nav';
+import { appPath } from '@/utils/app-path';
 import { debounce } from '@/utils/debounce';
 import useShortcuts from '@/hooks/useShortcuts';
 import Dropdown from '@/components/Dropdown';
@@ -48,7 +48,7 @@ const LibraryHeader: React.FC<LibraryHeaderProps> = ({
   const router = useRouter();
   const searchParams = useSearchParams();
   const { appService } = useEnv();
-  const { systemUIVisible, statusBarHeight, themeMode } = useThemeStore();
+  const { systemUIVisible, statusBarHeight, themeMode, isDarkMode, setThemeMode } = useThemeStore();
   const { currentBookshelf } = useLibraryStore();
   const {
     isTrafficLightVisible,
@@ -61,6 +61,7 @@ const LibraryHeader: React.FC<LibraryHeaderProps> = ({
   const [localSearchQuery, setLocalSearchQuery] = useState(searchQuery);
 
   const headerRef = useRef<HTMLDivElement>(null);
+  const authorsWindowRef = useRef<Window | null>(null);
   const iconSize18 = useResponsiveSize(18);
   const iconSize20 = useResponsiveSize(20);
   const { safeAreaInsets: insets } = useThemeStore();
@@ -89,14 +90,25 @@ const LibraryHeader: React.FC<LibraryHeaderProps> = ({
   };
 
   const switchToAuthorsMode = () => {
-    // If Authors tab that opened this Library is still open, just show message
-    if (window.opener && !window.opener.closed) {
-      const isDark = themeMode === 'dark' || (themeMode === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-      showAlert('Authors is already open in another tab', 'info', undefined, isDark);
-      return;
+    const authorsUrl = new URL(appPath('/authors/'), window.location.href);
+    const authorsTab = authorsWindowRef.current;
+    try {
+      if (authorsTab && !authorsTab.closed &&
+          authorsTab.location.origin === authorsUrl.origin &&
+          authorsTab.location.pathname.replace(/\/$/, '') === authorsUrl.pathname.replace(/\/$/, '')) {
+        // Bring back the writing tab without reloading unsaved writing.
+        authorsTab.focus();
+        return;
+      }
+    } catch {
+      // The previous tab may have navigated to another website.
     }
-    // Otherwise navigate to Authors in this tab
-    router.push('/authors');
+    // A script-opened Authors tab can close itself when Exit is clicked.
+    authorsWindowRef.current = window.open(authorsUrl.href, '_blank');
+    if (!authorsWindowRef.current) {
+      // If new tabs are blocked, the button still opens Authors.
+      window.location.assign(authorsUrl.href);
+    }
   };
 
   useEffect(() => {
@@ -136,6 +148,15 @@ const LibraryHeader: React.FC<LibraryHeaderProps> = ({
     >
       <div className='flex w-full items-center justify-between space-x-6 sm:space-x-12'>
         <div className='exclude-title-bar-mousedown relative flex w-full items-center pl-4'>
+          <button
+            onClick={() => setThemeMode(isDarkMode ? 'light' : 'dark')}
+            aria-label={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            className='mr-4 flex h-6 w-6 shrink-0 items-center justify-center'
+            style={{ background: 'none', border: 'none', fontSize: '18px', cursor: 'pointer', padding: '4px' }}
+          >
+            {isDarkMode ? '☀️' : '🌙'}
+          </button>
           {isInGroupView && (
             <button
               onClick={() => {
@@ -157,6 +178,15 @@ const LibraryHeader: React.FC<LibraryHeaderProps> = ({
             <PiArrowClockwise className='h-5 w-5' />
           </button>
           <button
+            onClick={switchToAuthorsMode}
+            aria-label={_('Authors')}
+            title={_('Write Ebook')}
+            className='mr-4 inline-flex h-8 shrink-0 items-center gap-1 rounded-full border border-blue-500/40 bg-blue-500/10 px-3 text-blue-500 hover:bg-blue-500/20 hover:text-blue-400'
+          >
+            <PiPencil className='h-5 w-5' />
+            <span className='text-sm'>Authors</span>
+          </button>
+          <button
             onClick={onImportBooks}
             aria-label={_('Add Ebook')}
             title={_('Add Ebook')}
@@ -165,15 +195,6 @@ const LibraryHeader: React.FC<LibraryHeaderProps> = ({
             <PiBooks className='h-5 w-5' />
             <span className='text-lg'>+</span>
             <span className='text-sm'>Ebook</span>
-          </button>
-          <button
-            onClick={switchToAuthorsMode}
-            aria-label={_('Authors')}
-            title={_('Write Ebook')}
-            className='mr-2 flex items-center gap-0 text-gray-500 hover:text-gray-400'
-          >
-            <PiPencil className='h-5 w-5' />
-            <span className='text-sm'>Authors</span>
           </button>
           {onStorageClick && (
             <div className='mr-4 flex items-center'>

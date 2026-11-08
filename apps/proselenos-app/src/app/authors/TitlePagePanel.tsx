@@ -19,7 +19,7 @@ interface TitlePagePanelProps {
   isDarkMode: boolean;
   onToggleSidebar: () => void;
   initialMetadata: BookMetadata;
-  onSave: (metadata: BookMetadata) => void;
+  onSave: (metadata: BookMetadata) => Promise<void>;
 }
 
 export default function TitlePagePanel({
@@ -33,22 +33,38 @@ export default function TitlePagePanel({
   const mutedText = isDarkMode ? '#888' : '#666';
 
   const [metadata, setMetadata] = useState<BookMetadata>(initialMetadata);
-  const [hasChanges, setHasChanges] = useState(false);
+  const [savedMetadata, setSavedMetadata] = useState<BookMetadata>(initialMetadata);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const { title, subtitle, author, publisher } = initialMetadata;
+  const hasChanges = (Object.keys(metadata) as Array<keyof BookMetadata>)
+    .some(field => metadata[field] !== savedMetadata[field]);
 
   // Update when initial metadata changes (section switch)
   useEffect(() => {
-    setMetadata(initialMetadata);
-    setHasChanges(false);
-  }, [initialMetadata]);
+    const saved = { title, subtitle, author, publisher };
+    setMetadata(saved);
+    setSavedMetadata(saved);
+    setSaveError('');
+  }, [title, subtitle, author, publisher]);
 
   const handleChange = (field: keyof BookMetadata, value: string) => {
     setMetadata((prev) => ({ ...prev, [field]: value }));
-    setHasChanges(true);
+    setSaveError('');
   };
 
-  const handleSave = () => {
-    onSave(metadata);
-    setHasChanges(false);
+  const handleSave = async () => {
+    if (isSaving || !hasChanges) return;
+    setIsSaving(true);
+    setSaveError('');
+    try {
+      await onSave(metadata);
+      setSavedMetadata(metadata);
+    } catch {
+      setSaveError('Could not save the title page. Your edits are still here; please try Save again.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -78,8 +94,14 @@ export default function TitlePagePanel({
               <line x1="9" y1="3" x2="9" y2="21" />
             </svg>
           </StyledSmallButton>
-          <StyledSmallButton theme={theme} onClick={handleSave} disabled={!hasChanges}>
-            {hasChanges ? 'Save' : 'Saved'}
+          <StyledSmallButton
+            theme={theme}
+            onClick={handleSave}
+            disabled={!hasChanges || isSaving}
+            title={hasChanges ? 'Unsaved changes - click to save' : 'Title page saved'}
+            styleOverrides={hasChanges ? { backgroundColor: '#dc3545', color: '#fff' } : {}}
+          >
+            {isSaving ? 'Saving…' : hasChanges ? 'Save' : 'Saved'}
           </StyledSmallButton>
           <h2
             style={{
@@ -102,6 +124,7 @@ export default function TitlePagePanel({
           padding: '16px',
         }}
       >
+        {saveError && <p role="alert" style={{ color: '#dc3545', marginBottom: '12px' }}>{saveError}</p>}
         <div
           style={{
             maxWidth: '600px',
@@ -125,6 +148,7 @@ export default function TitlePagePanel({
             </label>
             <input
               type="text"
+              disabled={isSaving}
               value={metadata.title}
               onChange={(e) => handleChange('title', e.target.value)}
               placeholder="Enter book title..."
@@ -157,6 +181,7 @@ export default function TitlePagePanel({
             </label>
             <input
               type="text"
+              disabled={isSaving}
               value={metadata.subtitle}
               onChange={(e) => handleChange('subtitle', e.target.value)}
               placeholder="Enter subtitle (optional)..."
@@ -192,6 +217,7 @@ export default function TitlePagePanel({
             </label>
             <input
               type="text"
+              disabled={isSaving}
               value={metadata.author}
               onChange={(e) => handleChange('author', e.target.value)}
               placeholder="Enter author name..."
@@ -224,6 +250,7 @@ export default function TitlePagePanel({
             </label>
             <input
               type="text"
+              disabled={isSaving}
               value={metadata.publisher}
               onChange={(e) => handleChange('publisher', e.target.value)}
               placeholder="Enter publisher (optional)..."

@@ -1,11 +1,8 @@
 import { resetLibraryAndAuthors } from '@/services/dataExportService';
 import clsx from 'clsx';
 import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { PiGear, PiPencil, PiBookOpenText, PiTrash, PiArrowClockwise, PiArrowCircleUp, PiDatabase, PiInfo, PiDownloadSimple } from 'react-icons/pi';
-import { PiSun, PiMoon } from 'react-icons/pi';
+import { PiGear, PiTrash, PiArrowCircleUp, PiDatabase, PiInfo, PiDownloadSimple } from 'react-icons/pi';
 import { showConfirm, showAlert } from '@/app/shared/alerts';
-import { TbSunMoon } from 'react-icons/tb';
 
 import { isDesktopAppPlatform } from '@/services/environment';
 import { useEnv } from '@/context/EnvContext';
@@ -31,10 +28,9 @@ interface Permissions {
 }
 
 const SettingsMenu: React.FC<SettingsMenuProps> = ({ setIsDropdownOpen }) => {
-  const router = useRouter();
   const _ = useTranslation();
   const { envConfig, appService } = useEnv();
-  const { themeMode, setThemeMode } = useThemeStore();
+  const { themeMode } = useThemeStore();
   const { settings, setSettingsDialogOpen } = useSettingsStore();
     const [isAutoCheckUpdates, setIsAutoCheckUpdates] = useState(settings.autoCheckUpdates);
   const [isAlwaysOnTop, setIsAlwaysOnTop] = useState(settings.alwaysOnTop);
@@ -79,11 +75,6 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ setIsDropdownOpen }) => {
   const showStorageInfo = () => {
     setStorageDialogVisible(true);
     setIsDropdownOpen?.(false);
-  };
-
-  const cycleThemeMode = () => {
-    const nextMode = themeMode === 'auto' ? 'light' : themeMode === 'light' ? 'dark' : 'auto';
-    setThemeMode(nextMode);
   };
 
   const handleFullScreen = () => {
@@ -138,20 +129,6 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ setIsDropdownOpen }) => {
     setSettingsDialogOpen(true);
   };
 
-  const switchToAuthorsMode = () => {
-    setIsDropdownOpen?.(false);
-
-    // If Authors tab that opened this Library is still open, just show message
-    if (window.opener && !window.opener.closed) {
-      const isDark = themeMode === 'dark' || (themeMode === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-      showAlert('Authors is already open in another tab', 'info', undefined, isDark);
-      return;
-    }
-
-    // Otherwise navigate to Authors in this tab
-    router.push('/authors');
-  };
-
   const handleResetLibrary = async () => {
     const isDark = themeMode === 'dark' || (themeMode === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
 
@@ -202,13 +179,6 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ setIsDropdownOpen }) => {
     saveSysSettings(envConfig, 'alwaysInForeground', requestAlwaysInForeground);
     setAlwaysInForeground(requestAlwaysInForeground);
   };
-
-  const themeModeLabel =
-    themeMode === 'dark'
-      ? _('Dark Mode')
-      : themeMode === 'light'
-        ? _('Light Mode')
-        : _('Auto Mode');
 
   return (
     <Menu
@@ -264,35 +234,8 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ setIsDropdownOpen }) => {
           onClick={toggleAlwaysInForeground}
         />
       )}
-      <MenuItem
-        label={_('Reload Page')}
-        Icon={PiArrowClockwise}
-        onClick={() => window.location.reload()}
-      />
-      <MenuItem
-        label={themeModeLabel}
-        Icon={themeMode === 'dark' ? PiMoon : themeMode === 'light' ? PiSun : TbSunMoon}
-        onClick={cycleThemeMode}
-      />
       <MenuItem label={_('Settings')} Icon={PiGear} onClick={openSettingsDialog} />
-      <hr aria-hidden='true' className='border-base-200 my-1' />
-      <MenuItem
-        label={_('Reader')}
-        description={_('explore a curated collection of books available for immersive reading')}
-        Icon={PiBookOpenText}
-        buttonClass='bg-emerald-600/20 hover:!bg-emerald-600/30'
-        onClick={() => {
-          setIsDropdownOpen?.(false);
-          window.open('https://reader.everythingebooks.org/', '_blank');
-        }}
-      />
-      <MenuItem
-        label={_('Authors')}
-        description={_('write, edit, and publish your manuscripts as ebooks')}
-        Icon={PiPencil}
-        buttonClass='bg-blue-600/20 hover:!bg-blue-600/30'
-        onClick={switchToAuthorsMode}
-      />
+      <MenuItem label={_('Storage: Export & Import')} Icon={PiDatabase} onClick={showStorageInfo} />
       {appService?.canCustomizeRootDir && (
         <>
           <hr aria-hidden='true' className='border-base-200 my-1' />
@@ -317,7 +260,12 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ setIsDropdownOpen }) => {
         </>
       )}
       <hr aria-hidden='true' className='border-base-200 my-1' />
-      <MenuItem label={_('Storage')} Icon={PiDatabase} onClick={showStorageInfo} />
+      <MenuItem
+        label={`${_('Update App')} - ${RELEASE_HASH}`}
+        description={_('only works when online')}
+        Icon={PiArrowCircleUp}
+        onClick={handleUpdateApp}
+      />
       <MenuItem
         label={_('Prep for offline use')}
         description={_('save application files in this browser')}
@@ -334,12 +282,6 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ setIsDropdownOpen }) => {
         Icon={PiTrash}
         buttonClass='bg-red-900/20 hover:!bg-red-900/30'
         onClick={handleResetLibrary}
-      />
-      <MenuItem
-        label={`${_('Update App')} - ${RELEASE_HASH}`}
-        description={_('only works when online')}
-        Icon={PiArrowCircleUp}
-        onClick={handleUpdateApp}
       />
       <MenuItem label={_('About')} Icon={PiInfo} onClick={showAboutProselenosebooks} />
     </Menu>

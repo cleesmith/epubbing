@@ -165,7 +165,7 @@ export default function StorageModal({
             fontSize: '20px',
             fontWeight: '600'
           }}>
-            Storage
+            Storage: Export & Import
           </h2>
           <StyledSmallButton onClick={onClose} theme={theme}>
             Close

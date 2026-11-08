@@ -11,6 +11,7 @@
 import { markBackupChanged } from './backupReminder';
 import { ElementType } from '@/app/authors/elementTypes';
 import { plateToXhtml, xhtmlToPlainText } from '@/lib/plateXhtml';
+import { createSavedTitlePage, type TitlePageFields } from '@/lib/title-page-fields';
 
 export interface ManuscriptSettings {
   title: string;
@@ -437,6 +438,52 @@ export async function loadWorkingCopyMeta(): Promise<WorkingCopyMeta | null> {
 
 export async function saveWorkingCopyMeta(meta: WorkingCopyMeta): Promise<void> {
   await setValue(STORES.MANUSCRIPT, 'working_copy_meta.json', meta);
+}
+
+/** Save the readable title page and both metadata records together. */
+export async function saveTitlePageMetadata(sectionId: string, fields: TitlePageFields): Promise<{ meta: WorkingCopyMeta; xhtml: string }> {
+  const db = await openDB();
+  try {
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(STORES.MANUSCRIPT, 'readwrite');
+      const store = tx.objectStore(STORES.MANUSCRIPT);
+      const working = store.get('working_copy_meta.json');
+      const manuscript = store.get('meta.json');
+      const section = store.get(`${sectionId}.xhtml`);
+      let result: { meta: WorkingCopyMeta; xhtml: string };
+      let failure: unknown;
+      let changed = false;
+      let remaining = 3;
+      const ready = () => {
+        if (--remaining) return;
+        try {
+          const before = working.result?.value as WorkingCopyMeta | undefined;
+          const full = manuscript.result?.value as ManuscriptMeta | undefined;
+          const xhtml = section.result?.value;
+          if (!before || !full || typeof xhtml !== 'string' || !full.sections.some(s => s.id === sectionId)) {
+            throw new Error('Could not read the saved title page. Your edits are still open; please try again.');
+          }
+          const updated = createSavedTitlePage(fields);
+          result = { meta: { ...before, ...fields }, xhtml: updated };
+          for (const [key, oldValue, value] of [
+            ['working_copy_meta.json', before, result.meta],
+            ['meta.json', full, { ...full, ...fields }],
+            [`${sectionId}.xhtml`, xhtml, updated],
+          ] as const) {
+            if (JSON.stringify(oldValue) !== JSON.stringify(value)) {
+              store.put({ key, value });
+              changed = true;
+            }
+          }
+        } catch (error) { failure = error; tx.abort(); }
+      };
+      working.onsuccess = ready;
+      manuscript.onsuccess = ready;
+      section.onsuccess = ready;
+      tx.oncomplete = () => { if (changed) markBackupChanged(); resolve(result); };
+      tx.onabort = () => reject(failure || tx.error || new Error('Could not save the title page.'));
+    });
+  } finally { db.close(); }
 }
 
 // Patch the current records in one transaction. Image edits and publishing must

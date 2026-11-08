@@ -58,6 +58,7 @@ import {
   replaceTextWorkingCopy,
   deleteSection,
   saveWorkingCopyMeta,
+  saveTitlePageMetadata,
   updateWorkingCopyImageIds,
   loadWorkingCopyMeta,
   clearWorkingCopy,
@@ -1597,39 +1598,15 @@ export default function AuthorsLayout({
 
   // Handle book metadata save from TitlePagePanel
   const handleSaveBookMetadata = async (metadata: BookMetadata) => {
-    if (!epub) return;
-
-    // Update epub state (title/author for sidebar display)
-    setEpub({
-      ...epub,
-      title: metadata.title,
-      author: metadata.author,
-    });
-
-    // Save to IndexedDB and update local bookMeta state
-    const meta = await loadWorkingCopyMeta();
-    if (meta) {
-      const updatedMeta = {
-        ...meta,
-        title: metadata.title,
-        author: metadata.author,
-        subtitle: metadata.subtitle,
-        publisher: metadata.publisher,
-      };
-      await saveWorkingCopyMeta(updatedMeta);
-      setBookMeta(updatedMeta);
-    }
-
-    // Also update meta.json to keep both files in sync
-    // This prevents stale data when loadFullWorkingCopy() reads from meta.json
-    const manuscriptMeta = await loadManuscriptMeta();
-    if (manuscriptMeta) {
-      manuscriptMeta.title = metadata.title;
-      manuscriptMeta.author = metadata.author;
-      manuscriptMeta.subtitle = metadata.subtitle;
-      manuscriptMeta.publisher = metadata.publisher;
-      await saveManuscriptMeta(manuscriptMeta);
-    }
+    if (!epub || !selectedSectionId) throw new Error('No title page is open.');
+    const sectionId = selectedSectionId;
+    const saved = await saveTitlePageMetadata(sectionId, metadata);
+    setBookMeta(saved.meta);
+    setEpub(current => current ? {
+      ...current,
+      ...metadata,
+      sections: current.sections.map(section => section.id === sectionId ? { ...section, xhtml: saved.xhtml } : section),
+    } : current);
   };
 
   // Handle Save button - generate EPUB and add to library

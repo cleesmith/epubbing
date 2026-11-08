@@ -1,6 +1,7 @@
 import type { AppService } from '@/types/system';
 import type { Book } from '@/types/book';
 import { saveWorkingCopyLibraryHash } from './manuscriptStorage';
+import { useLibraryStore } from '@/store/libraryStore';
 
 /** Publish one working copy, replacing only its explicitly linked Library book. */
 export async function publishManuscript(
@@ -49,6 +50,11 @@ export async function publishManuscript(
     }
     throw error;
   }
+
+  // Authors and Library share this in-memory list when navigating in one tab.
+  // Replace the old entry before removing its file, so Plus can only select
+  // the newly saved EPUB when the author returns to Library.
+  useLibraryStore.getState().setLibrary(nextBooks);
 
   // Matching hashes share the same files: never delete them in that case.
   if (previous && previous.hash !== book.hash) {

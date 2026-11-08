@@ -39,7 +39,8 @@ interface ThemeState {
 
 const getInitialThemeMode = (): ThemeMode => {
   if (typeof window !== 'undefined' && localStorage) {
-    return (localStorage.getItem('themeMode') as ThemeMode) || 'auto';
+    const mode = localStorage.getItem('themeMode');
+    return mode === 'dark' || mode === 'light' ? mode : 'auto';
   }
   return 'auto';
 };
@@ -136,17 +137,25 @@ export const useThemeStore = create<ThemeState>((set, get) => {
 });
 
 export const loadDataTheme = () => {
-  if (typeof localStorage === 'undefined' || typeof document === 'undefined') return;
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined' || typeof document === 'undefined') return;
 
-  const themeMode = localStorage.getItem('themeMode');
-  const themeColor = localStorage.getItem('themeColor');
-  if (themeMode && themeColor) {
-    const systemIsDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const isDarkMode = themeMode === 'dark' || (themeMode === 'auto' && systemIsDarkMode);
-    document.documentElement.setAttribute(
-      'data-theme',
-      `${themeColor}-${isDarkMode ? 'dark' : 'light'}`,
-    );
+  const themeMode = getInitialThemeMode();
+  const themeColor = getInitialThemeColor();
+  const systemIsDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const isDarkMode = themeMode === 'dark' || (themeMode === 'auto' && systemIsDarkMode);
+  document.documentElement.setAttribute(
+    'data-theme',
+    `${themeColor}-${isDarkMode ? 'dark' : 'light'}`,
+  );
+  // Read only: receiving another tab's choice must not write it back or mark
+  // the backup reminder as changed again.
+  useThemeStore.setState({ themeMode, themeColor, systemIsDarkMode, isDarkMode, themeCode: getThemeCode() });
+};
+
+const handleStoredThemeChange = (event: StorageEvent) => {
+  if (event.storageArea !== localStorage) return;
+  if (event.key === null || event.key === 'themeMode' || event.key === 'themeColor' || event.key === 'customThemes') {
+    loadDataTheme();
   }
 };
 
@@ -155,9 +164,8 @@ export const initSystemThemeListener = (appService: AppService) => {
 
   const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
   const updateColorTheme = async () => {
-    // No Desktop - use web-only media query
-    const systemIsDarkMode = mediaQuery.matches;
-    useThemeStore.getState().handleSystemThemeChange(systemIsDarkMode);
+    // Also reread the shared setting when returning to an already open tab.
+    loadDataTheme();
   };
 
   const updateWindowTheme = async () => {
@@ -165,6 +173,7 @@ export const initSystemThemeListener = (appService: AppService) => {
   };
 
   mediaQuery?.addEventListener('change', updateColorTheme);
+  window.addEventListener('storage', handleStoredThemeChange);
   document.addEventListener('visibilitychange', updateColorTheme);
   window.addEventListener('resize', updateWindowTheme);
   updateColorTheme();
