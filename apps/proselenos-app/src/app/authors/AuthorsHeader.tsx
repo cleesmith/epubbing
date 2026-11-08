@@ -5,7 +5,7 @@
 import { appPath } from '@/utils/app-path';
 
 import { useState, useEffect, useRef } from 'react';
-import { PiFolderOpen, PiNotePencil, PiInfo, PiFileDoc, PiFileText, PiImage, PiArrowRight } from 'react-icons/pi';
+import { PiInfo, PiFileDoc, PiFileText, PiImage, PiArrowRight } from 'react-icons/pi';
 import { GiBoxUnpacking } from 'react-icons/gi';
 import { ThemeConfig } from '../shared/theme';
 import { showConfirm } from '../shared/alerts';
@@ -42,8 +42,6 @@ interface AuthorsHeaderProps {
   onThemeToggle: () => void;
   onAboutClick: () => void;
   onStorageClick: () => void;
-  onFilesClick: () => void;
-  onEditorClick: () => void;
   onNewClick: () => void;
   onOpenClick: () => void;
   onOpenDocxClick: () => void;
@@ -67,8 +65,6 @@ export default function AuthorsHeader({
   onThemeToggle,
   onAboutClick,
   onStorageClick,
-  onFilesClick,
-  onEditorClick,
   onNewClick,
   onOpenClick,
   onOpenDocxClick,
@@ -375,44 +371,6 @@ export default function AuthorsHeader({
                 minWidth: '100px',
               }}
             >
-            <button
-              onClick={() => { onFilesClick(); setMenuOpen(false); }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                width: '100%',
-                padding: '8px 12px',
-                background: 'rgba(59, 130, 246, 0.2)',
-                border: 'none',
-                textAlign: 'left',
-                cursor: 'pointer',
-                color: theme.text,
-                fontSize: '13px',
-              }}
-            >
-              <PiFolderOpen size={16} />
-              Files
-            </button>
-            <button
-              onClick={() => { onEditorClick(); setMenuOpen(false); }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                width: '100%',
-                padding: '8px 12px',
-                background: 'rgba(168, 85, 247, 0.2)',
-                border: 'none',
-                textAlign: 'left',
-                cursor: 'pointer',
-                color: theme.text,
-                fontSize: '13px',
-              }}
-            >
-              <PiNotePencil size={16} />
-              Editor
-            </button>
             <button
               onClick={() => { onCoverClick?.(); setMenuOpen(false); }}
               style={{

@@ -100,10 +100,8 @@ interface AuthorsLayoutProps {
   onThemeToggle: () => void;
   onAboutClick: () => void;
   onStorageClick: () => void;
-  onFilesClick: () => void;
   sidebarVisible: boolean;
   onToggleSidebar: () => void;
-  onEditorClick: () => void;
   onCoverClick: () => void;
   onXrayClick?: () => void;
   onLoadFromLibraryClick: () => void;
@@ -117,10 +115,8 @@ export default function AuthorsLayout({
   onThemeToggle,
   onAboutClick,
   onStorageClick,
-  onFilesClick,
   sidebarVisible,
   onToggleSidebar,
-  onEditorClick,
   onCoverClick,
   onXrayClick,
   onLoadFromLibraryClick,
@@ -1866,8 +1862,6 @@ export default function AuthorsLayout({
         onThemeToggle={onThemeToggle}
         onAboutClick={onAboutClick}
         onStorageClick={onStorageClick}
-        onFilesClick={onFilesClick}
-        onEditorClick={onEditorClick}
         onNewClick={handleNew}
         onOpenClick={handleOpenEpub}
         onOpenDocxClick={handleOpenDocx}

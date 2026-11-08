@@ -9,8 +9,6 @@ import { getTheme } from '../shared/theme';
 import AuthorsLayout from './AuthorsLayout';
 import AboutModal from '@/components/AboutModal';
 import StorageModal from '@/components/StorageModal';
-import FilesModal from '@/app/projects/FilesModal';
-import EditorModal from '@/app/proselenos/EditorModal';
 import BookInfoModal from './BookInfoModal';
 import LibraryBooksModal from './LibraryBooksModal';
 import CoverModal from './CoverModal';
@@ -65,14 +63,8 @@ export default function AuthorsClient() {
   // Storage modal state
   const [showStorageModal, setShowStorageModal] = useState(false);
 
-  // Files modal state
-  const [showFilesModal, setShowFilesModal] = useState(false);
-
   // Sidebar visibility state
   const [sidebarVisible, setSidebarVisible] = useState(true);
-
-  // Editor modal state
-  const [showEditor, setShowEditor] = useState(false);
 
   // Book Info modal state
   const [showBookInfo, setShowBookInfo] = useState(false);
@@ -233,10 +225,8 @@ export default function AuthorsClient() {
         onThemeToggle={toggleTheme}
         onAboutClick={() => setShowAboutModal(true)}
         onStorageClick={() => setShowStorageModal(true)}
-        onFilesClick={() => setShowFilesModal(true)}
         sidebarVisible={sidebarVisible}
         onToggleSidebar={() => setSidebarVisible(!sidebarVisible)}
-        onEditorClick={() => setShowEditor(true)}
         onCoverClick={handleOpenCoverModal}
         onXrayClick={() => setShowXrayModal(true)}
         onLoadFromLibraryClick={() => setShowLibraryModal(true)}
@@ -260,22 +250,6 @@ export default function AuthorsClient() {
         onClose={() => setShowStorageModal(false)}
         isDarkMode={isDarkMode}
         theme={theme}
-      />
-
-      {/* Files Modal */}
-      <FilesModal
-        isOpen={showFilesModal}
-        onClose={() => setShowFilesModal(false)}
-        isDarkMode={isDarkMode}
-        theme={theme}
-      />
-
-      {/* Editor Modal */}
-      <EditorModal
-        isOpen={showEditor}
-        onClose={() => setShowEditor(false)}
-        theme={theme}
-        isDarkMode={isDarkMode}
       />
 
       {/* Book Info Modal */}
