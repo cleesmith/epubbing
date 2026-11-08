@@ -64,7 +64,7 @@ export default function TrafficLightIcon({ pending = false, isDarkMode, onClick 
           </filter>
         </defs>
         {/* Housing */}
-        <rect x="0" y="0" width="12" height="24" rx="3" ry="3" fill={housing} />
+        <rect x="0.75" y="0.75" width="10.5" height="22.5" rx="3" ry="3" fill={housing} stroke="#000000" strokeWidth="1.5" />
         {/* Red light (top) */}
         <circle
           cx="6"

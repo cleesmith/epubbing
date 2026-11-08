@@ -44,7 +44,6 @@ import ReaderModal from './components/ReaderModal';
 import useShortcuts from '@/hooks/useShortcuts';
 import DropIndicator from '@/components/DropIndicator';
 import SettingsDialog from '@/components/settings/SettingsDialog';
-import Dialog from '@/components/Dialog';
 
 const LibraryPageWithSearchParams = () => {
   const searchParams = useSearchParams();
@@ -78,7 +77,6 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
   const [isSelectAll, setIsSelectAll] = useState(false);
   const [isSelectNone, setIsSelectNone] = useState(false);
   const [showDetailsBook, setShowDetailsBook] = useState<Book | null>(null);
-  const [showImportModal, setShowImportModal] = useState(false);
   const [pendingNavigationBookIds, setPendingNavigationBookIds] = useState<string[] | null>(null);
   const [readerBookHash, setReaderBookHash] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -422,20 +420,24 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
     await updateBook(envConfig, book);
   };
 
-  const handleImportBooks = async () => {
-    setIsSelectMode(false);
-    setShowImportModal(true);
-  };
-
   const handleStorageClick = () => {
     setStorageDialogVisible(true);
   };
 
-  const handleImportFromLocalFile = () => {
-    setShowImportModal(false);
-    console.log('Importing books...');
-    selectFiles({ type: 'books', multiple: true }).then((result) => {
-      if (result.files.length === 0 || result.error) return;
+  const handleImportBooks = () => {
+    setIsSelectMode(false);
+    selectFiles({ type: 'books', accept: '.epub', extensions: ['epub'], multiple: true }).then((result) => {
+      if (result.error) {
+        eventDispatcher.dispatch('toast', { message: result.error, type: 'error' });
+        return;
+      }
+      if (result.files.length === 0) return;
+      // Some system file choosers allow overriding the extension filter.
+      // Reject that selection before importing anything.
+      if (result.files.some((f) => !/\.epub$/i.test(f.file?.name || f.path || ''))) {
+        eventDispatcher.dispatch('toast', { message: _('Please select .epub files only.'), type: 'warning' });
+        return;
+      }
       const groupId = searchParams?.get('group') || '';
       // Set import source for each file (use path for desktop, filename for web)
       const filesWithSource = result.files.map((f) => ({
@@ -562,7 +564,6 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
                 isSelectAll={isSelectAll}
                 isSelectNone={isSelectNone}
                 searchQuery={searchQuery}
-                handleImportBooks={handleImportBooks}
                 handleBookDownload={handleBookDownload}
                 handleBookDelete={handleBookDelete('local')}
                 handleSetSelectMode={handleSetSelectMode}
@@ -582,9 +583,6 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
                     'Welcome to your library. You can import your books here and read them anytime.',
                   )}
                 </p>
-                <button className='btn btn-primary rounded-xl' onClick={handleImportBooks}>
-                  {_('Import Books')}
-                </button>
               </div>
             </div>
           </div>
@@ -602,24 +600,6 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
       <AboutWindow />
       <StorageWindow />
       {isSettingsDialogOpen && <SettingsDialog bookKey={''} />}
-      <Dialog
-        isOpen={showImportModal}
-        onClose={() => setShowImportModal(false)}
-        title={_('Import Ebook')}
-        boxClassName='sm:!h-auto sm:!w-auto sm:!min-w-80'
-      >
-        <div className='flex flex-col gap-4 p-6'>
-          <div className='flex flex-col gap-3'>
-            <h3 className='text-lg font-semibold'>{_('from .epub file')}</h3>
-            <button
-              className='btn btn-sm btn-primary'
-              onClick={handleImportFromLocalFile}
-            >
-              {_('Choose File')}
-            </button>
-          </div>
-        </div>
-      </Dialog>
       {!settings.hideWelcomeModal && (
         <WelcomeModal
           isDarkMode={isDarkMode}

@@ -188,13 +188,12 @@ const LibraryHeader: React.FC<LibraryHeaderProps> = ({
           </button>
           <button
             onClick={onImportBooks}
-            aria-label={_('Add Ebook')}
-            title={_('Add Ebook')}
-            className='mr-4 flex items-center gap-0 text-gray-500 hover:text-gray-400'
+            aria-label={_('Import Ebook')}
+            title={_('Import Ebook')}
+            className='mr-4 inline-flex h-8 shrink-0 items-center gap-1 rounded-full border border-green-600/40 bg-green-600/10 px-3 text-green-600 hover:bg-green-600/20 hover:text-green-500'
           >
             <PiBooks className='h-5 w-5' />
-            <span className='text-lg'>+</span>
-            <span className='text-sm'>Ebook</span>
+            <span className='text-sm'>{_('Import Ebook')}</span>
           </button>
           {onStorageClick && (
             <div className='mr-4 flex items-center'>
