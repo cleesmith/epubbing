@@ -149,6 +149,14 @@ const LibraryHeader: React.FC<LibraryHeaderProps> = ({
       <div className='flex w-full items-center justify-between space-x-6 sm:space-x-12'>
         <div className='exclude-title-bar-mousedown relative flex w-full items-center pl-4'>
           <button
+            onClick={() => window.location.reload()}
+            aria-label={_('Reload Page')}
+            title={_('Reload Page')}
+            className='mr-4 flex h-6 w-6 items-center justify-center text-gray-500 hover:text-gray-400'
+          >
+            <PiArrowClockwise className='h-5 w-5' />
+          </button>
+          <button
             onClick={() => setThemeMode(isDarkMode ? 'light' : 'dark')}
             aria-label={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
             title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
@@ -157,6 +165,14 @@ const LibraryHeader: React.FC<LibraryHeaderProps> = ({
           >
             {isDarkMode ? '☀️' : '🌙'}
           </button>
+          {onStorageClick && (
+            <div className='mr-4 flex items-center'>
+              <TrafficLightIcon
+                isDarkMode={themeMode === 'dark' || (themeMode === 'auto' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches)}
+                onClick={onStorageClick}
+              />
+            </div>
+          )}
           {isInGroupView && (
             <button
               onClick={() => {
@@ -169,14 +185,6 @@ const LibraryHeader: React.FC<LibraryHeaderProps> = ({
               </div>
             </button>
           )}
-          <button
-            onClick={() => window.location.reload()}
-            aria-label={_('Reload Page')}
-            title={_('Reload Page')}
-            className='mr-4 flex h-6 w-6 items-center justify-center text-gray-500 hover:text-gray-400'
-          >
-            <PiArrowClockwise className='h-5 w-5' />
-          </button>
           <button
             onClick={switchToAuthorsMode}
             aria-label={_('Authors')}
@@ -195,14 +203,6 @@ const LibraryHeader: React.FC<LibraryHeaderProps> = ({
             <PiBooks className='h-5 w-5' />
             <span className='text-sm'>{_('Import Ebook')}</span>
           </button>
-          {onStorageClick && (
-            <div className='mr-4 flex items-center'>
-              <TrafficLightIcon
-                isDarkMode={themeMode === 'dark' || (themeMode === 'auto' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches)}
-                onClick={onStorageClick}
-              />
-            </div>
-          )}
           <div className='relative flex h-9 max-w-sm flex-1 items-center sm:h-7'>
             <span className='absolute left-3 text-gray-500'>
               <FaSearch className='h-4 w-4' />
