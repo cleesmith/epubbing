@@ -57,8 +57,8 @@ const topRowItems: HelpItem[] = [
   },
   {
     icon: <GiBoxUnpacking size={ICON_SIZE} className="fill-purple-500" />,
-    name: 'X-ray: View epub structure',
-    description: 'Peek inside your EPUB to see all the files — chapters, images, stylesheets, and more.',
+    name: 'X-ray: view inside Authors epub',
+    description: 'Peek inside your Authors EPUB to see all the files — chapters, images, stylesheets, and more.',
   },
 ];
 

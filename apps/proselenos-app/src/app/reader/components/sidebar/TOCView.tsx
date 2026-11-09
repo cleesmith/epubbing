@@ -150,7 +150,12 @@ const TOCView: React.FC<{
     const parentItems = findParentPath(toc, href)
       .map((item) => getItemIdentifier(item))
       .filter(Boolean);
-    setExpandedItems(new Set(parentItems));
+    // Reveal the current section without closing groups the reader opened.
+    setExpandedItems((previous) => {
+      const next = new Set(previous);
+      parentItems.forEach((id) => next.add(id));
+      return next.size === previous.size ? previous : next;
+    });
   }, []);
 
   const scrollToActiveItem = useCallback(() => {
@@ -197,26 +202,28 @@ const TOCView: React.FC<{
   );
 
   useEffect(() => {
-    if (!progress) return;
+    setExpandedItems(new Set());
+  }, [bookKey, toc]);
+
+  useEffect(() => {
+    if (!activeHref) return;
     if (sideBarBookKey !== bookKey) return;
     if (!isSideBarVisible) return;
 
-    const { sectionHref: currentHref } = progress;
-    if (currentHref) {
-      expandParents(toc, currentHref);
-    }
-  }, [toc, progress, sideBarBookKey, isSideBarVisible, bookKey, expandParents]);
+    expandParents(toc, activeHref);
+  }, [toc, activeHref, sideBarBookKey, isSideBarVisible, bookKey, expandParents]);
 
   useEffect(() => {
     if (hasToggleExpandRef.current) {
       hasToggleExpandRef.current = false;
-      return;
+      return undefined;
     }
     if (flatItems.length > 0) {
-      setTimeout(scrollToActiveItem, appService?.isAndroidApp ? 300 : 100);
+      const timeout = setTimeout(scrollToActiveItem, appService?.isAndroidApp ? 300 : 100);
+      return () => clearTimeout(timeout);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [progress, scrollToActiveItem]);
+    return undefined;
+  }, [activeHref, scrollToActiveItem, flatItems.length, appService?.isAndroidApp]);
 
   return sections && sections.length > 256 ? (
     <div

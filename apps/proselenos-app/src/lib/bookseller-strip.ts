@@ -1,8 +1,8 @@
 /**
- * Strip ALL Visual Narrative, Sticky Image, and SceneCraft traces from an epub zip.
+ * Strip No Matter sections, Visual Narrative, Sticky Image, and SceneCraft data from an epub zip.
  *
  * Produces a clean, plain epub suitable for booksellers (D2D, KDP, etc.)
- * that passes EPUBCheck with zero errors.
+ * while preserving the book's reading content.
  *
  * Used by both BookDetailModal (download bookseller epub) and
  * BookshelfItem (read as bookseller preview).
@@ -12,6 +12,7 @@ import { removePaperbackSetup } from './paperback-epub';
 
 /**
  * Mutates the given JSZip in place, stripping VN/sticky/SceneCraft content.
+ * - No Matter sections and their navigation entries are removed.
  * - Images and audio folders are kept intact.
  * - All XHTML files are cleaned of VN class names and sticky markup.
  * - visual-narrative.css and meta.json are removed from the zip.
@@ -19,6 +20,7 @@ import { removePaperbackSetup } from './paperback-epub';
  */
 export async function stripEpubForBookseller(zip: JSZip): Promise<void> {
   removePaperbackSetup(zip);
+  await removeNoMatterSections(zip);
   // Step 1: Strip XHTML content files
   const xhtmlFiles = Object.keys(zip.files).filter(
     (name) => name.startsWith('OEBPS/') && name.endsWith('.xhtml')
@@ -44,6 +46,98 @@ export async function stripEpubForBookseller(zip: JSZip): Promise<void> {
     opf = opf.replace(/\s*<item\s+id="vn-style"\s+href="css\/visual-narrative\.css"[^>]*\/>/g, '');
     zip.file(opfPath, opf);
   }
+}
+
+/** Remove EE's No Matter sections only from the temporary Booksellers copy. */
+async function removeNoMatterSections(zip: JSZip): Promise<void> {
+  const prefix = 'OEBPS/nomatter/';
+  if (!Object.keys(zip.files).some(name => name.startsWith(prefix))) return;
+
+  // Do not classify by title or linear="no": ordinary books can use both
+  // for published notes. EE puts sections assigned to No Matter in this folder.
+  const isNoMatterLink = (href: string | null, from: string): boolean => {
+    if (!href) return false;
+    try {
+      const url = new URL(href, `https://epub.invalid/${from}`);
+      return url.origin === 'https://epub.invalid' &&
+        decodeURIComponent(url.pathname).slice(1).startsWith(prefix);
+    } catch {
+      return false;
+    }
+  };
+
+  const paths = Object.keys(zip.files).filter(name =>
+    name.startsWith('OEBPS/') && !name.startsWith(prefix) && /\.(xhtml|opf|ncx)$/.test(name)
+  );
+  for (const path of paths) {
+    const content = await zip.file(path)!.async('string');
+    const doc = new DOMParser().parseFromString(content, 'application/xml');
+    if (doc.querySelector('parsererror')) {
+      throw new Error(`Could not prepare the Booksellers EPUB: ${path} contains invalid XML.`);
+    }
+    let changed = false;
+    const remove = (element: Element) => { element.remove(); changed = true; };
+    const onlyNoMatterLinks = (elements: Element[], attribute: string) =>
+      elements.length > 0 && elements.every(element => isNoMatterLink(element.getAttribute(attribute), path));
+
+    if (path.endsWith('.opf')) {
+      const removedIds = new Set<string>();
+      for (const item of Array.from(doc.querySelectorAll('manifest > item'))) {
+        if (!isNoMatterLink(item.getAttribute('href'), path)) continue;
+        const id = item.getAttribute('id');
+        if (id) removedIds.add(id);
+        remove(item);
+      }
+      for (const item of Array.from(doc.querySelectorAll('spine > itemref'))) {
+        if (removedIds.has(item.getAttribute('idref') || '')) remove(item);
+      }
+      for (const reference of Array.from(doc.querySelectorAll('guide > reference'))) {
+        if (isNoMatterLink(reference.getAttribute('href'), path)) remove(reference);
+      }
+      for (const meta of Array.from(doc.querySelectorAll('metadata > meta[refines]'))) {
+        if (removedIds.has((meta.getAttribute('refines') || '').replace(/^#/, ''))) remove(meta);
+      }
+    } else if (path.endsWith('.ncx')) {
+      for (const item of Array.from(doc.querySelectorAll('navPoint, pageTarget, navTarget'))) {
+        if (item.isConnected && onlyNoMatterLinks(Array.from(item.querySelectorAll('content[src]')), 'src')) remove(item);
+      }
+    } else {
+      // Remove the entire navigation group when all its entries are No Matter,
+      // including the generated "Author's Notes" label, without matching titles.
+      for (const item of Array.from(doc.querySelectorAll('nav li'))) {
+        if (item.isConnected && onlyNoMatterLinks(Array.from(item.querySelectorAll('a[href]')), 'href')) remove(item);
+      }
+      if (path === 'OEBPS/contents.xhtml') {
+        for (const header of Array.from(doc.querySelectorAll('.toc-section-header'))) {
+          const links: Element[] = [];
+          for (let next = header.nextElementSibling; next && !next.classList.contains('toc-section-header'); next = next.nextElementSibling) {
+            links.push(...Array.from(next.querySelectorAll('a[href]')));
+          }
+          if (onlyNoMatterLinks(links, 'href')) remove(header);
+        }
+        for (const item of Array.from(doc.querySelectorAll('.toc-item'))) {
+          if (onlyNoMatterLinks(Array.from(item.querySelectorAll('a[href]')), 'href')) remove(item);
+        }
+      }
+      // A chapter may link to an author's private note. Keep its visible words,
+      // formatting and ID, but do not leave a link to a file we have removed.
+      for (const link of Array.from(doc.querySelectorAll('a[href]'))) {
+        if (!isNoMatterLink(link.getAttribute('href'), path)) continue;
+        link.removeAttribute('href');
+        const epubNamespace = 'http://www.idpf.org/2007/ops';
+        const types = link.getAttributeNS(epubNamespace, 'type');
+        if (types?.split(/\s+/).includes('noteref')) {
+          const kept = types.split(/\s+/).filter(type => type !== 'noteref').join(' ');
+          if (kept) link.setAttributeNS(epubNamespace, 'epub:type', kept);
+          else link.removeAttributeNS(epubNamespace, 'type');
+        }
+        if (link.getAttribute('role') === 'doc-noteref') link.removeAttribute('role');
+        changed = true;
+      }
+    }
+    if (changed) zip.file(path, new XMLSerializer().serializeToString(doc));
+  }
+  zip.remove(prefix);
 }
 
 /**

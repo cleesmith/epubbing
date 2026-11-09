@@ -137,7 +137,7 @@ const BookDetailView: React.FC<BookDetailViewProps> = ({
                   </button>
                 )}
                 {onXray && (
-                  <button onClick={onXray} title={_('X-ray: View epub structure')}>
+                  <button onClick={onXray} title={_('X-ray: view inside Authors epub')} aria-label={_('X-ray: view inside Authors epub')}>
                     <GiBoxUnpacking className='fill-base-content hover:fill-purple-500' />
                   </button>
                 )}

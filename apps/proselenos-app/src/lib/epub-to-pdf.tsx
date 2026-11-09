@@ -60,7 +60,10 @@ export async function getSpineItems(zip: JSZip): Promise<string[]> {
     const idref = ref.getAttribute('idref') ?? '';
     const href = manifest.get(idref);
     if (href) {
-      spineItems.push(opfDir + href);
+      const path = opfDir + href;
+      // All PDF sizes share this list. EE's No Matter sections are private
+      // author material; leave them in the EPUB, but never send them to print.
+      if (!path.startsWith('OEBPS/nomatter/')) spineItems.push(path);
     }
   });
 

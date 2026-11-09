@@ -38,6 +38,7 @@ const TOCItemView = React.memo<{
   onItemClick: (item: TOCItem) => void;
 }>(({ flatItem, itemSize, isActive, onToggleExpand, onItemClick }) => {
   const { item, depth } = flatItem;
+  const hasChildren = Boolean(item.subitems?.length);
 
   const handleToggleExpand = useCallback(
     (event: React.MouseEvent) => {
@@ -51,18 +52,23 @@ const TOCItemView = React.memo<{
   const handleClickItem = useCallback(
     (event: React.MouseEvent | React.KeyboardEvent) => {
       event.preventDefault();
-      onItemClick(item);
+      if (item.href) onItemClick(item);
+      else if (hasChildren) onToggleExpand(item);
     },
-    [item, onItemClick],
+    [item, hasChildren, onItemClick, onToggleExpand],
   );
 
   return (
     <div
       tabIndex={0}
       role='treeitem'
-      onClick={item.href ? handleClickItem : undefined}
-      onKeyDown={item.href ? (e) => e.key === 'Enter' && handleClickItem(e) : undefined}
-      aria-expanded={flatItem.isExpanded ? 'true' : 'false'}
+      onClick={item.href || hasChildren ? handleClickItem : undefined}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || (e.key === ' ' && !item.href && hasChildren)) {
+          handleClickItem(e);
+        }
+      }}
+      aria-expanded={hasChildren ? Boolean(flatItem.isExpanded) : undefined}
       aria-selected={isActive ? 'true' : 'false'}
       data-href={item.href ? getContentMd5(item.href) : undefined}
       className={clsx(
@@ -76,8 +82,11 @@ const TOCItemView = React.memo<{
         paddingInlineStart: `${(depth + 1) * 12}px`,
       }}
     >
-      {item.subitems && (
+      {hasChildren && (
         <button
+          type='button'
+          aria-label={`${flatItem.isExpanded ? 'Collapse' : 'Expand'} ${item.label}`}
+          aria-expanded={Boolean(flatItem.isExpanded)}
           onClick={handleToggleExpand}
           onKeyDown={(e) => {
             e.stopPropagation();
