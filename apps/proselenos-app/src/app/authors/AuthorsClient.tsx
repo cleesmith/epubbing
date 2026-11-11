@@ -17,11 +17,20 @@ import { loadAppSettings, saveAppSettings, clearWorkingCopy, saveFullWorkingCopy
 import { parseEpub } from '@/services/epubService';
 import { Book } from '@/types/book';
 import { getLocalBookFilename } from '@/utils/book';
+import { AUTHORS_TAB_NAME } from '@/utils/authors-tab';
 import environmentConfig from '@/services/environment';
 import Swal from 'sweetalert2';
 import { showAlert } from '../shared/alerts';
 
 export default function AuthorsClient() {
+  // Also name Authors when opened directly or restored by the browser.
+  useEffect(() => {
+    window.name = AUTHORS_TAB_NAME;
+    return () => {
+      if (window.name === AUTHORS_TAB_NAME) window.name = '';
+    };
+  }, []);
+
   // Library and Authors use one saved light/dark preference.
   const isDarkMode = useThemeStore(state => state.isDarkMode);
   const setThemeMode = useThemeStore(state => state.setThemeMode);

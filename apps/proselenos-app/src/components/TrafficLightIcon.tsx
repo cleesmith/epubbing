@@ -90,7 +90,7 @@ export default function TrafficLightIcon({ pending = false, isDarkMode, onClick 
           filter={status === 'green' ? `url(#${filterId})` : undefined}
         />
       </svg>
-      {status === 'red' && <span className="text-xs">{dateLabel}</span>}
+      {status === 'red' && <span className="text-xs" style={{ color: red }}>{dateLabel}</span>}
     </button>
   );
 }

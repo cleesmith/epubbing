@@ -13,7 +13,7 @@ import { useLibraryStore } from '@/store/libraryStore';
 import { useResponsiveSize } from '@/hooks/useResponsiveSize';
 import { useTrafficLightStore } from '@/store/trafficLightStore';
 import { navigateToLibrary } from '@/utils/nav';
-import { appPath } from '@/utils/app-path';
+import { openAuthorsTab } from '@/utils/authors-tab';
 import { debounce } from '@/utils/debounce';
 import useShortcuts from '@/hooks/useShortcuts';
 import Dropdown from '@/components/Dropdown';
@@ -61,7 +61,6 @@ const LibraryHeader: React.FC<LibraryHeaderProps> = ({
   const [localSearchQuery, setLocalSearchQuery] = useState(searchQuery);
 
   const headerRef = useRef<HTMLDivElement>(null);
-  const authorsWindowRef = useRef<Window | null>(null);
   const iconSize18 = useResponsiveSize(18);
   const iconSize20 = useResponsiveSize(20);
   const { safeAreaInsets: insets } = useThemeStore();
@@ -87,28 +86,6 @@ const LibraryHeader: React.FC<LibraryHeaderProps> = ({
     const newQuery = e.target.value;
     setLocalSearchQuery(newQuery);
     debouncedOnSearchChange(newQuery);
-  };
-
-  const switchToAuthorsMode = () => {
-    const authorsUrl = new URL(appPath('/authors/'), window.location.href);
-    const authorsTab = authorsWindowRef.current;
-    try {
-      if (authorsTab && !authorsTab.closed &&
-          authorsTab.location.origin === authorsUrl.origin &&
-          authorsTab.location.pathname.replace(/\/$/, '') === authorsUrl.pathname.replace(/\/$/, '')) {
-        // Bring back the writing tab without reloading unsaved writing.
-        authorsTab.focus();
-        return;
-      }
-    } catch {
-      // The previous tab may have navigated to another website.
-    }
-    // A script-opened Authors tab can close itself when Exit is clicked.
-    authorsWindowRef.current = window.open(authorsUrl.href, '_blank');
-    if (!authorsWindowRef.current) {
-      // If new tabs are blocked, the button still opens Authors.
-      window.location.assign(authorsUrl.href);
-    }
   };
 
   useEffect(() => {
@@ -186,7 +163,7 @@ const LibraryHeader: React.FC<LibraryHeaderProps> = ({
             </button>
           )}
           <button
-            onClick={switchToAuthorsMode}
+            onClick={openAuthorsTab}
             aria-label={_('Authors')}
             title={_('Write Ebook')}
             className='mr-4 inline-flex h-8 shrink-0 items-center gap-1 rounded-full border border-blue-500/40 bg-blue-500/10 px-3 text-blue-500 hover:bg-blue-500/20 hover:text-blue-400'

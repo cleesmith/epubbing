@@ -50,13 +50,27 @@ export interface FullBookViewProps {
 //  HTML Parser: XHTML → SceneCraftElement[]
 // ============================================================
 
-function parseSceneXhtml(xhtml: string): SceneCraftElement[] {
+function resolveImageSource(src: string | undefined, imageUrls: Map<string, string>): string | undefined {
+  if (!src || /^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i.test(src)) return src;
+  let path = src;
+  try { path = decodeURIComponent(src); } catch { /* Keep literal filenames with invalid escapes. */ }
+  const filename = path.split('/').pop() || path;
+  return imageUrls.get(src) || imageUrls.get(path) || imageUrls.get(filename) || src;
+}
+
+function parseSceneXhtml(xhtml: string, imageUrls: Map<string, string>): SceneCraftElement[] {
   if (!xhtml || !xhtml.trim()) return [];
 
   const parser = new DOMParser();
   const doc = parser.parseFromString(`<div>${xhtml}</div>`, 'text/html');
   const root = doc.body.firstElementChild;
   if (!root) return [];
+
+  // Paragraphs retain their HTML, so their images need local URLs too.
+  for (const img of Array.from(root.querySelectorAll('img[src]'))) {
+    const src = resolveImageSource(img.getAttribute('src') || undefined, imageUrls);
+    if (src) img.setAttribute('src', src);
+  }
 
   const elements: SceneCraftElement[] = [];
   let idx = 0;
@@ -98,8 +112,9 @@ function parseSceneXhtml(xhtml: string): SceneCraftElement[] {
       }
 
       // Figure
-      if (tag === 'figure') {
-        const img = node.querySelector('img');
+      // Authors also writes standalone images inside ordinary div wrappers.
+      if (tag === 'figure' || tag === 'img') {
+        const img = tag === 'img' ? node : node.querySelector('img');
         const figcaption = node.querySelector('figcaption');
         const styleAttr = node.getAttribute('style') || '';
         const widthMatch = styleAttr.match(/(?:^|;)\s*width\s*:\s*([^;]+)/);
@@ -838,12 +853,12 @@ export default function FullBookView({
   const parsedSections = useMemo(
     () => sections.map(s => ({
       title: s.title,
-      elements: parseSceneXhtml(s.xhtml),
+      elements: parseSceneXhtml(s.xhtml, imageUrls),
       config: s.sceneCraftConfig
         ? { ...createDefaultConfig(), ...s.sceneCraftConfig }
         : null,
     })),
-    [sections],
+    [sections, imageUrls],
   );
 
   // Check if ANY section has SceneCraft config
@@ -1009,9 +1024,7 @@ export default function FullBookView({
 
   // Resolve inline image src (e.g. "images/photo.jpg") to blob URL
   const resolveImgSrc = useCallback((src: string | undefined): string | undefined => {
-    if (!src) return src;
-    const fn = src.replace(/^(\.\.\/)*images\//, '');
-    return imageUrls.get(fn) || imageUrls.get(src) || src;
+    return resolveImageSource(src, imageUrls);
   }, [imageUrls]);
 
   // ── Preview refs (imperative audio) ───────────────────────
@@ -1638,7 +1651,9 @@ export default function FullBookView({
                     );
                   }
                   if (item.type === 'para') {
-                    const tocTarget = titleToSectionIndex.get(stripHtml(item.text).trim());
+                    const tocTarget = /<img\b/i.test(item.text)
+                      ? undefined
+                      : titleToSectionIndex.get(stripHtml(item.text).trim());
                     if (tocTarget !== undefined) {
                       return (
                         <div key={i} className="sc-pv-block" data-idx={item.idx} data-sec={si}

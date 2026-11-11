@@ -84,8 +84,8 @@ export function getBackupReminder(pending = false, now = new Date()): BackupRemi
   due.setDate(due.getDate() + 3);
   const overdue = now >= due;
   const dateLabel = hasZip
-    ? 'Last ZIP: ' + lastZip.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+    ? lastZip.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
     : 'No ZIP exported yet';
   const action = pending ? 'Save your chapter, then export a ZIP backup.' : 'Changes to back up. Export a ZIP.';
-  return { status: overdue ? 'red' : 'yellow', tooltip: action + ' ' + dateLabel, dateLabel };
+  return { status: overdue ? 'red' : 'yellow', tooltip: action + ' ' + (hasZip ? 'Last ZIP: ' : '') + dateLabel, dateLabel };
 }
