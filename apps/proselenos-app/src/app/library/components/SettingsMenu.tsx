@@ -17,6 +17,7 @@ import { invoke } from '@/utils/desktop-stubs';
 import MenuItem from '@/components/MenuItem';
 import Menu from '@/components/Menu';
 import { showOfflinePreparation } from '@/components/OfflinePreparation';
+import { updateApp } from '@/services/appUpdate';
 
 interface SettingsMenuProps {
   setIsDropdownOpen?: (isOpen: boolean) => void;
@@ -47,24 +48,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ setIsDropdownOpen }) => {
 
   const handleUpdateApp = async () => {
     setIsDropdownOpen?.(false);
-    try {
-      // 1. Unregister all service workers
-      if ('serviceWorker' in navigator) {
-        const registrations = await navigator.serviceWorker.getRegistrations();
-        for (const registration of registrations) {
-          await registration.unregister();
-        }
-      }
-      // 2. Clear all Cache Storage
-      const cacheNames = await caches.keys();
-      for (const name of cacheNames) {
-        await caches.delete(name);
-      }
-      // 3. Reload
-      window.location.reload();
-    } catch (error) {
-      console.error('Update app error:', error);
-    }
+    await updateApp();
   };
 
   const showAboutProselenosebooks = () => {

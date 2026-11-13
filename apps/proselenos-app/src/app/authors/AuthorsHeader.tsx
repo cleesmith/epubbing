@@ -5,12 +5,15 @@
 import { appPath } from '@/utils/app-path';
 
 import { useState, useEffect, useRef } from 'react';
-import { PiInfo, PiFileDoc, PiFileText, PiImage, PiArrowRight } from 'react-icons/pi';
+import { PiInfo, PiFileDoc, PiFileText, PiImage, PiArrowRight, PiArrowCircleUp, PiDownloadSimple } from 'react-icons/pi';
 import { GiBoxUnpacking } from 'react-icons/gi';
 import { ThemeConfig } from '../shared/theme';
-import { showConfirm } from '../shared/alerts';
+import { showConfirm, showAlert } from '../shared/alerts';
 import StyledSmallButton from '@/components/StyledSmallButton';
 import TrafficLightIcon from '@/components/TrafficLightIcon';
+import { showOfflinePreparation } from '@/components/OfflinePreparation';
+import { updateApp } from '@/services/appUpdate';
+import { RELEASE_HASH } from '@/generated/release';
 
 // Check without changing the other tab. Exit leaves Library alone.
 function isLibraryTab(tab: Window | null): tab is Window {
@@ -132,6 +135,15 @@ export default function AuthorsHeader({
     // Opening a new document also reads the saved Library. Keep the normal URL
     // (no cache-busting query) so EE's existing offline cache can serve it.
     libraryWindowRef.current = window.open(appPath('/library/'), '_blank');
+  };
+
+  const handleUpdateApp = () => {
+    setMenuOpen(false);
+    if (hasUnsavedChanges) {
+      showAlert('Save your changes before updating the app.', 'info', 'Update App', isDarkMode);
+      return;
+    }
+    void updateApp();
   };
 
   return (
@@ -368,7 +380,8 @@ export default function AuthorsHeader({
                 borderRadius: '4px',
                 boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
                 zIndex: 1000,
-                minWidth: '100px',
+                minWidth: '280px',
+                maxWidth: 'calc(100vw - 16px)',
               }}
             >
             <button
@@ -466,6 +479,35 @@ export default function AuthorsHeader({
             >
               <GiBoxUnpacking size={16} />
               X-Ray
+            </button>
+            <button
+              onClick={handleUpdateApp}
+              title="only works when online"
+              style={{
+                display: 'flex', alignItems: 'center', gap: '8px', width: '100%',
+                padding: '8px 12px', background: 'none', border: 'none',
+                textAlign: 'left', cursor: 'pointer', color: theme.text, fontSize: '13px',
+              }}
+            >
+              <PiArrowCircleUp size={16} />
+              <span style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                <span style={{ whiteSpace: 'nowrap' }}>Update App - {RELEASE_HASH}</span>
+                <span style={{ color: theme.textSecondary, fontSize: '11px' }}>only works when online</span>
+              </span>
+            </button>
+            <button
+              onClick={() => { setMenuOpen(false); void showOfflinePreparation(isDarkMode); }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '8px', width: '100%',
+                padding: '8px 12px', background: 'none', border: 'none',
+                textAlign: 'left', cursor: 'pointer', color: theme.text, fontSize: '13px',
+              }}
+            >
+              <PiDownloadSimple size={16} />
+              <span style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                <span>Prep for offline use</span>
+                <span style={{ color: theme.textSecondary, fontSize: '11px' }}>save application files in this browser</span>
+              </span>
             </button>
             <button
               onClick={() => { onAboutClick(); setMenuOpen(false); }}

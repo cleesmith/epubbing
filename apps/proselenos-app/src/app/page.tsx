@@ -8,8 +8,8 @@ export default function HomePage() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace('/library/');
+    router.replace('/authors/');
   }, [router]);
 
-  return <a href={appPath('/library/')}>Open library</a>;
+  return <a href={appPath('/authors/')}>Open Authors</a>;
 }
