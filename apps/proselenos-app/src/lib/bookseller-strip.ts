@@ -179,7 +179,7 @@ function stripXhtmlContent(html: string): string {
   s = s.replace(/\s*<\/article>/g, '');
 
   // 4. <h1 class="scene-title"> → plain <h1>
-  s = s.replace(/<h1 class="scene-title">/g, '<h1>');
+  s = s.replace(/<h1 class="scene-title"([^>]*)>/g, '<h1$1>');
 
   // 5. Dialogue: <div class="dialogue"><span class="speaker">X</span>Y</div>
   //    → <blockquote><strong>X</strong>Y</blockquote>

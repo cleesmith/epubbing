@@ -30,7 +30,7 @@ describe('EPUB content preservation', () => {
     const notes = await output.file('OEBPS/nomatter/section-4.xhtml')!.async('string');
     expect(main).toContain('nomatter/section-4.xhtml#note');
     expect(notes).toContain('../section-3.xhtml#ref');
-    expect(text(notes)).toBe('Keep this note. Return');
+    expect(text(extractEpubBody(notes))).toBe('Keep this note. Return');
   });
 
   it('stops loading if a section is missing instead of silently publishing a partial book', async () => {

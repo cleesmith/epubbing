@@ -216,6 +216,8 @@ function convertNode(node: Node): React.ReactNode {
     }
 
     case 'h1':
+      // The PDF prints EE's separate chapter title above the body when requested.
+      if (el.getAttribute('data-ee-chapter-heading') === 'true') return null;
       return <Text key={nextKey()} style={styles.h1}>{el.textContent ?? ''}</Text>;
 
     case 'h2':

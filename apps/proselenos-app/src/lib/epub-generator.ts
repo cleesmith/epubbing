@@ -852,7 +852,7 @@ function createChapterHTML(chapter: Chapter, _metadata: any, isNoMatter: boolean
 </head>
 <body>
   <article class="scene" epub:type="chapter">
-${chapter.sourceHref ? '' : `    <h1 class="scene-title">${escapeHtml(chapter.title)}</h1>`}
+    <h1 class="scene-title" data-ee-chapter-heading="true">${escapeHtml(chapter.title)}</h1>
 ${bodyContent}
   </article>
 </body>
@@ -869,7 +869,7 @@ ${bodyContent}
 </head>
 <body>
   <section class="chapter" epub:type="chapter">
-${chapter.sourceHref ? '' : `    <h1>${escapeHtml(chapter.title)}</h1>`}
+    <h1 data-ee-chapter-heading="true">${escapeHtml(chapter.title)}</h1>
 ${bodyContent}
   </section>
 </body>

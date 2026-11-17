@@ -55,6 +55,9 @@ export function extractEpubBody(html: string): string {
   if (doc.querySelector('parsererror')) doc = parser.parseFromString(html, 'text/html');
   const body = doc.getElementsByTagName('body')[0];
   if (!body) throw new Error('This EPUB section has no readable body.');
+  // EE's published title belongs in Authors' separate title field, not its editor.
+  // Leave all author-written headings and text untouched.
+  body.querySelectorAll('h1[data-ee-chapter-heading="true"]').forEach(heading => heading.remove());
   // Preserve namespace/vocabulary declarations and body IDs as well as its
   // children. Whitespace between inline elements can separate words.
   const wrapper = doc.createElementNS(XHTML, 'div');
