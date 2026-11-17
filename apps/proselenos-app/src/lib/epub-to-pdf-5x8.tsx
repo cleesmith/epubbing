@@ -414,6 +414,7 @@ export const BookDocument5x8: React.FC<{
         {/* Chapters — each starts on a new page */}
         {chapters.map((ch) => (
           <View break key={ch.id}>
+            {includeChapterHeadings && <Text style={styles.h1}>{ch.title}</Text>}
             {convertHtmlToElements(includeChapterHeadings ? ch.html : stripChapterHeading(ch.html))}
           </View>
         ))}

@@ -145,8 +145,8 @@ export async function extractChapters(
     // Flatten all <a> links to plain <span> for print compliance
     flattenLinksForPrint(body);
 
-    // Extract chapter title from h1, h2, or the <title> element
-    const titleEl = body.querySelector('h1, h2') ?? doc.querySelector('title');
+    // Use the separately stored chapter title for the PDF heading and contents.
+    const titleEl = doc.querySelector('title') ?? body.querySelector('h1, h2');
     const chapterTitle = titleEl?.textContent?.trim() ?? `Chapter ${chapters.length + 1}`;
 
     const chapterId = `chapter-${chapters.length + 1}`;
@@ -692,6 +692,7 @@ export const BookDocument: React.FC<{
         {/* Chapters — each starts on a new page */}
         {chapters.map((ch) => (
           <View break key={ch.id}>
+            {includeChapterHeadings && <Text style={styles.h1}>{ch.title}</Text>}
             {convertHtmlToElements(includeChapterHeadings ? ch.html : stripChapterHeading(ch.html))}
           </View>
         ))}
