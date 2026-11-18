@@ -447,7 +447,7 @@ ${allSectionsHtml}
       <label for="readingPace">Reading pace</label>
       <span class="autoplay-speed-range">
         <span>Slower</span>
-        <input type="range" id="readingPace" min="60" max="360" step="1" value="183" aria-describedby="readingPaceValue" />
+        <input type="range" id="readingPace" min="0" max="1000" step="1" value="500" aria-describedby="readingPaceValue" />
         <span>Faster</span>
       </span>
       <output id="readingPaceValue" for="readingPace">~183 WPM</output>
@@ -2479,8 +2479,8 @@ body:has(.sc-sticky-img input:checked) .sc-sticky-img {
   font-size: 12px;
 }
 .autoplay-speed-range input {
-  width: 130px;
-  max-width: 30vw;
+  width: 180px;
+  max-width: 38vw;
   accent-color: #ffad80;
   cursor: pointer;
 }
@@ -2784,24 +2784,40 @@ const SCENECRAFT_AUTOPLAY_JS = `
       var STICKY_MIN_SPEED = 1;
       var STICKY_MAX_SPEED = 48;
       var DEFAULT_WPM = 183;
+      var MIN_WPM = 15;
+      var MAX_WPM = 400;
       var readingWpm = DEFAULT_WPM;
       var paceInput = document.getElementById('readingPace');
       var paceOutput = document.getElementById('readingPaceValue');
       var statusEl = document.getElementById('footerStatus');
-      var paceKey = 'html-ebook-reading-wpm';
+      // Start the wider control at its new midpoint, not an old test setting.
+      var paceKey = 'html-ebook-reading-wpm-v2';
       try {
         var savedWpm = Number(localStorage.getItem(paceKey));
-        if (isFinite(savedWpm) && savedWpm >= 60 && savedWpm <= 360) readingWpm = Math.round(savedWpm);
+        if (isFinite(savedWpm) && savedWpm >= MIN_WPM && savedWpm <= MAX_WPM) readingWpm = Math.round(savedWpm);
       } catch(e) {}
 
+      // Proportional steps give fine control around reading speeds while still
+      // reaching a near standstill and fast skimming. The center is 183 WPM.
+      function paceAtPosition(position) {
+        position = clamp(position, 0, 1000);
+        return Math.round(position <= 500
+          ? MIN_WPM * Math.pow(DEFAULT_WPM / MIN_WPM, position / 500)
+          : DEFAULT_WPM * Math.pow(MAX_WPM / DEFAULT_WPM, (position - 500) / 500));
+      }
+      function positionAtPace(wpm) {
+        return Math.round(wpm <= DEFAULT_WPM
+          ? 500 * Math.log(wpm / MIN_WPM) / Math.log(DEFAULT_WPM / MIN_WPM)
+          : 500 + 500 * Math.log(wpm / DEFAULT_WPM) / Math.log(MAX_WPM / DEFAULT_WPM));
+      }
       function showPace() {
-        paceInput.value = String(readingWpm);
         paceInput.setAttribute('aria-valuetext', 'About ' + readingWpm + ' words per minute');
         paceOutput.textContent = '~' + readingWpm + ' WPM';
       }
+      paceInput.value = String(positionAtPace(readingWpm));
       showPace();
       paceInput.addEventListener('input', function() {
-        readingWpm = clamp(Number(paceInput.value) || DEFAULT_WPM, 60, 360);
+        readingWpm = paceAtPosition(Number(paceInput.value));
         showPace();
         try { localStorage.setItem(paceKey, String(readingWpm)); } catch(e) {}
       });
