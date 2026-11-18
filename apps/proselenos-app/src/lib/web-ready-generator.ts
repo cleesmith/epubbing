@@ -444,14 +444,15 @@ ${allSectionsHtml}
     </div>
     <div class="autoplay-controls" aria-label="Autoplay controls">
       <button type="button" class="footer-status" id="footerStatus" title="Start scrolling">Play</button>
+      <span class="autoplay-pace-picker" id="readingPacePicker">
       <label for="readingPace">Reading pace</label>
       <span class="autoplay-speed-range">
         <span>Slower</span>
         <input type="range" id="readingPace" min="0" max="1000" step="1" value="500" aria-describedby="readingPaceValue" />
         <span>Faster</span>
       </span>
-      <output id="readingPaceValue" for="readingPace">~183 WPM</output>
-      <span class="autoplay-key-hint">Space: pause / resume scrolling</span>
+      </span>
+      <output id="readingPaceValue" for="readingPace">183 WPM</output>
     </div>
   </div>
 
@@ -826,7 +827,10 @@ function parseSceneElements(xhtml: string): ScElement[] {
       }
       if (tag === 'h1' || tag === 'h2' || tag === 'h3') {
         const hasContent = (node.textContent || '').trim();
-        if (hasContent) elements.push({ type: tag as 'h1' | 'h2' | 'h3', text: (node.innerHTML || '').trim(), idx: idx++ });
+        // Published headings are added after Scenecraft assigns clip indexes.
+        // Display them without shifting the author's existing audio assignments.
+        const generatedHeading = tag === 'h1' && node.getAttribute('data-ee-chapter-heading') === 'true';
+        if (hasContent) elements.push({ type: tag as 'h1' | 'h2' | 'h3', text: (node.innerHTML || '').trim(), idx: generatedHeading ? -1 : idx++ });
         continue;
       }
       if (tag === 'hr') {
@@ -2472,6 +2476,12 @@ body:has(.sc-sticky-img input:checked) .sc-sticky-img {
   color: #e0e0e0;
   font: 14px/1.4 system-ui, sans-serif;
 }
+.autoplay-pace-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.autoplay-pace-picker[hidden] { display: none; }
 .autoplay-speed-range {
   display: inline-flex;
   align-items: center;
@@ -2503,14 +2513,9 @@ body:has(.sc-sticky-img input:checked) .sc-sticky-img {
   outline: 2px solid #a9d6ff;
   outline-offset: 3px;
 }
-.autoplay-key-hint {
-  color: #ccc;
-  font-size: 12px;
-}
 @media (max-width: 600px) {
   .autoplay-footer .footer-info { display: none; }
   .autoplay-controls { flex: 1; justify-content: flex-start; }
-  .autoplay-key-hint { display: none; }
 }
 `;
 
@@ -2525,15 +2530,21 @@ const SCENECRAFT_AUTOPLAY_JS = `
 
       function createFadeIn(audioEl, vol, dur) {
         audioEl.volume = 0;
-        audioEl.play().catch(function(){});
-        return { el: audioEl, state: 'in', start: Date.now(), dur: dur * 1000, targetVol: vol };
+        var now = Date.now();
+        var obj = { el: audioEl, state: 'in', start: now, dur: dur * 1000, targetVol: vol,
+          userPaused: !autoScrollActive, pauseStarted: now };
+        if (autoScrollActive) audioEl.play().catch(function(){});
+        return obj;
       }
       function createFadeOut(obj, dur) {
         if (!obj || !obj.el) return null;
-        return { el: obj.el, state: 'out', start: Date.now(), dur: dur * 1000, startVol: obj.el.volume };
+        var now = Date.now();
+        return { el: obj.el, state: 'out', start: now, dur: dur * 1000, startVol: obj.el.volume,
+          userPaused: obj.userPaused, pauseStarted: now };
       }
       function tickFade(obj) {
         if (!obj || !obj.el) return null;
+        if (obj.userPaused) return obj;
         var t = obj.dur > 0 ? clamp((Date.now() - obj.start) / obj.dur, 0, 1) : 1;
         if (obj.state === 'in') {
           obj.el.volume = t * (obj.targetVol || 1);
@@ -2606,7 +2617,7 @@ const SCENECRAFT_AUTOPLAY_JS = `
           var aUrl = s.el.dataset['scAud_' + c.ambientFilename.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()];
           if (aUrl) {
             var a = new Audio(aUrl);
-            a.loop = !!c.ambientLoop;
+            a.loop = false; // Autoplay follows each chapter MP3 once, then continues.
             s.ambient = createFadeIn(a, c.ambientVolume || 0.5, c.fadeIn || 2);
           }
         }
@@ -2765,30 +2776,32 @@ const SCENECRAFT_AUTOPLAY_JS = `
             }
           }
         }
+        updateNarrationPace();
         requestAnimationFrame(tick);
       }
       requestAnimationFrame(tick);
 
       // ── Autoplay scroll controller ──────────────────────────
-      // Audio provides a baseline pace; the reader's slider scales it last.
+      // Narration is the master clock. The slider only controls unvoiced passages.
       // Dialogue/para clips GATE the scroll (nearly pause until done).
       // Sticky clips PACE the scroll (keep scrolling to reveal text).
-      // Ambient never affects scroll — it is just atmosphere.
+      // Chapter-wide audio (stored as ambient) also controls scrolling in Autoplay.
 
       // All movement is pixels per second, independent of display refresh rate.
       // Reading pace is estimated from each text block's words and rendered height.
       var FRONT_MATTER_SPEED = 12;
       var GAP_SPEED = 20;
-      var CREEP_SPEED = 2;
+      var CREEP_SPEED = 9; // original 0.15 px/frame at 60 fps
       var PAUSE_AFTER_CLIP = 0.75; // seconds
-      var STICKY_MIN_SPEED = 1;
-      var STICKY_MAX_SPEED = 48;
+      var STICKY_MIN_SPEED = 4.8; // original 0.08 px/frame at 60 fps
+      var STICKY_MAX_SPEED = 72; // original 1.2 px/frame at 60 fps
       var DEFAULT_WPM = 183;
       var MIN_WPM = 15;
       var MAX_WPM = 400;
       var readingWpm = DEFAULT_WPM;
       var paceInput = document.getElementById('readingPace');
       var paceOutput = document.getElementById('readingPaceValue');
+      var pacePicker = document.getElementById('readingPacePicker');
       var statusEl = document.getElementById('footerStatus');
       // Start the wider control at its new midpoint, not an old test setting.
       var paceKey = 'html-ebook-reading-wpm-v2';
@@ -2810,13 +2823,28 @@ const SCENECRAFT_AUTOPLAY_JS = `
           ? 500 * Math.log(wpm / MIN_WPM) / Math.log(DEFAULT_WPM / MIN_WPM)
           : 500 + 500 * Math.log(wpm / DEFAULT_WPM) / Math.log(MAX_WPM / DEFAULT_WPM));
       }
+      var followingNarration = false;
       function showPace() {
-        paceInput.setAttribute('aria-valuetext', 'About ' + readingWpm + ' words per minute');
-        paceOutput.textContent = '~' + readingWpm + ' WPM';
+        paceInput.disabled = followingNarration;
+        pacePicker.hidden = followingNarration;
+        paceInput.setAttribute('aria-valuetext', readingWpm + ' words per minute');
+        paceOutput.textContent = followingNarration ? 'Following narration' : readingWpm + ' WPM';
+      }
+      function updateNarrationPace() {
+        var following = postClipTimer > 0 || sceneStates.some(function(s) {
+          return [s.ambient, s.dlgObj, s.paraObj, s.stkObj].some(function(obj) {
+            return obj && obj.el && !obj.el.ended && (obj.userPaused || !obj.el.paused);
+          });
+        });
+        if (following !== followingNarration) {
+          followingNarration = following;
+          showPace();
+        }
       }
       paceInput.value = String(positionAtPace(readingWpm));
       showPace();
       paceInput.addEventListener('input', function() {
+        if (paceInput.disabled) return;
         readingWpm = paceAtPosition(Number(paceInput.value));
         showPace();
         try { localStorage.setItem(paceKey, String(readingWpm)); } catch(e) {}
@@ -2867,7 +2895,7 @@ const SCENECRAFT_AUTOPLAY_JS = `
 
       function hasDuration(obj) {
         if (!obj || !obj.el) return false;
-        return obj.el.duration && !isNaN(obj.el.duration) && obj.el.duration > 0;
+        return isFinite(obj.el.duration) && obj.el.duration > 0;
       }
 
       // Only dialogue and para clips gate (nearly stop scroll).
@@ -2917,7 +2945,7 @@ const SCENECRAFT_AUTOPLAY_JS = `
 
             // If all text has already passed the playhead but audio still playing,
             // keep scrolling slowly — don't jump to BASE_SPEED
-            if (pixelsLeft <= 10) return CREEP_SPEED;
+            if (pixelsLeft <= 10) return 48; // original 0.8 px/frame at 60 fps
 
             var speed = pixelsLeft / remaining;
             speed = Math.max(STICKY_MIN_SPEED, Math.min(STICKY_MAX_SPEED, speed));
@@ -2930,9 +2958,48 @@ const SCENECRAFT_AUTOPLAY_JS = `
         return null;
       }
 
+      // Pause only the audio that this player owns, and retain its position/fade.
+      function setAudioPaused(paused) {
+        var keys = ['ambient', 'ambientOut', 'voice', 'voiceOut', 'dlgObj', 'dlgOut', 'stkObj', 'stkOut', 'paraObj', 'paraOut'];
+        var now = Date.now();
+        sceneStates.forEach(function(s) {
+          keys.forEach(function(key) {
+            var obj = s[key];
+            if (!obj || !obj.el || obj.el.ended) return;
+            if (paused && !obj.el.paused) {
+              obj.userPaused = true;
+              obj.pauseStarted = now;
+              obj.el.pause();
+            } else if (!paused && obj.userPaused) {
+              obj.start += now - obj.pauseStarted;
+              obj.userPaused = false;
+              obj.el.play().catch(function(){});
+            }
+          });
+        });
+      }
+
+      function getChapterPacedSpeed() {
+        for (var i = 0; i < sceneStates.length; i++) {
+          var s = sceneStates[i];
+          if (!s.inScene || !isClipPlaying(s.ambient)) continue;
+          var audio = s.ambient.el;
+          // Wait for the recording's duration instead of using the WPM slider.
+          if (!hasDuration(s.ambient)) return 0;
+          var remaining = audio.duration - audio.currentTime;
+          if (remaining <= 0) continue;
+          var end = s.exitEl || s.el;
+          var rect = end.getBoundingClientRect();
+          // Stay inside the scene until its recording ends.
+          var pixelsLeft = (s.exitEl ? rect.top : rect.bottom) - playheadY - 1;
+          return Math.max(0, pixelsLeft) / remaining;
+        }
+        return null;
+      }
+
       function updatePlayButton() {
         statusEl.textContent = autoScrollActive ? 'Pause' : scrollDone ? 'Replay' : hasStarted ? 'Resume' : 'Play';
-        statusEl.title = autoScrollActive ? 'Pause scrolling' : scrollDone ? 'Read again from the beginning' : 'Start or resume scrolling';
+        statusEl.title = autoScrollActive ? 'Pause reading and audio' : scrollDone ? 'Read again from the beginning' : 'Start or resume reading and audio';
       }
 
       function toggleAutoScroll() {
@@ -2942,6 +3009,7 @@ const SCENECRAFT_AUTOPLAY_JS = `
           postClipTimer = 0;
         }
         autoScrollActive = !autoScrollActive;
+        setAudioPaused(!autoScrollActive);
         hasStarted = true;
         lastScrollTime = null;
         scrollRemainder = 0;
@@ -2965,12 +3033,11 @@ const SCENECRAFT_AUTOPLAY_JS = `
           return;
         }
 
-        var pace = readingWpm / DEFAULT_WPM;
-        var readingSpeed = getReadingSpeed();
-        var speed = readingSpeed === null ? GAP_SPEED : readingSpeed;
-
-        if (isInFrontMatter()) {
-          speed = Math.min(speed, FRONT_MATTER_SPEED);
+        var speed;
+        var chapterSpeed = getChapterPacedSpeed();
+        if (chapterSpeed !== null) {
+          speed = chapterSpeed;
+          postClipTimer = 0;
         } else if (isGatedAudioPlaying()) {
           speed = CREEP_SPEED;
           postClipTimer = PAUSE_AFTER_CLIP;
@@ -2979,12 +3046,16 @@ const SCENECRAFT_AUTOPLAY_JS = `
           postClipTimer = Math.max(0, postClipTimer - elapsed);
         } else {
           var stickySpeed = getStickyPacedSpeed();
-          // Audio can slow the baseline; the slider still controls the result.
-          if (stickySpeed !== null) speed = Math.min(speed, stickySpeed);
+          if (stickySpeed !== null) {
+            // Restore audio-led timing, without a WPM cap or multiplier.
+            speed = stickySpeed;
+          } else {
+            var readingSpeed = getReadingSpeed();
+            speed = readingSpeed === null ? GAP_SPEED : readingSpeed;
+            if (isInFrontMatter()) speed = Math.min(speed, FRONT_MATTER_SPEED);
+            speed *= readingWpm / DEFAULT_WPM;
+          }
         }
-
-        // Scale after all content/audio limits so every slider change takes effect.
-        speed *= pace;
 
         // Accumulate fractions: browsers may round individual scrollBy calls.
         scrollRemainder += speed * elapsed;
@@ -2993,13 +3064,6 @@ const SCENECRAFT_AUTOPLAY_JS = `
         if (pixels > 0) window.scrollBy(0, pixels);
       }
 
-      document.addEventListener('keydown', function(e) {
-        if (e.code !== 'Space' || e.repeat || e.altKey || e.ctrlKey || e.metaKey) return;
-        // Native buttons and the slider keep their own keyboard behavior.
-        if (e.target instanceof Element && e.target.closest('button, input, select, textarea, a, [contenteditable]')) return;
-        e.preventDefault();
-        toggleAutoScroll();
-      });
       statusEl.addEventListener('click', toggleAutoScroll);
       document.addEventListener('visibilitychange', function() { lastScrollTime = null; });
 
