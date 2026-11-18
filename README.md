@@ -2,92 +2,142 @@
 
 ## Write your book. Read it. Make it yours.
 
-[Open EverythingEbooks at everythingebooks.org](https://everythingebooks.org/)
+[Start writing at everythingebooks.org](https://everythingebooks.org/)
 
 EverythingEbooks is a free, open-source writing workspace that runs in your browser. Write a new book, return to an unfinished manuscript, or bring in an existing ebook to work on again.
 
 The focus is your words and an ebook that is comfortable to read.
 
-No account. No subscription. No tracking. No cloud storage.
+**No account. No subscription. No tracking. No cloud storage.**
 
 ## Your book is an EPUB from the start
 
-Your writing lives in the format used by ebooks. Work on chapters and sections, save your changes, and publish a copy to your own Library whenever you want to read it.
+Your ebook is your manuscript. Work on chapters and sections in **Authors**, save your changes, and publish a copy to your own **Library** whenever you want to read and review it.
 
-You decide when to download a copy and where to publish it.
+When you are ready, download an EPUB for ebook stores or a PDF for a paperback. You decide where and when to publish it.
 
 ## Start with Authors
 
-EverythingEbooks opens in the Library. Click **Authors** to begin writing.
+EverythingEbooks opens in **Authors**. Use **Open** to choose how to begin:
 
-Start a new book, or use **Open** to load an EPUB, a Word document, a manuscript text file, or a book already in your Library.
+| Open option | What it does |
+| --- | --- |
+| **New** | Starts a new ebook. |
+| **Load EPUB** | Opens an `.epub` file from your device. |
+| **Load from Library** | Opens a book already in your EE Library for editing. |
+| **Load DOCX → EPUB** | Brings in a Word document. |
+| **Load PDF → EPUB** | Brings in text from a PDF. |
+| **Load manuscript.txt → EPUB** | Brings in a plain-text manuscript. |
 
-In Authors, you can:
+Books enter through Authors. **Publish** puts a copy in Library for reading, reviewing, and downloading.
 
-- Write and edit with the full editor.
-- Switch to **Writing mode** for distraction-free work on the current chapter. Press Escape to return.
-- Add and arrange chapters, front matter, and back matter.
-- Set your title, author name, book details, and cover.
-- Search your writing and keep an eye on word counts.
-- Save ideas, research, and unfinished material in **No Matter**.
+## Write, organize, and save
 
-Save as you write. Your working manuscript stays in this browser.
+Select the **Title Page** or a section in the sidebar to edit it. Add and arrange chapters, front matter, and back matter as your book takes shape.
+
+- The **full editor** provides formatting and images.
+- **Writing mode** gives you distraction-free writing for the current chapter or section. Press **Escape** to return. Sections with attached audio use the full editor.
+- **Save** turns red when there are unsaved changes, including on the Title Page. Click it to keep your edits in this browser.
+- Click the chapter title above the editor to change it. EE includes that heading in both EPUB editions, so you do not need to repeat it inside the chapter text.
+- **Review text** checks the current section and reports possible issues without changing your words. Its explanation lists what it checks.
+- **Scenecraft** adds presentation and audio for enhanced reading.
+
+Use the Authors menu for **Cover**, **TXT**, **DOCX**, and **X-Ray**. TXT and DOCX download your writing in those formats; X-Ray lets you look inside the EPUB.
+
+## Keep your author notes with your book
+
+**No Matter** is a place for reminders, research, discarded passages, alternate endings, or anything still taking shape.
+
+These sections stay in the **Authors EPUB** and enhanced reader. They are excluded from the **Booksellers EPUB** and paperback PDF interiors.
+
+Keep them while you work. Move material into a regular section whenever you want it to become part of the published book.
 
 ## Publish to your Library to read and review
 
-Click **Publish** in Authors to put a reading copy in your own EE Library.
+Save your edits, then click **Publish** in Authors to put a copy in your own EE Library.
 
-Publish here means making the book available in your Library for reading and review. When you are ready to release it, download your Booksellers EPUB and submit it to the bookseller you choose.
+**Publish in EE means publishing to your Library.** It does not send the book to Amazon, Kobo, or another bookseller. Download your finished EPUB or PDF and submit it wherever you choose.
 
-Click a book's cover in the Library to read its Booksellers version. Return to Authors to make changes, then publish again.
+Click **Library** to review your book while keeping Authors open.
 
-The orange icon opens enhanced reading. For books that use Scenecraft, this includes their added visual and sound features.
+| Library control | What it opens |
+| --- | --- |
+| **Book cover** | The Booksellers EPUB for reading. |
+| **Blue book icon** | The Authors EPUB, including author notes. |
+| **Orange icon** | The enhanced reader, with Scenecraft presentation and audio where included. |
+| **Plus** | Ebook Plus, with downloads and other book tools. Its Help button explains each icon. |
 
-If you already have a Library tab open, use its Reload button to see your latest published changes.
+Return to Authors to make changes, save, and publish again. If an already-open Library shows an older copy, click its **reload arrow**.
+
+Library's search finds books by their details. The three-dot view menu changes the shelf layout and sorting. **Menu → Settings** opens Library preferences.
+
+The **sun/moon button** changes the shared light/dark setting for Authors and Library. An already-open tab may need a reload to show the change.
 
 ## Download the version you need
 
-Open **Plus** beside a book in the Library.
+Open **Plus** beside a book in Library.
 
-**Booksellers EPUB** is the copy for publishing through ebook stores. It leaves out No Matter and EE's author-only settings.
+| Download | What it contains |
+| --- | --- |
+| **Booksellers EPUB** — green download arrow | The edition for ebook stores, without No Matter author notes or EE's author-only settings. |
+| **Authors EPUB** — blue book icon | Your editable EE copy, including author notes and saved paperback cover settings. |
+| **Web-ready ZIP** | An enhanced-reading version with Scenecraft presentation and included audio. |
+| **6 × 9 inch PDF** | A paperback interior, with options for a table of contents and chapter headings. |
+| **8.5 × 8.5 inch PDF** | A square paperback interior. |
+| **6 × 9 paperback cover PDF** | A separate front, back, and spine cover file. |
 
-**Authors EPUB** keeps the material and settings used by EE, including No Matter, so you can bring the book back into Authors.
+For a 6 × 9 paperback, create the interior first so you have its total page count for the cover. **Include Chapter Headings** adds the titles stored separately in Authors; they do not have to be repeated inside your chapter text.
 
-**PDF** creates a 6 × 9 inch paperback interior or an 8.5 × 8.5 inch square interior. You can also create a 6 × 9 paperback cover PDF.
+Paperback cover settings stay with the Authors EPUB. The generated PDFs are separate downloads.
 
-**Check EPUB** checks the Booksellers version and shows any errors or warnings, with a readable report you can download.
+## Check your Booksellers EPUB
 
-## A place for material that isn't part of the published book
+In Ebook Plus, **Check EPUB** checks the Booksellers edition and shows errors and warnings. You can download a readable text report.
 
-**No Matter** is for the author's own material: reminders, research, discarded passages, alternate endings, or anything still taking shape.
+The checker does not repair your book. Results are cleared when you close it. It works offline after **Prep for offline use** has finished.
 
-It stays in the Authors EPUB and enhanced reading. It is excluded from the Booksellers EPUB and both PDF interiors.
+Ebook Plus also has **X-ray** for looking inside the Authors EPUB: its chapters, images, and other files.
 
-Keep it while you work. Move it into a regular section whenever you want it to become part of the published book.
+## Your writing stays in your browser
+
+Your books and working manuscript are stored in this browser on this device. They are not automatically shared with another browser or device.
+
+Download an **Authors EPUB** to keep or move an editable copy of one book. Use a **ZIP backup** to keep your saved Authors workspace, Library, and settings together.
+
+### Make a ZIP backup
+
+Save your edits, then click the **stoplight** in either Authors or Library. You can also use **Library Menu → Storage: Export & Import**.
+
+Choose **Export All Data** to download a ZIP backup. Keep these dated files somewhere you can find them.
+
+| Stoplight | Meaning |
+| --- | --- |
+| **Green** | No changes waiting for a backup. |
+| **Yellow** | Changes need a new ZIP backup. |
+| **Red** | Changes still need a backup after two intervening calendar days. The last export date appears beside the light. |
+
+For example, changes after a Monday export stay yellow through Wednesday and turn red on Thursday. If you have never exported a ZIP, the reminder counts from your first change. Reading alone does not turn it yellow.
+
+### Restore or revisit a backup
+
+**Import Data** checks the ZIP and asks you to confirm before resetting Library & Authors and restoring the backup. Export your current work first if you want to keep it.
+
+A successful restore starts with a green stoplight. New changes need a new backup.
+
+To explore an older draft without disturbing your current work, open EverythingEbooks in another browser and import the backup there. Your dated backups become a history of your writing that you can revisit.
 
 ## Write online or offline
 
-While online, open the Library menu and choose **Prep for offline use**. Let it finish, then bookmark [everythingebooks.org](https://everythingebooks.org/).
+While online, choose **Menu → Prep for offline use** in either Authors or Library. Let it finish, then bookmark [everythingebooks.org](https://everythingebooks.org/).
 
-Use that bookmark in the same browser when you are offline. Writing, reading, and creating your downloads continue to work.
+Use that bookmark in the same browser on the same device, online or offline. Writing, reading, and creating your downloads continue to work.
 
-Nothing installs.
+**Nothing installs.** Your writing remains in your browser and available to download as an EPUB or ZIP backup.
 
-## Your writing stays with you
-
-Your books and manuscripts are stored in your browser on this device. They are not automatically shared with another browser or device.
-
-The stoplight reminds you when it is time to make a backup.
-
-In the Library menu, choose **Storage: Export & Import**, then **Export All Data** to download a ZIP backup of your Library, Authors workspace, and saved settings. Keep these dated backups somewhere you can find them.
-
-**Import Data** resets the current Library and Authors workspace and restores the backup you select.
-
-To explore an older draft without disturbing your current work, import that backup in another browser. Your backups become a history of your writing that you can revisit.
+**Menu → Update App** is available in both Authors and Library when you are online. Use it to load the latest app update.
 
 ## Free and open source
 
 EverythingEbooks is free for everyone. There are no paid tiers or subscriptions.
 
 [Start writing at everythingebooks.org](https://everythingebooks.org/)
-

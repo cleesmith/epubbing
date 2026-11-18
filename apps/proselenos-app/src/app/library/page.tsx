@@ -3,7 +3,8 @@
 'use client';
 
 import clsx from 'clsx';
-import { parseOpenWithFiles, getCurrentWebview } from '@/utils/desktop-stubs';
+import { getCurrentWebview } from '@/utils/desktop-stubs';
+// import { parseOpenWithFiles } from '@/utils/desktop-stubs'; // Library imports paused.
 import * as React from 'react';
 import { useState, useRef, useEffect, Suspense, useCallback } from 'react';
 import { ReadonlyURLSearchParams, useRouter, useSearchParams } from 'next/navigation';
@@ -13,9 +14,10 @@ import 'overlayscrollbars/overlayscrollbars.css';
 import { Book } from '@/types/book';
 import { AppService, DeleteAction } from '@/types/system';
 import { navigateToReader } from '@/utils/nav';
-import { formatAuthors, formatTitle, getPrimaryLanguage, listFormater } from '@/utils/book';
+import { formatAuthors, formatTitle, getPrimaryLanguage } from '@/utils/book';
+// import { listFormater } from '@/utils/book'; // Library imports paused.
 import { eventDispatcher } from '@/utils/event';
-import { getFilename } from '@/utils/path';
+// import { getFilename } from '@/utils/path'; // Library imports paused.
 import { isWebAppPlatform } from '@/services/environment';
 
 import { useEnv } from '@/context/EnvContext';
@@ -26,13 +28,13 @@ import { useSettingsStore } from '@/store/settingsStore';
 import { useTheme } from '@/hooks/useTheme';
 import { useUICSS } from '@/hooks/useUICSS';
 import { useScreenWakeLock } from '@/hooks/useScreenWakeLock';
-import { SelectedFile, useFileSelector } from '@/hooks/useFileSelector';
+// import { SelectedFile, useFileSelector } from '@/hooks/useFileSelector'; // Library imports paused.
 
 import { BookMetadata } from '@/libs/document';
 import { AboutWindow } from '@/components/AboutWindow';
 import { StorageWindow, setStorageDialogVisible } from '@/components/StorageWindow';
 import { BookDetailModal } from '@/components/metadata';
-import { useDragDropImport } from './hooks/useDragDropImport';
+// import { useDragDropImport } from './hooks/useDragDropImport'; // Library imports paused.
 import { useLibraryRefresh } from './hooks/useLibraryRefresh';
 import { Toast } from '@/components/Toast';
 import WelcomeModal from '@/components/WelcomeModal';
@@ -42,7 +44,7 @@ import LibraryHeader from './components/LibraryHeader';
 import Bookshelf from './components/Bookshelf';
 import ReaderModal from './components/ReaderModal';
 import useShortcuts from '@/hooks/useShortcuts';
-import DropIndicator from '@/components/DropIndicator';
+// import DropIndicator from '@/components/DropIndicator'; // Library imports paused.
 import SettingsDialog from '@/components/settings/SettingsDialog';
 
 const LibraryPageWithSearchParams = () => {
@@ -64,11 +66,17 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
     syncProgress,
     updateBook,
     setLibrary,
-    getGroupName,
+    // getGroupName, // Used only by the retained Library import code.
     refreshGroups,
   } = useLibraryStore();
+  // The Booksellers reading copy is hidden from the shelf, so it cannot make
+  // Library count as nonempty after the last real book has been deleted.
+  const hasLibraryBooks = libraryBooks.some(
+    book => !book.deletedAt && book.hash !== '__bookseller_temp__',
+  );
   const _ = useTranslation();
-  const { selectFiles } = useFileSelector(appService, _);
+  // Library importing is paused; restore these commented hooks with the import controls.
+  // const { selectFiles } = useFileSelector(appService, _);
   const { safeAreaInsets: insets, isRoundedWindow, themeMode } = useThemeStore();
   const { settings, setSettings, saveSettings } = useSettingsStore();
   const { isSettingsDialogOpen, setSettingsDialogOpen } = useSettingsStore();
@@ -96,7 +104,7 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
   useUICSS();
 
 
-  const { isDragging } = useDragDropImport();
+  // const { isDragging } = useDragDropImport();
   useScreenWakeLock(settings.screenWakeLock);
 
   useShortcuts({
@@ -112,9 +120,10 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
     onOpenFontLayoutSettings: () => {
       setSettingsDialogOpen(true);
     },
-    onOpenBooks: () => {
-      handleImportBooks();
-    },
+    // Library importing is paused. Keep the shortcut code for restoring later.
+    // onOpenBooks: () => {
+    //   handleImportBooks();
+    // },
   });
 
   // Clear the window name on mount. 
@@ -147,6 +156,7 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
     return;
   }, [appService, handleRefreshLibrary]);
 
+  /* Library importing is paused. Retain the file-event handler and subscription.
   const handleImportBookFiles = useCallback(async (event: CustomEvent) => {
     const selectedFiles: SelectedFile[] = event.detail.files;
     const groupId: string = event.detail.groupId || '';
@@ -161,15 +171,17 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
       eventDispatcher.off('import-book-files', handleImportBookFiles);
     };
   }, [handleImportBookFiles]);
+  */
 
   useEffect(() => {
     refreshGroups();
-    if (!libraryBooks.some((book) => !book.deletedAt)) {
+    if (!hasLibraryBooks) {
       handleSetSelectMode(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [libraryBooks]);
+  }, [libraryBooks, hasLibraryBooks]);
 
+  /* Library importing is paused. Retain the legacy Open With importer.
   const processOpenWithFiles = useCallback(
     async (appService: AppService, openWithFiles: string[], libraryBooks: Book[]) => {
       const settings = await appService.loadSettings();
@@ -199,6 +211,8 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
+
+  */
 
   const handleOpenLastBooks = async (
     appService: AppService,
@@ -242,12 +256,14 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
       if (!active || !snapshot) return;
       const { appService, settings, library } = snapshot;
       let opened = false;
-      opened = await handleOpenWithBooks(appService, library);
+      // Library importing is paused:
+      // opened = await handleOpenWithBooks(appService, library);
       if (active && !opened && settings.openLastBooks) {
         opened = await handleOpenLastBooks(appService, settings.lastOpenBooks, library);
       }
     };
 
+    /* Library importing is paused. Retain the Open With startup hookup.
     const handleOpenWithBooks = async (appService: AppService, library: Book[]) => {
       const openWithFiles = (await parseOpenWithFiles()) || [];
 
@@ -256,6 +272,7 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
       }
       return false;
     };
+    */
 
     void initLibrary()
       .catch(error => console.error('Could not initialize Library:', error))
@@ -272,6 +289,8 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
+  /* Library importing is paused. Authors publishes through publishManuscript instead.
+     Keep this implementation for restoring direct Library imports later.
   const importBooks = async (files: SelectedFile[], groupId?: string) => {
     setLoading(true);
     const { library } = useLibraryStore.getState();
@@ -339,6 +358,8 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
     appService?.saveLibraryBooks(library);
     setLoading(false);
   };
+
+  */
 
   const handleBookDownload = useCallback(
     async (_book: Book, _redownload = false) => {
@@ -424,6 +445,7 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
     setStorageDialogVisible(true);
   };
 
+  /* Library importing is paused. Retain the EPUB file chooser.
   const handleImportBooks = () => {
     setIsSelectMode(false);
     selectFiles({ type: 'books', accept: '.epub', extensions: ['epub'], multiple: true }).then((result) => {
@@ -446,6 +468,15 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
       }));
       importBooks(filesWithSource, groupId);
     });
+  };
+
+  */
+
+  // A dropped book must not navigate this tab away from EE. File inputs in
+  // settings or backup dialogs can still accept their own files normally.
+  const preventFileNavigation = (event: React.DragEvent<HTMLDivElement>) => {
+    if (event.target instanceof Element && event.target.closest('input[type="file"]')) return;
+    if (event.dataTransfer.types.includes('Files')) event.preventDefault();
   };
 
   const handleSetSelectMode = (selectMode: boolean) => {
@@ -494,6 +525,8 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
     <div
       ref={pageRef}
       aria-label='Your Library'
+      onDragOver={preventFileNavigation}
+      onDrop={preventFileNavigation}
       className={clsx(
         'library-page text-base-content flex h-[100vh] select-none flex-col overflow-hidden',
         viewSettings?.isEink ? 'bg-base-100' : 'bg-base-200',
@@ -506,12 +539,12 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
         tabIndex={-1}
         aria-label={_('Library Header')}
       >
+        {/* Library imports paused: restore onImportBooks={handleImportBooks} below if needed. */}
         <LibraryHeader
           isSelectMode={isSelectMode}
           isSelectAll={isSelectAll}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
-          onImportBooks={handleImportBooks}
           onToggleSelectMode={() => handleSetSelectMode(!isSelectMode)}
           onSelectAll={handleSelectAll}
           onDeselectAll={handleDeselectAll}
@@ -524,7 +557,7 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
         </div>
       )}
       {showBookshelf &&
-        (libraryBooks.some((book) => !book.deletedAt) ? (
+        (hasLibraryBooks ? (
           <OverlayScrollbarsComponent
             defer
             aria-label=''
@@ -541,7 +574,8 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
             }}
           >
             <div
-              className={clsx('scroll-container drop-zone flex-grow', isDragging && 'drag-over')}
+              // Library imports paused: className={clsx('scroll-container drop-zone flex-grow', isDragging && 'drag-over')}
+              className='scroll-container flex-grow'
               style={{
                 paddingTop: '0px',
                 paddingRight: `${insets.right}px`,
@@ -557,7 +591,7 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
                 value={syncProgress * 100}
                 max='100'
               ></progress>
-              <DropIndicator />
+              {/* Library imports paused: <DropIndicator /> */}
               <Bookshelf
                 libraryBooks={libraryBooks}
                 isSelectMode={isSelectMode}
@@ -573,14 +607,15 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
             </div>
           </OverlayScrollbarsComponent>
         ) : (
-          <div className='hero drop-zone h-screen items-center justify-center'>
-            <DropIndicator />
+          // Library imports paused: the empty shelf no longer acts as a drop-zone.
+          <div className='hero h-screen items-center justify-center'>
+            {/* <DropIndicator /> */}
             <div className='hero-content text-neutral-content text-center'>
               <div className='max-w-md'>
                 <h1 className='mb-5 text-5xl font-bold'>{_('Your Library')}</h1>
                 <p className='mb-5'>
                   {_(
-                    'Welcome to your library. You can import your books here and read them anytime.',
+                    'Open or write your book in Authors, then Publish it here to read, review, and download.',
                   )}
                 </p>
               </div>

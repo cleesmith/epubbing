@@ -1,5 +1,5 @@
 // apps/proselenos-app/src/components/AboutWindow.tsx
-// About for ereader Library page
+// About and help for Library
 
 import React, { useEffect, useState } from 'react';
 import { useEnv } from '@/context/EnvContext';
@@ -12,6 +12,7 @@ import LegalLinks from './LegalLinks';
 import Dialog from './Dialog';
 import Link from './Link';
 import { RELEASE_HASH } from '@/generated/release';
+import AboutHelpContent from './AboutHelpContent';
 
 export const setAboutDialogVisible = (visible: boolean) => {
   const dialog = document.getElementById('about_window');
@@ -63,15 +64,15 @@ export const AboutWindow = () => {
       isOpen={isOpen}
       title=""
       onClose={handleClose}
-      boxClassName='sm:!w-[480px] sm:!max-w-screen-sm sm:h-auto'
+      boxClassName='sm:!w-[720px] sm:!max-w-[90vw] sm:!h-[85vh]'
     >
       {isOpen && (
-        <div className='about-content flex h-full flex-col items-center justify-center gap-4 pb-10 sm:pb-0'>
-          <div className='flex flex-1 flex-col items-center justify-end gap-2 px-8 py-2'>
+        <div className='about-content flex flex-col items-center gap-4 pb-10 sm:pb-0'>
+          <div className='flex flex-col items-center gap-2 px-8 py-2'>
 
             <div className='flex select-text flex-col items-center'>
               <h2 className='mb-1 text-2xl font-bold'>EverythingEbooks</h2>
-              <p className='mb-2 text-sm italic tracking-wide text-neutral-content'>Readers and Writers</p>
+              <p className='mb-2 text-sm italic tracking-wide text-neutral-content'>Write, review, and publish your books</p>
               <p className='text-neutral-content text-center text-sm'>
                 {_('Version {{version}}', { version: getAppVersion() })} {`(${browserInfo})`}
               </p>
@@ -91,10 +92,12 @@ export const AboutWindow = () => {
 
           </div>
 
-          <hr className='border-base-300 my-12 w-full sm:my-4' />
+          <AboutHelpContent page='library' />
+
+          <hr className='border-base-300 my-4 w-full' />
 
           <div
-            className='flex flex-1 flex-col items-center justify-start gap-2 px-4 text-center'
+            className='flex flex-col items-center gap-2 px-4 text-center'
             dir='ltr'
           >
             <p className='text-neutral-content text-sm'>
@@ -116,16 +119,6 @@ export const AboutWindow = () => {
               . You are free to use, modify, and distribute this software under the terms of the
               AGPL v3 license. Please see the license for more details.
             </p>
-            <p className='text-neutral-content text-xs italic'>
-              EverythingEbooks is compatible with{' '}
-              <Link href='https://readest.com/' className='text-blue-500 underline'>
-                Readest
-              </Link>
-              , an open-source ebook reader for immersive reading.
-              <br />
-              For a more robust ebook reader, definitely use Readest.
-            </p>
-
             <LegalLinks />
           </div>
           <SupportLinks />

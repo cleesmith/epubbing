@@ -2,7 +2,9 @@ import clsx from 'clsx';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { FaSearch } from 'react-icons/fa';
-import { PiBooks, PiArrowClockwise, PiPencil, PiDotsThreeCircle } from 'react-icons/pi';
+import { PiArrowClockwise, PiPencil, PiDotsThreeCircle } from 'react-icons/pi';
+// Library importing is paused; keep its icon and controls below for restoring later.
+// import { PiBooks } from 'react-icons/pi';
 import { MdOutlineMenu, MdArrowBackIosNew } from 'react-icons/md';
 import { IoMdCloseCircle } from 'react-icons/io';
 
@@ -26,7 +28,7 @@ interface LibraryHeaderProps {
   isSelectAll: boolean;
   searchQuery: string;
   onSearchChange: (query: string) => void;
-  onImportBooks: () => void;
+  // onImportBooks: () => void;
   onToggleSelectMode: () => void;
   onSelectAll: () => void;
   onDeselectAll: () => void;
@@ -38,7 +40,7 @@ const LibraryHeader: React.FC<LibraryHeaderProps> = ({
   isSelectAll,
   searchQuery,
   onSearchChange,
-  onImportBooks,
+  // onImportBooks,
   onToggleSelectMode: _onToggleSelectMode, // disabled: multi-select mode
   onSelectAll,
   onDeselectAll,
@@ -171,6 +173,7 @@ const LibraryHeader: React.FC<LibraryHeaderProps> = ({
             <PiPencil className='h-5 w-5' />
             <span className='text-sm'>Authors</span>
           </button>
+          {/* Library importing is paused. Authors > Open is the entry point.
           <button
             onClick={onImportBooks}
             aria-label={_('Import Ebook')}
@@ -180,6 +183,7 @@ const LibraryHeader: React.FC<LibraryHeaderProps> = ({
             <PiBooks className='h-5 w-5' />
             <span className='text-sm'>{_('Import Ebook')}</span>
           </button>
+          */}
           <div className='relative flex h-9 max-w-sm flex-1 items-center sm:h-7'>
             <span className='absolute left-3 text-gray-500'>
               <FaSearch className='h-4 w-4' />

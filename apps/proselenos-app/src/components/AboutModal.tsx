@@ -12,6 +12,7 @@ import { FaDiscord } from 'react-icons/fa';
 import { ThemeConfig } from '../app/shared/theme';
 import StyledSmallButton from '@/components/StyledSmallButton';
 import { RELEASE_HASH } from '@/generated/release';
+import AboutHelpContent from './AboutHelpContent';
 
 interface AboutModalProps {
   isOpen: boolean;
@@ -118,51 +119,7 @@ export default function AboutModal({
             <div style={{ borderTop: `1px solid ${isDarkMode ? '#333' : '#e5e7eb'}`, marginTop: '16px' }} />
           </div>
 
-          {/* Getting Started Section */}
-          <div style={{ marginBottom: '32px' }}>
-            <h3 style={{
-              fontSize: '20px',
-              fontWeight: '600',
-              marginBottom: '16px',
-              color: '#10b981'
-            }}>
-              Getting Started
-            </h3>
-            <div style={{ fontWeight: '600', marginBottom: '8px' }}>
-              Work directly on an Ebook in plain text that is always EPUB ready
-            </div>
-            <p style={{ fontSize: '14px', color: isDarkMode ? '#d1d5db' : '#374151', lineHeight: '1.6', marginBottom: '12px' }}>
-              Click the &quot;Open&quot; button, then choose: <br />
-              &quot;New&quot; - create a blank starter ebook, <br />
-              &quot;Load EPUB&quot; - import an existing <b>.epub</b> from your device, <br />
-              &quot;Load DOCX&quot; - convert a Word document <b>.docx</b> to EPUB, <br />
-              &quot;Load from Library&quot; - import an ebook from your e-reader Library.
-            </p>
-            <p style={{ fontSize: '14px', color: isDarkMode ? '#d1d5db' : '#374151', lineHeight: '1.6' }}>
-              That&apos;s it - you can now create and edit your ebook.
-            </p>
-          </div>
-
-          {/* How Your Ebook Works */}
-          <div style={{ marginBottom: '32px' }}>
-            <h3 style={{
-              fontSize: '18px',
-              fontWeight: '600',
-              marginBottom: '12px',
-              color: '#10b981'
-            }}>
-              How Your Ebook Works
-            </h3>
-            <p style={{ fontSize: '14px', color: isDarkMode ? '#d1d5db' : '#374151', lineHeight: '1.6', marginBottom: '12px' }}>
-              Your ebook is stored entirely in your web browser:
-            </p>
-            <ul style={{ fontSize: '14px', color: isDarkMode ? '#d1d5db' : '#374151', lineHeight: '1.6', paddingLeft: '24px' }}>
-              <li style={{ marginBottom: '8px' }}>All data stays on your computer - nothing is uploaded anywhere</li>
-              <li style={{ marginBottom: '8px' }}>Organized into sections: front matter, chapters, and back matter - the ebook is your manuscript</li>
-              <li style={{ marginBottom: '8px' }}>Click &quot;Publish&quot; to export as EPUB and add to your Library for instant reading and listening</li>
-              <li style={{ marginBottom: '8px' }}>No accounts, no sign up, no sign in, no emails - completely private</li>
-            </ul>
-          </div>
+          <AboutHelpContent page="authors" />
 
           {/* Book & Ko-fi Donate */}
           <div className="mt-6 flex items-center justify-center gap-4">
