@@ -321,7 +321,7 @@ ${sceneCraftJsBlock}
 
 // ── Autoplay variant: passive viewer with auto-scroll ─────────────────────
 
-function buildAutoplayHtml(opts: BuildHtmlOptions): string {
+export function buildAutoplayHtml(opts: BuildHtmlOptions): string {
   const { title, author, year, sections, isDarkMode, coverFilename, subtitle, publisher, imageMap, audioMap } = opts;
 
   // Reset the global enlarge counter for each new HTML build
@@ -432,7 +432,7 @@ ${HTML_SPECIFIC_CSS}
 <body${isDarkMode ? ' class="dark-mode"' : ''}>
 ${allSectionsHtml}
 
-  <div class="footer">
+  <div class="footer autoplay-footer">
     <div class="footer-buttons">
       <button class="theme-toggle" id="themeToggle" title="Toggle light/dark mode">${isDarkMode ? '&#9728;&#65039;' : '&#127769;'}</button>
     </div>
@@ -442,7 +442,17 @@ ${allSectionsHtml}
       <span class="footer-copyright">&copy; ${escapeHtml(year)}</span>
       <span class="footer-scene" id="footerScene"></span>
     </div>
-    <div class="footer-status" id="footerStatus"></div>
+    <div class="autoplay-controls" aria-label="Autoplay controls">
+      <button type="button" class="footer-status" id="footerStatus" title="Start scrolling">Play</button>
+      <label for="readingPace">Reading pace</label>
+      <span class="autoplay-speed-range">
+        <span>Slower</span>
+        <input type="range" id="readingPace" min="60" max="360" step="1" value="183" aria-describedby="readingPaceValue" />
+        <span>Faster</span>
+      </span>
+      <output id="readingPaceValue" for="readingPace">~183 WPM</output>
+      <span class="autoplay-key-hint">Space: pause / resume scrolling</span>
+    </div>
   </div>
 
   <script>
@@ -2444,25 +2454,65 @@ body:has(.sc-sticky-img input:checked) .sc-sticky-img {
 .footer-scene-label {
   color: #777;
 }
-.footer-status {
-  font-family: "SF Mono", "Fira Code", monospace;
-  font-size: 10px;
-  letter-spacing: 0.1em;
-  color: rgba(255,120,68,0.35);
-  margin-left: auto;
-  user-select: none;
-  transition: opacity 2s;
-  white-space: nowrap;
-  padding: 4px 14px;
-  border-radius: 999px;
-  background: transparent;
-  border: 1px solid transparent;
+.footer.autoplay-footer {
+  flex-wrap: wrap;
+  gap: 8px 16px;
 }
-.footer-status.pill {
-  background: rgba(255,120,68,0.08);
-  border-color: rgba(255,120,68,0.12);
+.autoplay-footer .footer-info {
+  flex: 1 1 240px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.autoplay-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  color: #e0e0e0;
+  font: 14px/1.4 system-ui, sans-serif;
+}
+.autoplay-speed-range {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.autoplay-speed-range input {
+  width: 130px;
+  max-width: 30vw;
+  accent-color: #ffad80;
   cursor: pointer;
-}`;
+}
+.autoplay-controls output {
+  min-width: 76px;
+  font-variant-numeric: tabular-nums;
+}
+.autoplay-controls .footer-status {
+  color: #ffe6d7;
+  background: #543623;
+  border: 1px solid #bd8b69;
+  border-radius: 999px;
+  padding: 7px 16px;
+  min-width: 78px;
+  font: inherit;
+  cursor: pointer;
+}
+.autoplay-controls button:focus-visible,
+.autoplay-controls input:focus-visible {
+  outline: 2px solid #a9d6ff;
+  outline-offset: 3px;
+}
+.autoplay-key-hint {
+  color: #ccc;
+  font-size: 12px;
+}
+@media (max-width: 600px) {
+  .autoplay-footer .footer-info { display: none; }
+  .autoplay-controls { flex: 1; justify-content: flex-start; }
+  .autoplay-key-hint { display: none; }
+}
+`;
 
 const SCENECRAFT_AUTOPLAY_JS = `
     // SceneCraft autoplay: scroll-driven audio + auto-scroll controller
@@ -2720,35 +2770,79 @@ const SCENECRAFT_AUTOPLAY_JS = `
       requestAnimationFrame(tick);
 
       // ── Autoplay scroll controller ──────────────────────────
-      // Audio is the master clock.
+      // Audio provides a baseline pace; the reader's slider scales it last.
       // Dialogue/para clips GATE the scroll (nearly pause until done).
       // Sticky clips PACE the scroll (keep scrolling to reveal text).
       // Ambient never affects scroll — it is just atmosphere.
 
-      var FRONT_MATTER_SPEED = 0.3; // px/frame for cover, copyright, TOC (~18px/s)
-      var BASE_SPEED = 0.8;        // px/frame through non-audio content (~48px/s @ 60fps)
-      var DEAD_ZONE_SPEED = 2.5;   // px/frame through silence gaps (dead zones)
-      var CREEP_SPEED = 0.15;      // px/frame — tiny drift while a dialogue clip plays
-      var PAUSE_AFTER_CLIP = 45;   // frames to breathe after a clip ends (~0.75s)
-      var STICKY_MIN_SPEED = 0.08;    // very low floor — let audio fully control pace
-      var STICKY_MAX_SPEED = 1.2;     // cap for sticky clips
-      var FPS = 60;
+      // All movement is pixels per second, independent of display refresh rate.
+      // Reading pace is estimated from each text block's words and rendered height.
+      var FRONT_MATTER_SPEED = 12;
+      var GAP_SPEED = 20;
+      var CREEP_SPEED = 2;
+      var PAUSE_AFTER_CLIP = 0.75; // seconds
+      var STICKY_MIN_SPEED = 1;
+      var STICKY_MAX_SPEED = 48;
+      var DEFAULT_WPM = 183;
+      var readingWpm = DEFAULT_WPM;
+      var paceInput = document.getElementById('readingPace');
+      var paceOutput = document.getElementById('readingPaceValue');
+      var statusEl = document.getElementById('footerStatus');
+      var paceKey = 'html-ebook-reading-wpm';
+      try {
+        var savedWpm = Number(localStorage.getItem(paceKey));
+        if (isFinite(savedWpm) && savedWpm >= 60 && savedWpm <= 360) readingWpm = Math.round(savedWpm);
+      } catch(e) {}
+
+      function showPace() {
+        paceInput.value = String(readingWpm);
+        paceInput.setAttribute('aria-valuetext', 'About ' + readingWpm + ' words per minute');
+        paceOutput.textContent = '~' + readingWpm + ' WPM';
+      }
+      showPace();
+      paceInput.addEventListener('input', function() {
+        readingWpm = clamp(Number(paceInput.value) || DEFAULT_WPM, 60, 360);
+        showPace();
+        try { localStorage.setItem(paceKey, String(readingWpm)); } catch(e) {}
+      });
+
+      var textSelector = '.sc-block, .chapter p, .chapter li, .chapter h1, .chapter h2, .chapter h3, '
+        + '.scene p, .scene h1, .scene h2, .scene h3, .copyright-page p, .title-page p, .title-page h1, .toc-item';
+      var readingBlocks = [];
+      document.querySelectorAll(textSelector).forEach(function(el) {
+        // Count the innermost text blocks once, including text beside sticky images.
+        if (el.querySelector(textSelector)) return;
+        var parentBlock = el.parentElement && el.parentElement.closest('.sc-block');
+        if (parentBlock) return;
+        var text = (el.textContent || '').trim();
+        if (text) readingBlocks.push({ el: el, words: text.split(/\\s+/).length });
+      });
+      var readingIndex = 0;
+
+      function getReadingSpeed() {
+        if (!readingBlocks.length) return null;
+        while (readingIndex > 0 && readingBlocks[readingIndex].el.getBoundingClientRect().top > playheadY) readingIndex--;
+        while (readingIndex < readingBlocks.length - 1 && readingBlocks[readingIndex].el.getBoundingClientRect().bottom <= playheadY) readingIndex++;
+        var block = readingBlocks[readingIndex];
+        var rect = block.el.getBoundingClientRect();
+        if (rect.height <= 0 || rect.top > playheadY || rect.bottom <= playheadY) return null;
+        // Limit the default pace first. Applying limits after the reader's
+        // choice made short paragraphs and tall image blocks ignore the slider.
+        var seconds = Math.max(2, block.words * 60 / DEFAULT_WPM);
+        return clamp(rect.height / seconds, 1, 48);
+      }
 
       var firstSceneEl = document.querySelector('.sc-scene');
-      var pastFrontMatter = false;
-
       function isInFrontMatter() {
-        if (pastFrontMatter) return false;
-        if (firstSceneEl && firstSceneEl.getBoundingClientRect().top <= window.innerHeight) {
-          pastFrontMatter = true;
-          return false;
-        }
-        return true;
+        return firstSceneEl && firstSceneEl.getBoundingClientRect().top > window.innerHeight;
       }
 
       var autoScrollActive = false;
       var scrollDone = false;
+      var hasStarted = false;
       var postClipTimer = 0;
+      var lastScrollTime = null;
+      var scrollRemainder = 0;
 
       function isClipPlaying(obj) {
         if (!obj || !obj.el) return false;
@@ -2770,13 +2864,6 @@ const SCENECRAFT_AUTOPLAY_JS = `
           // NOTE: stkObj is NOT here — sticky clips are paced, not gated
         }
         return false;
-      }
-
-      function isInDeadZone() {
-        for (var i = 0; i < sceneStates.length; i++) {
-          if (sceneStates[i].inScene) return false;
-        }
-        return true;
       }
 
       // For sticky clips: pace scroll so the sticky section finishes
@@ -2814,9 +2901,9 @@ const SCENECRAFT_AUTOPLAY_JS = `
 
             // If all text has already passed the playhead but audio still playing,
             // keep scrolling slowly — don't jump to BASE_SPEED
-            if (pixelsLeft <= 10) return BASE_SPEED;
+            if (pixelsLeft <= 10) return CREEP_SPEED;
 
-            var speed = pixelsLeft / (remaining * FPS);
+            var speed = pixelsLeft / remaining;
             speed = Math.max(STICKY_MIN_SPEED, Math.min(STICKY_MAX_SPEED, speed));
             return speed;
           }
@@ -2827,92 +2914,86 @@ const SCENECRAFT_AUTOPLAY_JS = `
         return null;
       }
 
-      function autoScroll() {
-        if (!autoScrollActive || scrollDone) {
-          requestAnimationFrame(autoScroll);
-          return;
-        }
-
-        var maxScroll = document.documentElement.scrollHeight - window.innerHeight;
-        if (window.scrollY >= maxScroll) {
-          scrollDone = true;
-          console.log('Autoplay: reached the end.');
-          return;
-        }
-
-        var speed;
-
-        // Priority 0: front matter (cover, copyright, TOC) — slow scroll
-        if (isInFrontMatter()) {
-          speed = FRONT_MATTER_SPEED;
-          window.scrollBy(0, speed);
-          requestAnimationFrame(autoScroll);
-          return;
-        }
-
-        // Priority 1: dialogue/para clip playing — gate (nearly stop)
-        if (isGatedAudioPlaying()) {
-          speed = CREEP_SPEED;
-          postClipTimer = PAUSE_AFTER_CLIP;
-        }
-        // Priority 2: just finished a clip — brief pause
-        else if (postClipTimer > 0) {
-          speed = CREEP_SPEED;
-          postClipTimer--;
-        }
-        // Priority 3: sticky clip playing — pace through the sticky section
-        else {
-          var stickySpeed = getStickyPacedSpeed();
-          if (stickySpeed !== null) {
-            speed = stickySpeed;
-          }
-          // Priority 4: dead zone — move through silence
-          else if (isInDeadZone()) {
-            speed = DEAD_ZONE_SPEED;
-          }
-          // Default: gentle reading pace
-          else {
-            speed = BASE_SPEED;
-          }
-        }
-
-        window.scrollBy(0, speed);
-        requestAnimationFrame(autoScroll);
+      function updatePlayButton() {
+        statusEl.textContent = autoScrollActive ? 'Pause' : scrollDone ? 'Replay' : hasStarted ? 'Resume' : 'Play';
+        statusEl.title = autoScrollActive ? 'Pause scrolling' : scrollDone ? 'Read again from the beginning' : 'Start or resume scrolling';
       }
 
-      // Status indicator + start/pause control (lives in the footer)
-      var statusEl = document.getElementById('footerStatus');
-      statusEl.textContent = 'PRESS SPACE TO BEGIN';
-      statusEl.classList.add('pill');
+      function toggleAutoScroll() {
+        if (scrollDone) {
+          window.scrollTo(0, 0);
+          scrollDone = false;
+          postClipTimer = 0;
+        }
+        autoScrollActive = !autoScrollActive;
+        hasStarted = true;
+        lastScrollTime = null;
+        scrollRemainder = 0;
+        updatePlayButton();
+      }
+
+      function autoScroll(timestamp) {
+        requestAnimationFrame(autoScroll);
+        if (!autoScrollActive || document.hidden) {
+          lastScrollTime = null;
+          return;
+        }
+        // Never catch up after a hidden tab or long frame by jumping past text.
+        var elapsed = lastScrollTime === null ? 0 : clamp((timestamp - lastScrollTime) / 1000, 0, 0.1);
+        lastScrollTime = timestamp;
+        var maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+        if (window.scrollY >= maxScroll - 1) {
+          scrollDone = true;
+          autoScrollActive = false;
+          updatePlayButton();
+          return;
+        }
+
+        var pace = readingWpm / DEFAULT_WPM;
+        var readingSpeed = getReadingSpeed();
+        var speed = readingSpeed === null ? GAP_SPEED : readingSpeed;
+
+        if (isInFrontMatter()) {
+          speed = Math.min(speed, FRONT_MATTER_SPEED);
+        } else if (isGatedAudioPlaying()) {
+          speed = CREEP_SPEED;
+          postClipTimer = PAUSE_AFTER_CLIP;
+        } else if (postClipTimer > 0) {
+          speed = CREEP_SPEED;
+          postClipTimer = Math.max(0, postClipTimer - elapsed);
+        } else {
+          var stickySpeed = getStickyPacedSpeed();
+          // Audio can slow the baseline; the slider still controls the result.
+          if (stickySpeed !== null) speed = Math.min(speed, stickySpeed);
+        }
+
+        // Scale after all content/audio limits so every slider change takes effect.
+        speed *= pace;
+
+        // Accumulate fractions: browsers may round individual scrollBy calls.
+        scrollRemainder += speed * elapsed;
+        var pixels = Math.floor(scrollRemainder);
+        scrollRemainder -= pixels;
+        if (pixels > 0) window.scrollBy(0, pixels);
+      }
 
       document.addEventListener('keydown', function(e) {
-        if (e.code === 'Space') {
-          e.preventDefault();
-          if (scrollDone) return;
-
-          autoScrollActive = !autoScrollActive;
-
-          if (autoScrollActive) {
-            statusEl.textContent = 'PLAYING';
-            statusEl.classList.remove('pill');
-            // fade out the indicator after 1 second
-            setTimeout(function() {
-              if (autoScrollActive) statusEl.style.opacity = '0';
-            }, 1000);
-          } else {
-            statusEl.style.opacity = '1';
-            statusEl.textContent = 'PAUSED \\u2014 SPACE TO RESUME';
-            statusEl.classList.add('pill');
-          }
-        }
+        if (e.code !== 'Space' || e.repeat || e.altKey || e.ctrlKey || e.metaKey) return;
+        // Native buttons and the slider keep their own keyboard behavior.
+        if (e.target instanceof Element && e.target.closest('button, input, select, textarea, a, [contenteditable]')) return;
+        e.preventDefault();
+        toggleAutoScroll();
       });
+      statusEl.addEventListener('click', toggleAutoScroll);
+      document.addEventListener('visibilitychange', function() { lastScrollTime = null; });
 
-      // also allow clicking the status bar to toggle
-      statusEl.addEventListener('click', function() {
-        var ev = new KeyboardEvent('keydown', { code: 'Space' });
-        document.dispatchEvent(ev);
-      });
-
+      // Keep the last lines above the controls, including when the footer wraps.
+      var footer = document.querySelector('.autoplay-footer');
+      function fitFooter() { document.body.style.paddingBottom = (footer.offsetHeight + 24) + 'px'; }
+      fitFooter();
+      window.addEventListener('resize', fitFooter);
+      if (typeof ResizeObserver !== 'undefined') new ResizeObserver(fitFooter).observe(footer);
+      updatePlayButton();
       requestAnimationFrame(autoScroll);
 
     })();`;
