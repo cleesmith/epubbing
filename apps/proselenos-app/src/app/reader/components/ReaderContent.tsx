@@ -4,7 +4,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { desktopHandleClose, desktopHandleOnCloseWindow, parseOpenWithFiles } from '@/utils/desktop-stubs';
 import { useRouter, useSearchParams } from 'next/navigation';
 
-import { Book } from '@/types/book';
+// Retained for restoring Ebook Plus inside the EPUB reader.
+// import { Book } from '@/types/book';
 import { useEnv } from '@/context/EnvContext';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useBookDataStore } from '@/store/bookDataStore';
@@ -18,7 +19,7 @@ import { throttle } from '@/utils/throttle';
 import { eventDispatcher } from '@/utils/event';
 import { navigateToLibrary } from '@/utils/nav';
 import { BOOK_IDS_SEPARATOR } from '@/services/constants';
-import { BookDetailModal } from '@/components/metadata';
+// import { BookDetailModal } from '@/components/metadata';
 
 import useBooksManager from '../hooks/useBooksManager';
 import useBookShortcuts from '../hooks/useBookShortcuts';
@@ -37,7 +38,7 @@ const ReaderContent: React.FC<{ ids?: string; settings: SystemSettings; onClose?
   const { booksData: _booksData, getConfig, getBookData, saveConfig } = useBookDataStore();
   const { getView, setBookKeys, getViewSettings } = useReaderStore();
   const { initViewState, getViewState, clearViewState } = useReaderStore();
-  const [showDetailsBook, setShowDetailsBook] = useState<Book | null>(null);
+  // const [showDetailsBook, setShowDetailsBook] = useState<Book | null>(null);
   const isInitiating = useRef(false);
   const [loading, setLoading] = useState(false);
 
@@ -67,6 +68,7 @@ const ReaderContent: React.FC<{ ids?: string; settings: SystemSettings; onClose?
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /* Ebook Plus is available on the Library shelf. Keep this reader listener disabled.
   useEffect(() => {
     const handleShowBookDetails = (event: CustomEvent) => {
       setShowDetailsBook(event.detail as Book);
@@ -78,6 +80,7 @@ const ReaderContent: React.FC<{ ids?: string; settings: SystemSettings; onClose?
       eventDispatcher.offSync('show-book-details', handleShowBookDetails);
     };
   }, []);
+  */
 
   useEffect(() => {
     if (bookKeys && bookKeys.length > 0) {
@@ -201,6 +204,7 @@ const ReaderContent: React.FC<{ ids?: string; settings: SystemSettings; onClose?
       <SideBar onGoToLibrary={handleCloseBooksToLibrary} />
       <BooksGrid bookKeys={bookKeys} onCloseBook={handleCloseBook} />
       <Notebook />
+      {/* Retained for restoring Ebook Plus inside either EPUB reader.
       {showDetailsBook && (
         <BookDetailModal
           isOpen={!!showDetailsBook}
@@ -208,6 +212,7 @@ const ReaderContent: React.FC<{ ids?: string; settings: SystemSettings; onClose?
           onClose={() => setShowDetailsBook(null)}
         />
       )}
+      */}
     </div>
   );
 };

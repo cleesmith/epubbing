@@ -1,23 +1,26 @@
 import clsx from 'clsx';
 import React from 'react';
 import Image from 'next/image';
-import { MdInfoOutline } from 'react-icons/md';
+// Retained for restoring Ebook Plus inside the EPUB reader.
+// import { MdInfoOutline } from 'react-icons/md';
 import { Book } from '@/types/book';
 import { useThemeStore } from '@/store/themeStore';
 import { useTranslation } from '@/hooks/useTranslation';
-import { eventDispatcher } from '@/utils/event';
-import { useResponsiveSize } from '@/hooks/useResponsiveSize';
+// import { eventDispatcher } from '@/utils/event';
+// import { useResponsiveSize } from '@/hooks/useResponsiveSize';
 import { formatAuthors, formatTitle } from '@/utils/book';
 
 const BookCard = ({ book }: { book: Book }) => {
   const { coverImageUrl, title, author, metadata } = book;
   const _ = useTranslation();
   const { isDarkMode } = useThemeStore();
-  const iconSize18 = useResponsiveSize(18);
+  // const iconSize18 = useResponsiveSize(18);
 
+  /* Ebook Plus is available on the Library shelf, not inside either EPUB reader.
   const showBookDetails = () => {
     eventDispatcher.dispatchSync('show-book-details', book);
   };
+  */
 
   return (
     <div className='flex h-20 w-full items-center'>
@@ -38,6 +41,7 @@ const BookCard = ({ book }: { book: Book }) => {
         <h4 className='line-clamp-2 w-[90%] text-sm font-semibold'>{formatTitle(title)}</h4>
         <p className='truncate text-xs opacity-75'>{formatAuthors(author)}</p>
       </div>
+      {/* Ebook Plus entry point retained but hidden in Authors and Booksellers readers.
       <button
         className='btn btn-ghost hover:bg-base-300 h-6 min-h-6 w-6 rounded-full p-0 transition-colors'
         aria-label={_('More Info')}
@@ -45,6 +49,7 @@ const BookCard = ({ book }: { book: Book }) => {
       >
         <MdInfoOutline size={iconSize18} className='fill-base-content' />
       </button>
+      */}
     </div>
   );
 };
