@@ -93,7 +93,7 @@ export const StorageWindow = () => {
     setIsExporting(true);
     try {
       await exportAndDownload();
-      showAlert(_('Your backup has been downloaded.'), 'success', _('Export Complete'));
+      showAlert(_('Your backup has been exported.'), 'success', _('Export Complete'));
     } catch (err) {
       console.error('Export failed:', err);
       showAlert(_('Export failed. Please try again.'), 'error');

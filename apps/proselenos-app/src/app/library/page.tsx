@@ -644,7 +644,7 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
                 <h1 className='mb-5 text-5xl font-bold'>{_('Your Library')}</h1>
                 <p className='mb-5'>
                   {_(
-                    'Open or write your book in Authors, then click Save & read in Library to read, review, and download it here.',
+                    'Open or write your book in Authors, then click Save & read in Library to read, review, and export it here.',
                   )}
                 </p>
               </div>

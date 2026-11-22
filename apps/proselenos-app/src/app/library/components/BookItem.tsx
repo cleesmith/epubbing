@@ -98,8 +98,8 @@ const BookItem: React.FC<BookItemProps> = ({
             {book.progress && <ReadingProgress book={book} />}
             {onReadBook && (
               <button
-                aria-label={_('Read Ebook')}
-                title={_('Read Ebook')}
+                aria-label={_('Read Authors EPUB')}
+                title={_('Read Authors EPUB')}
                 className='-m-2 p-2'
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={() => {

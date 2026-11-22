@@ -84,8 +84,6 @@ import environmentConfig from '@/services/environment';
 import { publishManuscript } from '@/services/publishManuscript';
 import { reserveLibraryReview } from '@/utils/library-tab';
 import { publishedReviewFragment } from '@/utils/published-review';
-import { reviewForAuthors, snapshotForTextReview } from '@/lib/text-review';
-import { showTextReviewResult } from '@/lib/text-review-tab';
 
 // Helper to escape HTML for XHTML storage
 function escapeHtmlForLayout(text: string): string {
@@ -132,11 +130,6 @@ export default function AuthorsLayout({
   const [isProcessing, setIsProcessing] = useState(false);
   const [showCoverUpload, setShowCoverUpload] = useState(false);
   const [writingMode, setWritingMode] = useState(false);
-  const reviewTabRef = useRef<Window | null>(null);
-  const reviewAbortRef = useRef<AbortController | null>(null);
-  const [reviewProgress, setReviewProgress] = useState('');
-
-  useEffect(() => () => reviewAbortRef.current?.abort(), [selectedSectionId, refreshKey]);
 
   // A newly selected/reloaded chapter always opens with the full controls.
   useEffect(() => {
@@ -1560,34 +1553,6 @@ export default function AuthorsLayout({
     setPendingXhtml(hasChanges ? xhtml : null);
   };
 
-  const handleReviewText = async () => {
-    if (!epub || !selectedSection) return;
-    const snapshot = snapshotForTextReview(
-      selectedSection, epub.sections, pendingXhtml, pendingTitle,
-      manuscriptImages.map(image => image.filename), manuscriptAudios.map(audio => audio.filename),
-    );
-    reviewAbortRef.current?.abort();
-    const controller = new AbortController();
-    reviewAbortRef.current = controller;
-    try {
-      const report = await reviewForAuthors(snapshot, setReviewProgress, controller.signal);
-      if (controller.signal.aborted) return;
-      setReviewProgress('');
-      const tab = await showTextReviewResult(report, reviewTabRef.current, isDarkMode, snapshot.section.title, epub.title);
-      if (!controller.signal.aborted) reviewTabRef.current = tab;
-    } catch (error) {
-      if (!controller.signal.aborted) {
-        console.error('Text review could not finish:', error);
-        showAlert('The review could not finish. Please try Review text again.', 'error', 'Review text', isDarkMode);
-      }
-    } finally {
-      if (reviewAbortRef.current === controller) {
-        reviewAbortRef.current = null;
-        setReviewProgress('');
-      }
-    }
-  };
-
   // Handle title changes from EditorPanel
   const handleTitleChange = (newTitle: string) => {
     setPendingTitle(newTitle);
@@ -1724,7 +1689,7 @@ export default function AuthorsLayout({
       link.remove();
       // Let the browser begin the download before releasing its URL.
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-      showAlert('Downloaded manuscript.txt!', 'success', undefined, isDarkMode);
+      showAlert('Exported manuscript.txt!', 'success', undefined, isDarkMode);
     } catch (error) {
       console.error('TXT export failed:', error);
       showAlert(error instanceof Error ? error.message : 'TXT export failed.', 'error', undefined, isDarkMode);
@@ -1748,7 +1713,7 @@ export default function AuthorsLayout({
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      showAlert('Downloaded DOCX!', 'success', undefined, isDarkMode);
+      showAlert('Exported DOCX!', 'success', undefined, isDarkMode);
     } catch (error) {
       console.error('DOCX export failed:', error);
       showAlert('DOCX export failed', 'error', undefined, isDarkMode);
@@ -1772,7 +1737,7 @@ export default function AuthorsLayout({
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      showAlert('Downloaded Fountain!\nThe .fountain file downloaded will need clean up and editing in a proper screenplay editor.', 'success', undefined, isDarkMode);
+      showAlert('Exported Fountain!\nThe exported .fountain file will need clean up and editing in a proper screenplay editor.', 'success', undefined, isDarkMode);
     } catch (error) {
       console.error('Fountain export failed:', error);
       showAlert('Fountain export failed', 'error', undefined, isDarkMode);
@@ -1953,8 +1918,6 @@ export default function AuthorsLayout({
             isDarkMode={isDarkMode}
             onToggleSidebar={onToggleSidebar}
             onSave={saveCurrentSection}
-            onReviewText={selectedSection ? handleReviewText : undefined}
-            reviewProgress={reviewProgress}
             sectionId={selectedSectionId || undefined}
             sectionTitle={selectedSection?.title ?? ''}
             sectionXhtml={selectedSection?.xhtml ?? '<p></p>'}

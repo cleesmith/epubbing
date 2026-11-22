@@ -45,8 +45,6 @@ interface EditorPanelProps {
   isDarkMode: boolean;
   onToggleSidebar: () => void;
   onSave?: () => Promise<void>;
-  onReviewText?: () => void;
-  reviewProgress?: string;
   // Section content - XHTML-Native: Single source of truth
   sectionId?: string;
   sectionTitle: string;
@@ -98,8 +96,6 @@ const EditorPanel = forwardRef<EditorPanelRef, EditorPanelProps>(function Editor
   isDarkMode,
   onToggleSidebar,
   onSave,
-  onReviewText,
-  reviewProgress,
   sectionId,
   sectionTitle,
   sectionXhtml,
@@ -641,18 +637,6 @@ const EditorPanel = forwardRef<EditorPanelRef, EditorPanelProps>(function Editor
               {writingBlockedReason}
             </span>
           )}
-        </span>
-
-        <StyledSmallButton
-          theme={theme}
-          onClick={onReviewText}
-          disabled={!onReviewText || !isEditorReady || !!reviewProgress}
-          title="Review the open chapter or section"
-        >
-          Review text
-        </StyledSmallButton>
-        <span role="status" style={{ color: theme.textSecondary, fontSize: '12px', display: reviewProgress ? undefined : 'none' }}>
-          {reviewProgress}
         </span>
 
         {/* SceneCraft button */}

@@ -42,18 +42,18 @@ const topRowItems: HelpItem[] = [
   },
   {
     icon: <MdOutlineFileDownload size={ICON_SIZE} className="fill-green-500" />,
-    name: 'Download Booksellers EPUB',
+    name: 'Export Booksellers EPUB',
     description: 'Save the edition you can send to a bookseller.',
   },
   {
     icon: <MdOutlineAutoStories size={ICON_SIZE} className="fill-blue-500" />,
-    name: 'Download Authors EPUB',
+    name: 'Export Authors EPUB',
     description: 'Save your editable EE copy, including its authoring extras and any paperback settings.',
   },
   {
     icon: <MdOutlineFactCheck size={ICON_SIZE} className="fill-emerald-500" />,
     name: 'Check EPUB',
-    description: 'Check the Booksellers EPUB prepared from your book, review errors and warnings, and download a text report. Results are cleared when you close the checker. Works offline after Prep for offline use.',
+    description: 'Check the Booksellers EPUB prepared from your book, review errors and warnings, and export a text report. Results are cleared when you close the checker. Works offline after Prep for offline use.',
   },
   {
     icon: <GiBoxUnpacking size={ICON_SIZE} className="fill-purple-500" />,
@@ -65,29 +65,29 @@ const topRowItems: HelpItem[] = [
 const bottomRowItems: HelpItem[] = [
   {
     icon: <MdOutlineLanguage size={ICON_SIZE} className="fill-teal-500" />,
-    name: 'Download web ready (zip)',
-    description: 'Download your book formatted for web reading, with Scenecraft styling and audio.',
+    name: 'Export web ready (zip)',
+    description: 'Export your book formatted for web reading, with Scenecraft styling and audio.',
   },
   /* 5x8 option hidden; retained in case it is restored.
   {
     icon: <MdPictureAsPdf size={ICON_SIZE} className="fill-red-400" />,
-    name: 'Download 5x8 inch PDF (KDP)',
+    name: 'Export 5x8 inch PDF (KDP)',
     description: 'Generate a 5×8 inch print PDF for Amazon KDP. The most popular small paperback size. You can choose to include a Table of Contents and chapter headings.',
   },
   */
   {
-    icon: <SimpleShelfIcon size={ICON_SIZE} className="text-amber-600" />,
-    name: 'Create 6x9 paperback cover PDF',
-    description: 'Create your 6×9 interior PDF first, then enter its total page count here. Use your EPUB cover or choose one paperback image to save with this ebook. Arranges the front, back, and spine automatically and downloads the cover as a separate PDF.',
-  },
-  {
     icon: <MdOutlinePictureAsPdf size={ICON_SIZE} className="fill-red-500" />,
-    name: 'Download 6x9 inch PDF (KDP)',
+    name: 'Export 6x9 inch PDF (KDP)',
     description: 'Generate a 6×9 inch print PDF for Amazon KDP. Uses embedded EB Garamond fonts. You can choose to include a Table of Contents and chapter headings.',
   },
   {
+    icon: <SimpleShelfIcon size={ICON_SIZE} className="text-amber-600" />,
+    name: 'Create 6x9 paperback cover PDF',
+    description: 'Create your 6×9 interior PDF first, then enter its total page count here. Use your EPUB cover or choose one paperback image to save with this ebook. Arranges the front, back, and spine automatically and exports the cover as a separate PDF.',
+  },
+  {
     icon: <MdPictureAsPdf size={ICON_SIZE} className="fill-red-700" />,
-    name: 'Download 8.5x8.5 inch PDF (KDP square)',
+    name: 'Export 8.5x8.5 inch PDF (KDP square)',
     description: 'Generate an 8.5×8.5 inch square print PDF for Amazon KDP. Suited for illustrated works and photo books.',
   },
   {

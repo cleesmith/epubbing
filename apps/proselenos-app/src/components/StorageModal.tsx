@@ -43,7 +43,7 @@ export default function StorageModal({
     setIsExporting(true);
     try {
       await exportAndDownload();
-      showAlert('Your backup has been downloaded.', 'success', 'Export Complete', isDarkMode);
+      showAlert('Your backup has been exported.', 'success', 'Export Complete', isDarkMode);
     } catch (err) {
       console.error('Export failed:', err);
       showAlert('Export failed. Please try again.', 'error', undefined, isDarkMode);

@@ -119,14 +119,14 @@ export default function EpubCheckModal({ book, onClose }: { book: Book; onClose:
               </li>
             ))}
           </ul>
-          {messages.length > 200 && <p className='mt-3 text-sm'>Showing the first 200 messages. Download the report for all {messages.length} messages.</p>}
+          {messages.length > 200 && <p className='mt-3 text-sm'>Showing the first 200 messages. Export the report for all {messages.length} messages.</p>}
           {!report.result.valid && messages.length === 0 && <pre className='whitespace-pre-wrap break-words text-sm'>{report.result.stdout}\n{report.result.stderr}</pre>}
         </section>
       )}
       <div className='sticky bottom-0 flex flex-wrap items-center gap-2 bg-base-100 py-3'>
         {running ? <button type='button' className='btn btn-outline btn-sm' onClick={cancel}>Cancel</button> :
           <button type='button' className='btn btn-primary btn-sm' onClick={() => void start()}>{report ? 'Check again' : 'Check EPUB'}</button>}
-        {report && <button type='button' className='btn btn-outline btn-sm' onClick={() => downloadCheckReport(report)}>Download report</button>}
+        {report && <button type='button' className='btn btn-outline btn-sm' onClick={() => downloadCheckReport(report)}>Export report</button>}
         <button type='button' className='btn btn-ghost btn-sm ml-auto' onClick={close}>Close</button>
       </div>
       <p className='text-xs text-base-content/60'>Results are cleared when you close this window.</p>

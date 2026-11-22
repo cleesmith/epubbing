@@ -96,10 +96,10 @@ describe('separate paperback-cover calculator', () => {
     fireEvent.change(screen.getByLabelText('Background color'), { target: { value: '#123456' } });
     await waitFor(() => expect((screen.getByText('Create cover PDF') as HTMLButtonElement).disabled).toBe(false), { timeout: 5000 });
     fireEvent.click(screen.getByText('Create cover PDF'));
-    await screen.findByRole('link', { name: 'Download cover PDF' });
+    await screen.findByRole('link', { name: 'Export cover PDF' });
     expect(mocked.openFile).toHaveBeenCalledWith('book.epub', 'Books');
     expect(mocked.generate).toHaveBeenCalledWith(expect.objectContaining({ loadedEpub: true }), 300, expect.objectContaining({ paper: 'bw-cream', backText: 'A quiet valley.', backgroundColor: '#123456' }), 'Book title', 'Clee Smith', expect.any(Function), expect.objectContaining({ fit: 'fill' }));
-    expect(screen.queryByText('Download interior PDF')).toBeNull();
+    expect(screen.queryByText('Export interior PDF')).toBeNull();
     expect(screen.getByText('The sides of this image will be cropped.')).toBeTruthy();
     expect(mocked.writeFile).not.toHaveBeenCalled();
     fireEvent.click(screen.getByText('Close')); expect(close).not.toHaveBeenCalled();

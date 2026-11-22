@@ -34,7 +34,7 @@ export default function AboutHelpContent({ page }: { page: 'authors' | 'library'
             <p>The full editor provides formatting and images. Writing mode gives you distraction-free writing for the current chapter or section; press Escape to return. Sections with attached audio use the full editor.</p>
             <p>Save turns red when there are unsaved changes, including on the Title Page. Click Save to keep those edits in this browser.</p>
             <p>Click the chapter title above the editor to change it. EE includes that heading in both EPUB editions, so you do not need to repeat it inside the chapter text.</p>
-            <p>Review text checks the current section and reports possible issues without changing your words. Its explanation lists what it checks. Scenecraft adds presentation and audio for enhanced reading.</p>
+            <p>Scenecraft adds presentation and audio for enhanced reading.</p>
             <p>No Matter sections are for your author notes. They remain in the Authors EPUB and enhanced reader, and are left out of the Booksellers EPUB and paperback PDFs.</p>
           </HelpSection>
 
@@ -43,15 +43,15 @@ export default function AboutHelpContent({ page }: { page: 'authors' | 'library'
             <p>Authors stays open while you read. An existing Library tab is reused, or one opens if needed. This does not send your book to a bookseller.</p>
             <p>The separate <strong>Library</strong> button leaves Authors without making a new Library copy. It closes the Authors tab when Library is already open, or takes this tab to Library otherwise. Save any edits you want to keep before leaving. If you switch to an older Library tab yourself, use its reload arrow to see the latest saved books.</p>
             <p>In Library, Ebook Plus offers the Booksellers EPUB for uploading to a bookseller and the Authors EPUB for keeping an editable EE copy, along with paperback PDF tools.</p>
-            <p>Authors Menu also offers Cover, TXT, DOCX, and X-Ray. TXT and DOCX download your writing in those formats; X-Ray lets you look inside the EPUB.</p>
+            <p>Authors Menu also offers Cover, TXT, DOCX, and X-Ray. TXT and DOCX export your writing in those formats; X-Ray lets you look inside the EPUB.</p>
           </HelpSection>
         </>
       ) : (
         <>
           <HelpSection title='From Authors to Library'>
-            <p>Library is where you read, review, and download the books you save from Authors.</p>
+            <p>Library is where you read, review, and export the books you save from Authors.</p>
             <p>To start or load a book, click Authors and use Open. When you are ready to review your writing, click <strong>Save &amp; read in Library</strong>. It saves your latest edits and a fresh Library copy, then opens the Booksellers EPUB at your current section, including an empty one. No Matter author notes are excluded; from those notes, the book opens at its title page instead.</p>
-            <p>This keeps Authors open and reuses or opens a Library tab. The separate <strong>Library</strong> button leaves Authors without making a new Library copy. To publish for sale, download your EPUB or PDF from Ebook Plus and submit it to your chosen bookseller.</p>
+            <p>This keeps Authors open and reuses or opens a Library tab. The separate <strong>Library</strong> button leaves Authors without making a new Library copy. To publish for sale, export your EPUB or PDF from Ebook Plus and submit it to your chosen bookseller.</p>
             <p>If you switch to an older Library tab yourself and do not see the latest saved books, click the reload arrow.</p>
           </HelpSection>
 
@@ -60,14 +60,14 @@ export default function AboutHelpContent({ page }: { page: 'authors' | 'library'
               <li><strong>Book cover</strong> — read the Booksellers EPUB.</li>
               <li><strong>Blue book icon</strong> — read the Authors EPUB, including author notes.</li>
               <li><strong>Orange icon</strong> — open the enhanced reader with Scenecraft presentation and audio, where included.</li>
-              <li><strong>Plus</strong> — open Ebook Plus for downloads and other book tools. Its Help button explains each icon.</li>
+              <li><strong>Plus</strong> — open Ebook Plus for exports and other book tools. Its Help button explains each icon.</li>
             </ul>
           </HelpSection>
 
-          <HelpSection title='Download and check your book'>
-            <p>In Ebook Plus, the green download arrow saves the Booksellers EPUB for uploading to a bookseller. The blue book icon downloads the Authors EPUB, including author notes and saved paperback cover settings.</p>
-            <p>Check EPUB checks the Booksellers edition and shows errors and warnings. You can download a readable text report. It does not repair your book or keep the results after you close the checker.</p>
-            <p>X-ray shows the files inside the Authors EPUB. The web download saves an enhanced-reading version as a ZIP.</p>
+          <HelpSection title='Export and check your book'>
+            <p>In Ebook Plus, the green export arrow saves the Booksellers EPUB for uploading to a bookseller. The blue book icon exports the Authors EPUB, including author notes and saved paperback cover settings.</p>
+            <p>Check EPUB checks the Booksellers edition and shows errors and warnings. You can export a readable text report. It does not repair your book or keep the results after you close the checker.</p>
+            <p>X-ray shows the files inside the Authors EPUB. The web export saves an enhanced-reading version as a ZIP.</p>
             <p>The PDF tools create paperback interiors and a separate 6×9 cover PDF. The 6×9 interior offers a table of contents and chapter headings. Create the interior first so you have its page count for the cover.</p>
             <p>No Matter author notes are excluded from the Booksellers EPUB and paperback PDFs.</p>
           </HelpSection>
@@ -80,12 +80,12 @@ export default function AboutHelpContent({ page }: { page: 'authors' | 'library'
       )}
 
       <HelpSection title='Your work stays in this browser'>
-        <p>EverythingEbooks is free, with no account, no cloud storage, and no tracking. Your writing and Library are stored in this browser on this device. Downloads give you copies to keep or move elsewhere.</p>
+        <p>EverythingEbooks is free, with no account, no cloud storage, and no tracking. Your writing and Library are stored in this browser on this device. Exports give you copies to keep or move elsewhere.</p>
         {page === 'authors' && <p>The sun/moon button changes the shared light/dark setting for Authors and Library. An already-open tab may need a reload to show the change.</p>}
       </HelpSection>
 
       <HelpSection title='Keep a ZIP backup'>
-        <p>Save your edits, then click the stoplight in either Authors or Library. You can also use Library Menu → Storage: Export &amp; Import. Export All Data downloads a ZIP of your saved Authors work, Library, and settings.</p>
+        <p>Save your edits, then click the stoplight in either Authors or Library. You can also use Library Menu → Storage: Export &amp; Import. Export All Data exports a ZIP of your saved Authors work, Library, and settings.</p>
         <ul className='list-disc space-y-1 pl-5'>
           <li><strong>Green</strong> — no changes waiting for a backup.</li>
           <li><strong>Yellow</strong> — changes need a new ZIP backup.</li>

@@ -122,12 +122,12 @@ const BookDetailView: React.FC<BookDetailViewProps> = ({
                   </button>
                 )}
                 {onDownloadBookseller && (
-                  <button onClick={onDownloadBookseller} title={_('Download Booksellers EPUB')} aria-label={_('Download Booksellers EPUB')}>
+                  <button onClick={onDownloadBookseller} title={_('Export Booksellers EPUB')} aria-label={_('Export Booksellers EPUB')}>
                     <MdOutlineFileDownload className='fill-green-500 hover:fill-green-600' />
                   </button>
                 )}
                 {onDownloadLocal && (
-                  <button onClick={onDownloadLocal} title={_('Download Authors EPUB')} aria-label={_('Download Authors EPUB')}>
+                  <button onClick={onDownloadLocal} title={_('Export Authors EPUB')} aria-label={_('Export Authors EPUB')}>
                     <MdOutlineAutoStories className='fill-blue-500 hover:fill-blue-600' />
                   </button>
                 )}
@@ -144,29 +144,29 @@ const BookDetailView: React.FC<BookDetailViewProps> = ({
               </div>
               <div className={actionRowClassName}>
                 {onDownloadWebReady && (
-                  <button onClick={onDownloadWebReady} title={_('Download web ready (zip)')}>
+                  <button onClick={onDownloadWebReady} title={_('Export web ready (zip)')}>
                     <MdOutlineLanguage className='fill-base-content hover:fill-teal-500' />
                   </button>
                 )}
                 {/* 5x8 button hidden by request; generator and handler remain available.
                 {onDownloadPdf5x8 && (
-                  <button onClick={onDownloadPdf5x8} title={_('Download 5x8 inch PDF (KDP)')}>
+                  <button onClick={onDownloadPdf5x8} title={_('Export 5x8 inch PDF (KDP)')}>
                     <MdPictureAsPdf className='fill-base-content hover:fill-red-400' />
                   </button>
                 )}
                 */}
+                {onDownloadPdf && (
+                  <button onClick={onDownloadPdf} title={_('Export 6x9 inch PDF (KDP)')}>
+                    <MdOutlinePictureAsPdf className='fill-base-content hover:fill-red-500' />
+                  </button>
+                )}
                 {onPaperbackCover && (
                   <button onClick={onPaperbackCover} title={_('Create 6x9 paperback cover PDF')} aria-label={_('Create 6x9 paperback cover PDF')}>
                     <SimpleShelfIcon className='text-base-content hover:text-amber-600' />
                   </button>
                 )}
-                {onDownloadPdf && (
-                  <button onClick={onDownloadPdf} title={_('Download 6x9 inch PDF (KDP)')}>
-                    <MdOutlinePictureAsPdf className='fill-base-content hover:fill-red-500' />
-                  </button>
-                )}
                 {onDownloadPdfSquare && (
-                  <button onClick={onDownloadPdfSquare} title={_('Download 8.5x8.5 inch PDF (KDP square)')}>
+                  <button onClick={onDownloadPdfSquare} title={_('Export 8.5x8.5 inch PDF (KDP square)')}>
                     <MdPictureAsPdf className='fill-base-content hover:fill-red-700' />
                   </button>
                 )}

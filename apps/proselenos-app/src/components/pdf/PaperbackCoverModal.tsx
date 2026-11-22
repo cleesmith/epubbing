@@ -345,7 +345,7 @@ const PaperbackCoverModal: React.FC<PaperbackCoverModalProps> = ({ book, bookMet
               <p className='text-sm'>6 × 9 inches · {result.dimensions.pdfPages} interior pages</p>
               {result.warnings.length > 0 && <ul className='list-disc space-y-2 pl-5 text-sm'>{result.warnings.map(message => <li key={message}>{message}</li>)}</ul>}
               <div className='flex flex-wrap items-center gap-3'>
-                <a className='btn btn-primary btn-sm' href={result.url} download={`${filename}-6x9-cover.pdf`}>Download cover PDF</a>
+                <a className='btn btn-primary btn-sm' href={result.url} download={`${filename}-6x9-cover.pdf`}>Export cover PDF</a>
                 <a className='link text-sm' href={result.url} target='_blank' rel='noreferrer'>View cover PDF</a>
               </div>
               <p className='text-sm text-base-content/70'>Use this cover with the PDF whose page count you entered. If that PDF changes, create a new cover using its new page count.</p>
@@ -407,7 +407,7 @@ const PaperbackCoverModal: React.FC<PaperbackCoverModalProps> = ({ book, bookMet
                       </table>
                       {calculated.printPages !== calculated.pdfPages && <p className='mt-1 text-xs text-base-content/70'>This calculation rounds up to {calculated.printPages} pages.</p>}
                       {templateReady && <button type='button' className='btn btn-outline btn-sm mt-3' disabled={templateBusy} onClick={() => { void downloadTemplate(); }}>
-                        {templateBusy ? 'Creating template PNG…' : 'Download template PNG'}
+                        {templateBusy ? 'Creating template PNG…' : 'Export template PNG'}
                       </button>}
                     </div>}
                     <div className='mt-3 flex items-center gap-3'>

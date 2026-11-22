@@ -211,7 +211,7 @@ const BookDetailModal: React.FC<BookDetailModalProps> = ({
       a.click();
       URL.revokeObjectURL(url);
     } catch (error) {
-      setDownloadError(`The Authors EPUB could not be downloaded. ${error instanceof Error ? error.message : 'Please try again.'}`);
+      setDownloadError(`The Authors EPUB could not be exported. ${error instanceof Error ? error.message : 'Please try again.'}`);
     }
   };
 
@@ -227,7 +227,7 @@ const BookDetailModal: React.FC<BookDetailModalProps> = ({
       a.click();
       URL.revokeObjectURL(url);
     } catch (error) {
-      setDownloadError(`The Booksellers EPUB could not be downloaded. ${error instanceof Error ? error.message : 'Please try again.'}`);
+      setDownloadError(`The Booksellers EPUB could not be exported. ${error instanceof Error ? error.message : 'Please try again.'}`);
     }
   };
 

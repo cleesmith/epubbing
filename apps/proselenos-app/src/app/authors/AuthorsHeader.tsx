@@ -382,7 +382,7 @@ export default function AuthorsHeader({
             </button>
             <button
               onClick={() => { onTxtExportClick?.(); setMenuOpen(false); }}
-              title="Download chapters as manuscript.txt"
+              title="Export chapters as manuscript.txt"
               style={{
                 display: 'flex',
                 alignItems: 'center',

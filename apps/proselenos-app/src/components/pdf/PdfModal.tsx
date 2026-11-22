@@ -163,7 +163,7 @@ const PdfModal: React.FC<PdfModalProps> = ({ book, bookMeta, isOpen, onClose, in
           {section && <p className='text-base-content/70 mb-2 text-sm'>{section}</p>}
           <p className='text-base-content/60 mb-4 text-sm'>Time elapsed: {Math.floor(elapsed / 60)}m {elapsed % 60}s</p>
           <ol className='text-base-content/70 mb-5 space-y-2 text-left text-sm' aria-label='PDF preparation steps'>
-            {['Read chapters and illustrations', 'Lay out text and illustrations', 'Arrange the pages', 'Add page numbers and running headings', 'Write the downloadable PDF'].map((label, index) => (
+            {['Read chapters and illustrations', 'Lay out text and illustrations', 'Arrange the pages', 'Add page numbers and running headings', 'Prepare the PDF for export'].map((label, index) => (
               <li key={label} aria-current={index === step ? 'step' : undefined}>
                 {index < step ? '✓ ' : index === step ? '→ ' : '○ '}{label}
               </li>
@@ -197,7 +197,7 @@ const PdfModal: React.FC<PdfModalProps> = ({ book, bookMeta, isOpen, onClose, in
             event.preventDefault();
             setError(proof.open() ? '' : 'Allow a new tab for EverythingEbooks, then click the link again.');
           }}>Open PDF proof in a new tab</a>
-          <p className='text-base-content/60 mb-2 text-sm'>Preview your PDF, then use its download button to save a copy.</p>
+          <p className='text-base-content/60 mb-2 text-sm'>Preview your PDF, then use the PDF viewer’s save control to export a copy.</p>
           <p className='text-base-content/60 mb-4 text-sm'>In Safari, you can also open it in Preview and save it there.</p>
           <p className='text-base-content/60 mb-4 text-sm'>This page count is also available in this ebook’s paperback cover calculator.</p>
         </>}

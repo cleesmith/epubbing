@@ -22,14 +22,14 @@ it('checks only the prepared Booksellers EPUB and clears the report on retry', a
   expect(mocked.prepare).toHaveBeenCalledWith(expect.anything(), book, 'booksellers', expect.anything());
   const prepared = await mocked.prepare.mock.results[0]!.value;
   expect(mocked.check).toHaveBeenCalledWith(prepared.blob, prepared.filename, expect.anything());
-  fireEvent.click(screen.getByRole('button', { name: 'Download report' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Export report' }));
   expect(mocked.download.mock.calls[0]![0].variant).toBe('booksellers');
   expect(screen.queryByText(/JSON/)).toBeNull();
   mocked.check.mockImplementationOnce(() => new Promise(() => {}));
   fireEvent.click(screen.getByRole('button', { name: 'Check again' }));
   await waitFor(() => expect(mocked.check).toHaveBeenCalledTimes(2));
   expect(mocked.prepare.mock.calls.every(call => call[2] === 'booksellers')).toBe(true);
-  expect(screen.queryByRole('button', { name: 'Download report' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Export report' })).toBeNull();
   expect(screen.queryByText('Check complete: no errors or warnings.')).toBeNull();
 });
 it('cancels, ignores late results, and can run again', async () => {
@@ -43,7 +43,7 @@ it('cancels, ignores late results, and can run again', async () => {
   expect(signal.aborted).toBe(true);
   await act(async () => finish(clean));
   expect(screen.getByText('Check cancelled.')).toBeTruthy();
-  expect(screen.queryByRole('button', { name: 'Download report' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Export report' })).toBeNull();
   mocked.check.mockResolvedValueOnce(clean);
   fireEvent.click(screen.getByRole('button', { name: 'Check EPUB' }));
   await screen.findByText('Check complete: no errors or warnings.');
@@ -57,12 +57,12 @@ it('disposes an active run on unmount and reopens fresh', async () => {
   view.unmount(); expect(signal.aborted).toBe(true);
   render(<EpubCheckModal book={book} onClose={vi.fn()} />);
   expect(screen.getByText('Ready to check.')).toBeTruthy();
-  expect(screen.queryByRole('button', { name: 'Download report' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Export report' })).toBeNull();
 });
 it('shows load failure without a success or download', async () => {
   mocked.check.mockRejectedValueOnce(new Error('Checker files unavailable.'));
   render(<EpubCheckModal book={book} onClose={vi.fn()} />);
   fireEvent.click(screen.getByRole('button', { name: 'Check EPUB' }));
   expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'Checker files unavailable.');
-  expect(screen.queryByRole('button', { name: 'Download report' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Export report' })).toBeNull();
 });

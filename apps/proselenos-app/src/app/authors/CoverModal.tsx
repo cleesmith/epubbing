@@ -499,7 +499,7 @@ export default function CoverModal({
                       display: 'inline-block',
                     }}
                   >
-                    Download Cover
+                    Export Cover
                   </a>
                 </div>
               </>
@@ -546,7 +546,7 @@ export default function CoverModal({
                     display: 'inline-block',
                   }}
                 >
-                  Download Typography
+                  Export Typography
                 </a>
               </>
             )}
