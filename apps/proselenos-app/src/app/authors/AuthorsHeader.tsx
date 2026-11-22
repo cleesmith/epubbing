@@ -3,6 +3,7 @@
 'use client';
 
 import { appPath } from '@/utils/app-path';
+import { findLibraryTab } from '@/utils/library-tab';
 
 import { useState, useEffect, useRef } from 'react';
 import { PiInfo, PiFileDoc, PiFileText, PiImage, PiArrowRight, PiArrowCircleUp, PiDownloadSimple } from 'react-icons/pi';
@@ -14,30 +15,6 @@ import TrafficLightIcon from '@/components/TrafficLightIcon';
 import { showOfflinePreparation } from '@/components/OfflinePreparation';
 import { updateApp } from '@/services/appUpdate';
 import { RELEASE_HASH } from '@/generated/release';
-
-// Check without changing the other tab. Exit leaves Library alone.
-function isLibraryTab(tab: Window | null): tab is Window {
-  if (!tab || tab.closed || tab === window) return false;
-  try {
-    const libraryUrl = new URL(appPath('/library/'), window.location.href);
-    return tab.location.origin === libraryUrl.origin &&
-      tab.location.pathname.replace(/\/$/, '') === libraryUrl.pathname.replace(/\/$/, '');
-  } catch {
-    // A tab that has moved to another origin cannot be inspected or reused.
-    return false;
-  }
-}
-
-function reloadLibraryTab(tab: Window | null): boolean {
-  if (!isLibraryTab(tab)) return false;
-  try {
-    tab.location.reload();
-    tab.focus();
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 interface AuthorsHeaderProps {
   theme: ThemeConfig;
@@ -88,7 +65,6 @@ export default function AuthorsHeader({
   const [openDropdownOpen, setOpenDropdownOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const openDropdownRef = useRef<HTMLDivElement>(null);
-  const libraryWindowRef = useRef<Window | null>(null);
 
   // Close menus when clicking outside
   useEffect(() => {
@@ -118,7 +94,7 @@ export default function AuthorsHeader({
       );
       if (!confirmed) return;
     }
-    if (isLibraryTab(window.opener) || isLibraryTab(libraryWindowRef.current)) {
+    if (findLibraryTab()) {
       // The Library Authors button opens this tab with window.open, allowing
       // it to close itself. Do not focus, reload, or replace the Library tab.
       window.close();
@@ -127,14 +103,6 @@ export default function AuthorsHeader({
       // a previously visited Library through the client router's page state.
       window.location.assign(appPath('/library/'));
     }
-  };
-
-  const handleLibraryClick = () => {
-    if (reloadLibraryTab(window.opener)) return;
-    if (reloadLibraryTab(libraryWindowRef.current)) return;
-    // Opening a new document also reads the saved Library. Keep the normal URL
-    // (no cache-busting query) so EE's existing offline cache can serve it.
-    libraryWindowRef.current = window.open(appPath('/library/'), '_blank');
   };
 
   const handleUpdateApp = () => {
@@ -158,7 +126,7 @@ export default function AuthorsHeader({
         flexShrink: 0,
       }}
     >
-      {/* Left section: Theme toggle, Logo, Title, About, Exit, New/Open/Save */}
+      {/* Left section: Theme, backup reminder, Library, Open and Save & read in Library */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
         {/* Theme toggle */}
         <button
@@ -182,10 +150,10 @@ export default function AuthorsHeader({
         />
         <div style={{ width: '8px' }} />
 
-        {/* Exit */}
-        <StyledSmallButton onClick={handleExitClick} theme={theme} title="Quit authors, return to library">Exit</StyledSmallButton>
+        {/* Library keeps the former Exit action, including the unsaved-changes check. */}
+        <StyledSmallButton onClick={handleExitClick} theme={theme} title="Leave Authors and return to Library">Library</StyledSmallButton>
 
-        {/* Open dropdown + Publish → Library */}
+        {/* Open dropdown + Save & read in Library */}
         <div style={{ display: 'flex', gap: '0px', alignItems: 'center' }}>
           {/* Open dropdown */}
           <div ref={openDropdownRef} style={{ position: 'relative' }}>
@@ -340,9 +308,7 @@ export default function AuthorsHeader({
               </div>
             )}
           </div>
-          <StyledSmallButton theme={theme} onClick={onSaveClick} styleOverrides={{ marginRight: 0 }} title="Publish to Library">Publish</StyledSmallButton>
-          <span style={{ color: isDarkMode ? '#86efac' : '#16a34a', fontSize: '16px' }}>⇨</span>
-          <StyledSmallButton onClick={handleLibraryClick} theme={theme} title="Go read ebooks">Library</StyledSmallButton>
+          <StyledSmallButton theme={theme} onClick={onSaveClick} title="Save & read in Library">Save &amp; read in Library</StyledSmallButton>
         </div>
       </div>
 

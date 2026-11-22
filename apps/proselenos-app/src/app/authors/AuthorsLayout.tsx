@@ -5,7 +5,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { ThemeConfig } from '../shared/theme';
 import { showAlert, showConfirm } from '../shared/alerts';
-import Swal from 'sweetalert2';
 import AuthorsHeader from './AuthorsHeader';
 import ChapterSidebar from './ChapterSidebar';
 import EpubCoverUploadModal from './EpubCoverUploadModal';
@@ -83,6 +82,8 @@ import { exportWorkspaceToFountain } from '@/lib/fountain-generator';
 import { xhtmlToPlainText } from '@/lib/plateXhtml';
 import environmentConfig from '@/services/environment';
 import { publishManuscript } from '@/services/publishManuscript';
+import { reserveLibraryReview } from '@/utils/library-tab';
+import { publishedReviewFragment } from '@/utils/published-review';
 import { reviewForAuthors, snapshotForTextReview } from '@/lib/text-review';
 import { showTextReviewResult } from '@/lib/text-review-tab';
 
@@ -1610,7 +1611,12 @@ export default function AuthorsLayout({
     // Ignore a second click while this publication is still in progress.
     if (publishingRef.current) return;
     publishingRef.current = true;
+    let review: ReturnType<typeof reserveLibraryReview> | null = null;
+    const reviewSectionId = selectedSectionId;
+    let reviewOpened = false;
     try {
+      // Reserve synchronously, while the browser still allows this click to open a tab.
+      review = reserveLibraryReview(isDarkMode);
       // 1. Save any pending editor changes first
       if (hasUnsavedChanges && selectedSection && selectedSectionId) {
         await saveCurrentSection();
@@ -1673,18 +1679,9 @@ export default function AuthorsLayout({
         channel.postMessage('reload');
         channel.close();
 
-        await Swal.fire({
-          title: 'Saved!',
-          html: `"${meta.title}" saved to Library.<br>You can read it in the Library.`,
-          icon: 'success',
-          confirmButtonText: 'OK',
-          confirmButtonColor: '#28a745',
-          background: isDarkMode ? '#222' : '#fff',
-          color: isDarkMode ? '#fff' : '#333',
-          customClass: {
-            container: 'swal-above-modal'
-          }
-        });
+        await review.confirmPublished();
+        review.open(publishedReviewFragment(book.hash, orderedSections.find(section => section.id === reviewSectionId)));
+        reviewOpened = true;
       } else {
         showAlert('EPUB was generated but could not be added to library.', 'error', undefined, isDarkMode);
       }
@@ -1692,6 +1689,7 @@ export default function AuthorsLayout({
       console.error('Error saving manuscript:', error);
       showAlert(`Error saving manuscript: ${(error as Error).message}`, 'error', undefined, isDarkMode);
     } finally {
+      if (!reviewOpened) review?.cancel();
       publishingRef.current = false;
     }
   };

@@ -46,6 +46,9 @@ import ReaderModal from './components/ReaderModal';
 import useShortcuts from '@/hooks/useShortcuts';
 // import DropIndicator from '@/components/DropIndicator'; // Library imports paused.
 import SettingsDialog from '@/components/settings/SettingsDialog';
+import { LIBRARY_TAB_NAME } from '@/utils/library-tab';
+import { readPublishedReview } from '@/utils/published-review';
+import { prepareBooksellerReader } from '@/services/booksellerReader';
 
 const LibraryPageWithSearchParams = () => {
   const searchParams = useSearchParams();
@@ -89,6 +92,8 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
   const [readerBookHash, setReaderBookHash] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const isInitiating = useRef(false);
+  const reviewStarted = useRef(false);
+  const pageMounted = useRef(false);
 
 
   const viewSettings = settings.globalViewSettings;
@@ -126,16 +131,40 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
     // },
   });
 
-  // Clear the window name on mount. 
-  // If this tab was previously the "Authors" tab (navigated here via Exit),
-  // we must clear the name 'proselenos_authors_mode'.
-  // This ensures that clicking "Authors" again spawns a NEW tab instead of reusing this one.
+  // Also clears the Authors name after Exit; future review reuses this Library tab.
   useEffect(() => {
-    if (window.name === 'proselenos_authors_mode') {
-      // console.log('Clearing sticky window name to restore separate tab behavior');
-      window.name = '';
-    }
+    window.name = LIBRARY_TAB_NAME;
+    pageMounted.current = true;
+    return () => { pageMounted.current = false; };
   }, []);
+
+  // One request per explicit Publish navigation. No polling or background tab watcher.
+  useEffect(() => {
+    if (!libraryLoaded || !appService || reviewStarted.current) return;
+    const request = readPublishedReview(window.location.hash);
+    if (!request) return;
+    reviewStarted.current = true;
+    const book = useLibraryStore.getState().library.find(book => book.hash === request.bookHash && !book.deletedAt);
+    if (!book) {
+      eventDispatcher.dispatch('toast', { message: 'The published book is not in Library.', type: 'error' });
+      return;
+    }
+    setLoading(true);
+    void prepareBooksellerReader(appService, book, request.href)
+      .then(hash => {
+        if (!pageMounted.current) return;
+        setReaderBookHash(hash);
+        // A later Reload should return to the ordinary Library, not repeat this request.
+        window.history.replaceState(window.history.state, '', window.location.pathname + window.location.search);
+      })
+      .catch(error => {
+        console.error('Could not open the published Booksellers EPUB:', error);
+        if (pageMounted.current) eventDispatcher.dispatch('toast', {
+          message: 'Your book is saved. Please click its cover to open it.', type: 'error',
+        });
+      })
+      .finally(() => { if (pageMounted.current) setLoading(false); });
+  }, [libraryLoaded, appService]);
 
   // Prefetch other routes for offline support
   useEffect(() => {
@@ -258,7 +287,7 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
       let opened = false;
       // Library importing is paused:
       // opened = await handleOpenWithBooks(appService, library);
-      if (active && !opened && settings.openLastBooks) {
+      if (active && !opened && settings.openLastBooks && !readPublishedReview(window.location.hash)) {
         opened = await handleOpenLastBooks(appService, settings.lastOpenBooks, library);
       }
     };

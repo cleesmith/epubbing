@@ -10,7 +10,7 @@ import { useThemeStore } from '@/store/themeStore';
 import { parseEpub } from '@/services/epubService';
 import { saveLibraryManuscript } from '@/services/libraryManuscriptService';
 import Swal from 'sweetalert2';
-import { prepareEpubExport } from '@/services/epubExport';
+import { BOOKSELLER_TEMP_HASH, prepareBooksellerReader } from '@/services/booksellerReader';
 import { getLocalBookFilename } from '@/utils/book';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useLongPress } from '@/hooks/useLongPress';
@@ -26,8 +26,6 @@ import BookItem from './BookItem';
 import GroupItem from './GroupItem';
 
 export type BookshelfItem = Book | BooksGroup;
-
-const BOOKSELLER_TEMP_HASH = '__bookseller_temp__';
 
 export const generateBookshelfItems = (books: Book[]): (Book | BooksGroup)[] => {
   const groups: BooksGroup[] = books.reduce((acc: BooksGroup[], book: Book) => {
@@ -110,28 +108,7 @@ const BookshelfItem: React.FC<BookshelfItemProps> = ({
   const handleReadBookseller = useCallback(async (book: Book) => {
     if (!onOpenReader) return;
     const appService = await envConfig.getAppService();
-    const { blob } = await prepareEpubExport(appService, book, 'booksellers');
-    const tempFilePath = `${BOOKSELLER_TEMP_HASH}/bookseller.epub`;
-
-    // Write modified epub to IndexedDB
-    await appService.writeFile(tempFilePath, 'Books', new File([blob], 'bookseller.epub'));
-
-    // Upsert temp book in library store (in-memory only, not persisted)
-    const { library } = useLibraryStore.getState();
-    const tempBook: Book = {
-      hash: BOOKSELLER_TEMP_HASH,
-      format: 'EPUB',
-      title: `${book.title} (Bookseller)`,
-      sourceTitle: 'bookseller',
-      author: book.author,
-      coverImageUrl: book.coverImageUrl,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
-    const filtered = library.filter(b => b.hash !== BOOKSELLER_TEMP_HASH);
-    useLibraryStore.setState({ library: [...filtered, tempBook] });
-
-    onOpenReader(BOOKSELLER_TEMP_HASH);
+    onOpenReader(await prepareBooksellerReader(appService, book));
   }, [envConfig, onOpenReader]);
 
   const makeBookAvailable = useCallback(async (book: Book) => {
