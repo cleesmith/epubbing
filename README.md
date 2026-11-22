@@ -12,7 +12,7 @@ The focus is your words and an ebook that is comfortable to read.
 
 ## Your book is an EPUB from the start
 
-Your ebook is your manuscript. Work on chapters and sections in **Authors**, save your changes, and publish a copy to your own **Library** whenever you want to read and review it.
+Your ebook is your manuscript. Work on chapters and sections in **Authors**, save your changes, and use **Save & read in Library** whenever you want to read and review your latest draft.
 
 When you are ready, download an EPUB for ebook stores or a PDF for a paperback. You decide where and when to publish it.
 
@@ -29,7 +29,7 @@ EverythingEbooks opens in **Authors**. Use **Open** to choose how to begin:
 | **Load PDF → EPUB** | Brings in text from a PDF. |
 | **Load manuscript.txt → EPUB** | Brings in a plain-text manuscript. |
 
-Books enter through Authors. **Publish** puts a copy in Library for reading, reviewing, and downloading.
+Books enter through Authors. **Save & read in Library** saves a fresh copy in Library and opens the Booksellers EPUB for reading.
 
 ## Write, organize, and save
 
@@ -52,13 +52,15 @@ These sections stay in the **Authors EPUB** and enhanced reader. They are exclud
 
 Keep them while you work. Move material into a regular section whenever you want it to become part of the published book.
 
-## Publish to your Library to read and review
+## Save and read in your Library
 
-Save your edits, then click **Publish** in Authors to put a copy in your own EE Library.
+Click **Save & read in Library** in Authors to save your latest changes and put a fresh copy in your own EE Library. A brief confirmation appears, then the Booksellers EPUB opens at the chapter or section you were editing, even if that section is empty.
 
-**Publish in EE means publishing to your Library.** It does not send the book to Amazon, Kobo, or another bookseller. Download your finished EPUB or PDF and submit it wherever you choose.
+This saves your book in your own browser. It does not send it to Amazon, Kobo, or another bookseller. To publish for sale, download your finished EPUB or PDF from Library and submit it wherever you choose.
 
-Click **Library** to review your book while keeping Authors open.
+**Save & read in Library** keeps Authors open and reuses an existing Library tab or opens one for reading. No Matter author notes are excluded from the Booksellers EPUB; if you were editing those notes, the book opens at its title page instead.
+
+The separate **Library** button leaves Authors without making a new Library copy. It closes the Authors tab when Library is already open, or takes the current tab to Library otherwise. Save any edits you want to keep before leaving.
 
 | Library control | What it opens |
 | --- | --- |
@@ -67,7 +69,7 @@ Click **Library** to review your book while keeping Authors open.
 | **Orange icon** | The enhanced reader, with Scenecraft presentation and audio where included. |
 | **Plus** | Ebook Plus, with downloads and other book tools. Its Help button explains each icon. |
 
-Return to Authors to make changes, save, and publish again. If an already-open Library shows an older copy, click its **reload arrow**.
+Return to Authors to make changes, then click **Save & read in Library** again to review the updated book. If you switch to an older Library tab yourself, use its **reload arrow** to see the latest saved books.
 
 Library's search finds books by their details. The three-dot view menu changes the shelf layout and sorting. **Menu → Settings** opens Library preferences.
 

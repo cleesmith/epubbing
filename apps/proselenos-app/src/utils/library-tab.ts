@@ -2,7 +2,8 @@ import { appPath } from './app-path';
 import Swal from 'sweetalert2';
 
 export const LIBRARY_TAB_NAME = 'proselenos_library_mode';
-export const PUBLISH_CONFIRMATION = 'Saved to your Library. Opening your book for reading.';
+export const PUBLISH_CONFIRMATION = 'Saved to your Library.';
+export const PUBLISH_CONFIRMATION_DETAIL = 'Opening your book for reading.';
 let libraryTab: Window | null = null;
 
 export function isLibraryTab(tab: Window | null): tab is Window {
@@ -32,7 +33,7 @@ export function openLibraryTab(): void {
   if (!libraryTab) window.location.assign(appPath('/library/'));
 }
 
-/** Reserve during the Publish click, before any await or timer can block a new tab. */
+/** Reserve during the Save & read in Library click, before any await or timer can block a new tab. */
 export function reserveLibraryReview(isDarkMode: boolean) {
   const tab = findLibraryTab() || window.open('', LIBRARY_TAB_NAME);
   libraryTab = tab;
@@ -94,6 +95,7 @@ export function reserveLibraryReview(isDarkMode: boolean) {
     // create a separate success popup with its own message or timer.
     confirmPublished: () => Swal.fire({
       title: PUBLISH_CONFIRMATION,
+      text: PUBLISH_CONFIRMATION_DETAIL,
       icon: 'success',
       showConfirmButton: false,
       timer: 3000,
@@ -107,7 +109,7 @@ export function reserveLibraryReview(isDarkMode: boolean) {
     open: (fragment: string) => {
       const url = appPath('/library/') + fragment;
       if (!tab || tab.closed) {
-        // A blocked/closed review tab must not turn Publish into a dead button.
+        // A blocked/closed review tab must not turn Save & read in Library into a dead button.
         window.location.assign(url);
         return;
       }

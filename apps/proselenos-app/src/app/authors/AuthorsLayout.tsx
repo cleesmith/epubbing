@@ -616,7 +616,7 @@ export default function AuthorsLayout({
           }
 
           // Save to IndexedDB with normalization (section-001, section-002, etc.)
-          // Filter out table-of-contents - it gets auto-generated on "Publish"
+          // Filter out table-of-contents - it gets auto-generated on "Save & read in Library"
           // XHTML-Native: Use xhtml field directly from parsed sections
           await saveFullWorkingCopy({
             title: parsed.title,
@@ -698,7 +698,7 @@ export default function AuthorsLayout({
           // Clear any existing working copy first
           await clearWorkingCopy();
           // Save to IndexedDB
-          // Filter out table-of-contents - it gets auto-generated on "Publish"
+          // Filter out table-of-contents - it gets auto-generated on "Save & read in Library"
           // XHTML-Native: Convert plain text content to XHTML paragraphs
           await saveFullWorkingCopy({
             title: parsed.title,
@@ -1645,7 +1645,7 @@ export default function AuthorsLayout({
       const orderedSections = sectionOrder
         .map(id => {
           const section = workingCopy.sections.find(s => s.id === id);
-          if (!section) throw new Error('A section could not be read. The book has not been published.');
+          if (!section) throw new Error('A section could not be read. The book has not been saved to Library.');
           return section;
         });
 

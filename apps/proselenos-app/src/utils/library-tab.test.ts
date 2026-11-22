@@ -48,7 +48,7 @@ it('reuses and reloads the existing Library while leaving Authors open', async (
   expect(findLibraryTab()).toBe(existing);
 });
 
-it('uses the same review tab for the ordinary Authors Library button', async () => {
+it('reuses the review tab through the Library opener helper', async () => {
   const target = tab();
   const { open } = browser(target);
   const { reserveLibraryReview, openLibraryTab } = await import('./library-tab');
@@ -100,15 +100,17 @@ it.each([false, true])('uses one current confirmation and timer with an existing
   const target = tab(existing);
   vi.spyOn(window, 'open').mockReturnValue(target as unknown as Window);
   vi.spyOn(window, 'focus').mockImplementation(() => {});
-  const { reserveLibraryReview, PUBLISH_CONFIRMATION } = await import('./library-tab');
+  const { reserveLibraryReview, PUBLISH_CONFIRMATION, PUBLISH_CONFIRMATION_DETAIL } = await import('./library-tab');
   const review = reserveLibraryReview(true);
   const fire = vi.spyOn(Swal, 'fire');
   const popup = review.confirmPublished();
   await vi.advanceTimersByTimeAsync(50);
   expect(Swal.getTitle()?.textContent).toBe(PUBLISH_CONFIRMATION);
+  expect(Swal.getHtmlContainer()?.textContent).toBe(PUBLISH_CONFIRMATION_DETAIL);
   expect(Swal.getConfirmButton()?.style.display).toBe('none');
   if (!existing) {
     expect(target.document.querySelector('.swal2-title')?.textContent).toBe(PUBLISH_CONFIRMATION);
+    expect(target.document.querySelector('.swal2-html-container')?.textContent).toBe(PUBLISH_CONFIRMATION_DETAIL);
     expect(target.document.querySelector('.swal2-success')).not.toBeNull();
     expect(target.document.querySelector<HTMLButtonElement>('.swal2-confirm')?.style.display).toBe('none');
     expect(target.document.querySelector('link[rel="stylesheet"]')).toBeNull();

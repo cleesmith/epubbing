@@ -131,14 +131,14 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
     // },
   });
 
-  // Also clears the Authors name after Exit; future review reuses this Library tab.
+  // Also clears the Authors name when leaving Authors; future review reuses this Library tab.
   useEffect(() => {
     window.name = LIBRARY_TAB_NAME;
     pageMounted.current = true;
     return () => { pageMounted.current = false; };
   }, []);
 
-  // One request per explicit Publish navigation. No polling or background tab watcher.
+  // One request per explicit Save & read in Library navigation. No polling or background tab watcher.
   useEffect(() => {
     if (!libraryLoaded || !appService || reviewStarted.current) return;
     const request = readPublishedReview(window.location.hash);
@@ -146,7 +146,7 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
     reviewStarted.current = true;
     const book = useLibraryStore.getState().library.find(book => book.hash === request.bookHash && !book.deletedAt);
     if (!book) {
-      eventDispatcher.dispatch('toast', { message: 'The published book is not in Library.', type: 'error' });
+      eventDispatcher.dispatch('toast', { message: 'The saved book is not in Library.', type: 'error' });
       return;
     }
     setLoading(true);
@@ -644,7 +644,7 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
                 <h1 className='mb-5 text-5xl font-bold'>{_('Your Library')}</h1>
                 <p className='mb-5'>
                   {_(
-                    'Open or write your book in Authors, then Publish it here to read, review, and download.',
+                    'Open or write your book in Authors, then click Save & read in Library to read, review, and download it here.',
                   )}
                 </p>
               </div>

@@ -89,7 +89,7 @@ export default function AuthorsHeader({
         'You have unsaved changes that will be lost. Continue?',
         isDarkMode,
         'Unsaved Changes',
-        'Exit anyway',
+        'Go to Library',
         'Cancel'
       );
       if (!confirmed) return;
@@ -150,7 +150,7 @@ export default function AuthorsHeader({
         />
         <div style={{ width: '8px' }} />
 
-        {/* Library keeps the former Exit action, including the unsaved-changes check. */}
+        {/* Leave Authors for Library after checking for unsaved changes. */}
         <StyledSmallButton onClick={handleExitClick} theme={theme} title="Leave Authors and return to Library">Library</StyledSmallButton>
 
         {/* Open dropdown + Save & read in Library */}

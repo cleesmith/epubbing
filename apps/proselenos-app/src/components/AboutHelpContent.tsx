@@ -38,9 +38,10 @@ export default function AboutHelpContent({ page }: { page: 'authors' | 'library'
             <p>No Matter sections are for your author notes. They remain in the Authors EPUB and enhanced reader, and are left out of the Booksellers EPUB and paperback PDFs.</p>
           </HelpSection>
 
-          <HelpSection title='Publish to your Library'>
-            <p>Save your edits, then click Publish to put a copy in your own EE Library for reading, reviewing, and downloading. Publish does not send your book to a bookseller.</p>
-            <p>Click Library to review your book while keeping Authors open. If an already-open Library shows an older copy, use its reload arrow.</p>
+          <HelpSection title='Save and read in your Library'>
+            <p>Click <strong>Save &amp; read in Library</strong> to save your latest edits and a fresh copy in your EE Library. After a brief confirmation, the Booksellers EPUB opens at the chapter or section you were editing, even if it is empty. No Matter author notes are excluded; from those notes, the book opens at its title page instead.</p>
+            <p>Authors stays open while you read. An existing Library tab is reused, or one opens if needed. This does not send your book to a bookseller.</p>
+            <p>The separate <strong>Library</strong> button leaves Authors without making a new Library copy. It closes the Authors tab when Library is already open, or takes this tab to Library otherwise. Save any edits you want to keep before leaving. If you switch to an older Library tab yourself, use its reload arrow to see the latest saved books.</p>
             <p>In Library, Ebook Plus offers the Booksellers EPUB for uploading to a bookseller and the Authors EPUB for keeping an editable EE copy, along with paperback PDF tools.</p>
             <p>Authors Menu also offers Cover, TXT, DOCX, and X-Ray. TXT and DOCX download your writing in those formats; X-Ray lets you look inside the EPUB.</p>
           </HelpSection>
@@ -48,9 +49,10 @@ export default function AboutHelpContent({ page }: { page: 'authors' | 'library'
       ) : (
         <>
           <HelpSection title='From Authors to Library'>
-            <p>Library is where you read, review, and download the books you publish from Authors.</p>
-            <p>To start or load a book, click Authors, use Open, then write or edit and Save. Click Publish to put the book in your EE Library. Publish does not send it to a bookseller.</p>
-            <p>If you return to an already-open Library and do not see your latest changes, click the reload arrow.</p>
+            <p>Library is where you read, review, and download the books you save from Authors.</p>
+            <p>To start or load a book, click Authors and use Open. When you are ready to review your writing, click <strong>Save &amp; read in Library</strong>. It saves your latest edits and a fresh Library copy, then opens the Booksellers EPUB at your current section, including an empty one. No Matter author notes are excluded; from those notes, the book opens at its title page instead.</p>
+            <p>This keeps Authors open and reuses or opens a Library tab. The separate <strong>Library</strong> button leaves Authors without making a new Library copy. To publish for sale, download your EPUB or PDF from Ebook Plus and submit it to your chosen bookseller.</p>
+            <p>If you switch to an older Library tab yourself and do not see the latest saved books, click the reload arrow.</p>
           </HelpSection>
 
           <HelpSection title='Read your book'>
