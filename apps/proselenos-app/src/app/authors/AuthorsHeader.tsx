@@ -30,6 +30,7 @@ interface AuthorsHeaderProps {
   onOpenFountainClick: () => void;
   onLoadFromLibraryClick: () => void;
   onSaveClick: () => void;
+  isProcessing?: boolean;
   onSearchClose?: () => void;
   onCoverClick?: () => void;
   onDocxExportClick?: () => void;
@@ -53,6 +54,7 @@ export default function AuthorsHeader({
   onOpenFountainClick: _onOpenFountainClick,
   onLoadFromLibraryClick,
   onSaveClick,
+  isProcessing = false,
   onSearchClose,
   onCoverClick,
   onDocxExportClick,
@@ -308,7 +310,16 @@ export default function AuthorsHeader({
               </div>
             )}
           </div>
-          <StyledSmallButton theme={theme} onClick={onSaveClick} title="Save & read in Library">Save &amp; read in Library</StyledSmallButton>
+          <StyledSmallButton
+            theme={theme}
+            onClick={onSaveClick}
+            disabled={isProcessing}
+            aria-busy={isProcessing}
+            title={isProcessing ? 'Processing...' : 'Save & read in Library'}
+            styleOverrides={isProcessing ? { color: '#fff', cursor: 'wait' } : undefined}
+          >
+            {isProcessing ? 'Processing...' : 'Save & read in Library'}
+          </StyledSmallButton>
         </div>
       </div>
 

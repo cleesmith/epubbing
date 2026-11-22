@@ -3,7 +3,7 @@ import Swal from 'sweetalert2';
 
 export const LIBRARY_TAB_NAME = 'proselenos_library_mode';
 export const PUBLISH_CONFIRMATION = 'Saved to your Library.';
-export const PUBLISH_CONFIRMATION_DETAIL = 'Opening your book for reading.';
+export const PUBLISH_CONFIRMATION_DETAIL = 'Opening your book for reading.\nIf Library is already open, click its tab.';
 let libraryTab: Window | null = null;
 
 export function isLibraryTab(tab: Window | null): tab is Window {
@@ -101,7 +101,11 @@ export function reserveLibraryReview(isDarkMode: boolean) {
       timer: 3000,
       allowOutsideClick: false,
       allowEscapeKey: false,
-      didOpen: () => mirrorConfirmation(Swal.getContainer()),
+      didOpen: () => {
+        const message = Swal.getHtmlContainer();
+        if (message) message.style.whiteSpace = 'pre-line';
+        mirrorConfirmation(Swal.getContainer());
+      },
       background: isDarkMode ? '#222' : '#fff',
       color: isDarkMode ? '#fff' : '#333',
       customClass: { container: 'swal-above-modal' },

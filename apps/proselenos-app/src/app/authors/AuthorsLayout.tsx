@@ -129,6 +129,7 @@ export default function AuthorsLayout({
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
   const [bookMeta, setBookMeta] = useState<WorkingCopyMeta | null>(null);
   const publishingRef = useRef(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [showCoverUpload, setShowCoverUpload] = useState(false);
   const [writingMode, setWritingMode] = useState(false);
   const reviewTabRef = useRef<Window | null>(null);
@@ -1611,6 +1612,7 @@ export default function AuthorsLayout({
     // Ignore a second click while this publication is still in progress.
     if (publishingRef.current) return;
     publishingRef.current = true;
+    setIsProcessing(true);
     let review: ReturnType<typeof reserveLibraryReview> | null = null;
     const reviewSectionId = selectedSectionId;
     let reviewOpened = false;
@@ -1691,6 +1693,7 @@ export default function AuthorsLayout({
     } finally {
       if (!reviewOpened) review?.cancel();
       publishingRef.current = false;
+      setIsProcessing(false);
     }
   };
 
@@ -1868,6 +1871,7 @@ export default function AuthorsLayout({
         onOpenFountainClick={handleOpenFountain}
         onLoadFromLibraryClick={onLoadFromLibraryClick}
         onSaveClick={handleSave}
+        isProcessing={isProcessing}
         onSearchClose={handleSearchClose}
         onCoverClick={onCoverClick}
         onDocxExportClick={handleDocxExport}
