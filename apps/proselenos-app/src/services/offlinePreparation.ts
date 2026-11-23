@@ -21,6 +21,22 @@ export interface OfflineProgress {
 
 const updatedMessage = 'EverythingEbooks changed during the update. Choose Update App again.';
 
+// Keep readiness with the actual app cache, never in exported user data.
+const readyFile = '.ee-offline-ready';
+
+export async function isOfflineReady(version = RELEASE_HASH): Promise<boolean> {
+  const root = new URL(appPath('/'), window.location.origin);
+  const cacheName = `epubbing-${encodeURIComponent(root.pathname)}-${version}`;
+  try {
+    if (!(await caches.has(cacheName))) return false;
+    const cache = await caches.open(cacheName);
+    const ready = await cache.match(new URL(readyFile, root).href);
+    return !!ready?.ok && (await ready.text()) === version;
+  } catch {
+    return false;
+  }
+}
+
 function validateManifest(value: unknown, root: URL, version: string): OfflineManifest {
   const manifest = value as OfflineManifest | null;
   if (manifest?.schema !== 1 || manifest.version !== version || !Array.isArray(manifest.files)) {
@@ -143,6 +159,9 @@ export async function prepareForOffline(
       completed += 1;
       onProgress({ phase: 'verifying', completed, total: manifest.files.length });
     }
+    await checkCurrent();
+    // Only a fully saved and verified release may skip setup next time.
+    await cache.put(new URL(readyFile, root).href, new Response(version));
     await checkCurrent();
   } finally {
     signal.removeEventListener('abort', cancel);

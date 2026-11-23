@@ -95,7 +95,7 @@ Paperback cover settings stay with the Authors EPUB. The generated PDFs are sepa
 
 In Ebook Plus, **Check EPUB** checks the Booksellers edition and shows errors and warnings. You can export a readable text report.
 
-The checker does not repair your book. Results are cleared when you close it. It works offline after **Update App** has finished.
+The checker does not repair your book. Results are cleared when you close it. It works offline after the initial app setup has finished.
 
 Ebook Plus also has **X-ray** for looking inside the Authors EPUB: its chapters, images, and other files.
 
@@ -129,7 +129,9 @@ To explore an older draft without disturbing your current work, open EverythingE
 
 ## Write online or offline
 
-While online, choose **Menu → Update App** in either Authors or Library. This loads the latest app version and prepares its files for offline use in one step. The progress popup shows how many files have been saved and verified. Keep the tab open until it finishes; the updated app then reopens.
+On your first visit while online, EverythingEbooks prepares the complete app in this browser automatically. The progress popup shows how many files have been saved and verified. Keep the tab open until **Ready to write and read offline** appears. The completed file count stays visible until you choose **OK**. You do not need to choose Update App to finish setup.
+
+Successful setup is remembered in this browser. If setup is interrupted, it tries again the next time you open EE online or your connection returns. A different browser or cleared app cache needs its own setup.
 
 Bookmark [everythingebooks.org](https://everythingebooks.org/) to return in this browser.
 
@@ -137,7 +139,7 @@ Use that bookmark in the same browser on the same device, online or offline. Wri
 
 **Nothing installs.** Your writing remains in your browser and available to export as an EPUB or ZIP backup.
 
-**Menu → Update App - xxxx** shows the version currently open. Each update also refreshes the offline files. Save any unsaved writing in Authors before updating. Other open EE tabs may need a reload to show the new version.
+Later, **Menu → Update App - xxxx** in either Authors or Library checks for the latest version and prepares its offline files in one step. It shows file-count progress and reuses files that are already correct. When finished, the completion message and file count stay visible until you choose **OK** to reopen the updated app. The number beside Update App shows the version currently open. Stay online and save any unsaved writing in Authors before updating. Other open EE tabs may need a reload to show the new version.
 
 ## Free and open source
 

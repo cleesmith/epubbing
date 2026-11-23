@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { createHash, webcrypto } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { prepareForOffline } from './offlinePreparation';
+import { isOfflineReady, prepareForOffline } from './offlinePreparation';
 
 vi.mock('@/generated/release', () => ({ RELEASE_HASH: 'abc123' }));
 vi.mock('@/utils/app-path', () => ({ appPath: (value: string) => `/test${value}` }));
@@ -45,7 +45,8 @@ describe('offline preparation', () => {
     const progress = vi.fn();
     await prepareForOffline(progress, new AbortController().signal);
     expect(storage.open).toHaveBeenCalledWith('epubbing-%2Ftest%2F-abc123');
-    expect([...saved.keys()]).toEqual(routes.map((route) => new URL(route, root).href));
+    expect([...saved.keys()]).toEqual([...routes, '.ee-offline-ready'].map((route) => new URL(route, root).href));
+    expect(await isOfflineReady()).toBe(true);
     expect(progress).toHaveBeenLastCalledWith({ phase: 'verifying', completed: routes.length, total: routes.length });
     fetchMock.mockClear();
     await prepareForOffline(progress, new AbortController().signal);
@@ -57,7 +58,9 @@ describe('offline preparation', () => {
       ? JSON.stringify({ ...manifest(), version: 'def456' }) : contents));
     await prepareForOffline(vi.fn(), new AbortController().signal, 'def456');
     expect(storage.open).toHaveBeenCalledWith('epubbing-%2Ftest%2F-def456');
-    expect(saved.size).toBe(routes.length);
+    expect(saved.size).toBe(routes.length + 1);
+    expect(await isOfflineReady('def456')).toBe(true);
+    expect(await isOfflineReady('abc123')).toBe(false);
     expect(fetchMock.mock.calls.every(([url]) => url.searchParams.get('offline-prep') === 'def456')).toBe(true);
   });
 
@@ -87,6 +90,7 @@ describe('offline preparation', () => {
       if (completed === 1) operation.abort();
     }, operation.signal)).rejects.toMatchObject({ name: 'AbortError' });
     expect(saved.size).toBe(1);
+    expect(await isOfflineReady()).toBe(false);
   });
 
   it('does not recreate a version cache deleted by an update', async () => {
@@ -108,5 +112,27 @@ describe('offline preparation', () => {
     fetchMock.mockResolvedValue(new Response(JSON.stringify(invalid)));
     await expect(prepareForOffline(vi.fn(), new AbortController().signal)).rejects.toThrow(/invalid address/);
     expect(cache.put).not.toHaveBeenCalled();
+  });
+
+  it('does not confuse a partial cache with completed setup', async () => {
+    saved.set(root, new Response(contents));
+    expect(await isOfflineReady()).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('requires fresh setup after app storage is cleared', async () => {
+    await prepareForOffline(vi.fn(), new AbortController().signal);
+    expect(await isOfflineReady()).toBe(true);
+    storage.has.mockResolvedValue(false);
+    storage.open.mockClear();
+    expect(await isOfflineReady()).toBe(false);
+    expect(storage.open).not.toHaveBeenCalled();
+  });
+
+  it('never marks setup complete when the final verification fails', async () => {
+    await expect(prepareForOffline(({ phase, completed }) => {
+      if (phase === 'saving' && completed === routes.length) saved.delete(root);
+    }, new AbortController().signal)).rejects.toThrow(/not saved/);
+    expect(await isOfflineReady()).toBe(false);
   });
 });

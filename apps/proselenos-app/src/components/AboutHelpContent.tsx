@@ -96,7 +96,9 @@ export default function AboutHelpContent({ page }: { page: 'authors' | 'library'
       </HelpSection>
 
       <HelpSection title='Work online or offline'>
-        <p>While online, choose Menu → Update App in either Authors or Library. It loads the latest app version and prepares its files for offline use in one step. The progress popup shows the number of files saved and verified. Keep this tab open until it finishes and the updated app reopens. Save any unsaved writing before updating.</p>
+        <p>Your first visit while online prepares the complete app in this browser automatically. The progress popup shows the number of files saved and verified. Keep this tab open until Ready to write and read offline appears. The completed file count stays visible until you choose OK. You do not need to choose Update App to finish setup.</p>
+        <p>Successful setup is remembered in this browser. If interrupted, setup tries again the next time you open EE online or your connection returns. A different browser or cleared app cache needs its own setup.</p>
+        <p>Later, Menu → Update App in either Authors or Library checks for the latest version and prepares its offline files together. It reuses files that are already correct and shows progress. When finished, the completion message and file count stay visible until you choose OK to reopen the updated app. Stay online and save any unsaved writing before updating.</p>
         <p>The number beside Update App identifies the version currently open. Other open EE tabs may need a reload after updating. Bookmark everythingebooks.org and use that bookmark in this same browser on this device, online or offline. Nothing installs.</p>
       </HelpSection>
     </div>

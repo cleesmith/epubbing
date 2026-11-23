@@ -1,34 +1,20 @@
 'use client';
 
-import { appPath } from '@/utils/app-path';
-
 import { useEffect } from 'react';
+import { initializeApp } from '@/services/appUpdate';
+import { useThemeStore } from '@/store/themeStore';
 
 export function ServiceWorkerRegistration() {
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (!('serviceWorker' in navigator)) return;
-
-    navigator.serviceWorker
-      .register(appPath('/sw.js'))
-      .then((registration) => {
-        // Fetch sw.js to extract version from comment
-        fetch(appPath('/sw.js'))
-          .then((res) => res.text())
-          .then((text) => {
-            const match = text.match(/Version: ([a-f0-9]+)/);
-            const version = match ? match[1] : 'unknown';
-            console.log(`Service Worker offline cache: everythingebooks-${version}`);
-          });
-
-        // Check for updates periodically (every hour when online)
-        setInterval(() => {
-          registration.update();
-        }, 60 * 60 * 1000);
-      })
-      .catch((error) => {
-        console.error('SW registration failed:', error);
+    const prepare = () => {
+      void initializeApp(useThemeStore.getState().isDarkMode).catch(error => {
+        console.error('App setup failed:', error);
       });
+    };
+    prepare();
+    // Retry unfinished setup when connectivity returns; no polling.
+    window.addEventListener('online', prepare);
+    return () => window.removeEventListener('online', prepare);
   }, []);
 
   return null;

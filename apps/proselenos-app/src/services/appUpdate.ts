@@ -1,6 +1,6 @@
 import { appPath } from '@/utils/app-path';
 import { showOfflinePreparation } from '@/components/OfflinePreparation';
-import { prepareForOffline } from './offlinePreparation';
+import { isOfflineReady, prepareForOffline } from './offlinePreparation';
 
 function waitForController(registration: ServiceWorkerRegistration, signal: AbortSignal): Promise<ServiceWorker> {
   const worker = registration.installing || registration.waiting || registration.active;
@@ -54,7 +54,7 @@ function workerVersion(worker: ServiceWorker, signal: AbortSignal): Promise<stri
 
 // One action in both menus: activate the latest worker, verify and cache that
 // exact release, then reload into it. No book storage is opened or cleared.
-export async function updateApp(isDark = false): Promise<void> {
+export async function updateApp(isDark = false, mode: 'update' | 'setup' = 'update'): Promise<void> {
   const complete = await showOfflinePreparation(isDark, async (onProgress, signal) => {
     if (navigator.onLine === false) throw new Error('Connect to the internet, then choose Update App again.');
     if (!window.isSecureContext || !('serviceWorker' in navigator) || !('caches' in window) || !crypto.subtle) {
@@ -67,6 +67,29 @@ export async function updateApp(isDark = false): Promise<void> {
     const worker = await waitForController(registration, signal);
     const version = await workerVersion(worker, signal);
     await prepareForOffline(onProgress, signal, version);
-  });
-  if (complete) window.location.reload();
+  }, mode);
+  // Only the explicit menu action reloads. Automatic setup can also resume
+  // after reconnection, when an author may already have unsaved writing.
+  if (complete && mode === 'update') window.location.reload();
+}
+
+let initialSetup: Promise<void> | undefined;
+
+/** First visit (or an incomplete/cleared cache) prepares the whole app. */
+export function initializeApp(isDark = false): Promise<void> {
+  if (initialSetup) return initialSetup;
+  if (navigator.onLine === false || !window.isSecureContext ||
+      !('serviceWorker' in navigator) || !('caches' in window) || !crypto.subtle) {
+    return Promise.resolve();
+  }
+  // Share in-flight setup across React remounts. The cache marker handles later
+  // visits, and is deliberately absent from Export/Import Data backups.
+  initialSetup = (async () => {
+    if (await isOfflineReady()) {
+      const registration = await navigator.serviceWorker.getRegistration(appPath('/'));
+      if (registration?.active) return;
+    }
+    await updateApp(isDark, 'setup');
+  })().finally(() => { initialSetup = undefined; });
+  return initialSetup;
 }
