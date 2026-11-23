@@ -52,6 +52,15 @@ describe('offline preparation', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1); // Only the versioned file list.
   });
 
+  it('prepares the controlling updated release even while the page still runs an older release', async () => {
+    fetchMock.mockImplementation(async (url: URL) => new Response(url.pathname.endsWith('offline-manifest.json')
+      ? JSON.stringify({ ...manifest(), version: 'def456' }) : contents));
+    await prepareForOffline(vi.fn(), new AbortController().signal, 'def456');
+    expect(storage.open).toHaveBeenCalledWith('epubbing-%2Ftest%2F-def456');
+    expect(saved.size).toBe(routes.length);
+    expect(fetchMock.mock.calls.every(([url]) => url.searchParams.get('offline-prep') === 'def456')).toBe(true);
+  });
+
   it('rejects a partial or wrong-version list before saving anything', async () => {
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ ...manifest(), version: 'old' })));
     await expect(prepareForOffline(vi.fn(), new AbortController().signal)).rejects.toThrow(/another version/);

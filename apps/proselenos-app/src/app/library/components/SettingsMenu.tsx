@@ -1,7 +1,7 @@
 import { resetLibraryAndAuthors } from '@/services/dataExportService';
 import clsx from 'clsx';
 import React, { useState } from 'react';
-import { PiGear, PiTrash, PiArrowCircleUp, PiDatabase, PiInfo, PiDownloadSimple } from 'react-icons/pi';
+import { PiGear, PiTrash, PiArrowCircleUp, PiDatabase, PiInfo } from 'react-icons/pi';
 import { showConfirm, showAlert } from '@/app/shared/alerts';
 
 import { isDesktopAppPlatform } from '@/services/environment';
@@ -16,7 +16,6 @@ import { saveSysSettings } from '@/helpers/settings';
 import { invoke } from '@/utils/desktop-stubs';
 import MenuItem from '@/components/MenuItem';
 import Menu from '@/components/Menu';
-import { showOfflinePreparation } from '@/components/OfflinePreparation';
 import { updateApp } from '@/services/appUpdate';
 
 interface SettingsMenuProps {
@@ -48,7 +47,8 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ setIsDropdownOpen }) => {
 
   const handleUpdateApp = async () => {
     setIsDropdownOpen?.(false);
-    await updateApp();
+    const isDark = themeMode === 'dark' || (themeMode === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    await updateApp(isDark);
   };
 
   const showAboutProselenosebooks = () => {
@@ -249,16 +249,6 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ setIsDropdownOpen }) => {
         description={_('only works when online')}
         Icon={PiArrowCircleUp}
         onClick={handleUpdateApp}
-      />
-      <MenuItem
-        label={_('Prep for offline use')}
-        description={_('save application files in this browser')}
-        Icon={PiDownloadSimple}
-        onClick={() => {
-          setIsDropdownOpen?.(false);
-          const isDark = themeMode === 'dark' || (themeMode === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-          void showOfflinePreparation(isDark);
-        }}
       />
       <MenuItem
         label={_('Reset Library & Authors')}

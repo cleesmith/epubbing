@@ -6,13 +6,12 @@ import { appPath } from '@/utils/app-path';
 import { findLibraryTab } from '@/utils/library-tab';
 
 import { useState, useEffect, useRef } from 'react';
-import { PiInfo, PiFileDoc, PiFileText, PiImage, PiArrowRight, PiArrowCircleUp, PiDownloadSimple } from 'react-icons/pi';
+import { PiInfo, PiFileDoc, PiFileText, PiImage, PiArrowRight, PiArrowCircleUp } from 'react-icons/pi';
 import { GiBoxUnpacking } from 'react-icons/gi';
 import { ThemeConfig } from '../shared/theme';
 import { showConfirm, showAlert } from '../shared/alerts';
 import StyledSmallButton from '@/components/StyledSmallButton';
 import TrafficLightIcon from '@/components/TrafficLightIcon';
-import { showOfflinePreparation } from '@/components/OfflinePreparation';
 import { updateApp } from '@/services/appUpdate';
 import { RELEASE_HASH } from '@/generated/release';
 
@@ -113,7 +112,7 @@ export default function AuthorsHeader({
       showAlert('Save your changes before updating the app.', 'info', 'Update App', isDarkMode);
       return;
     }
-    void updateApp();
+    void updateApp(isDarkMode);
   };
 
   return (
@@ -470,20 +469,6 @@ export default function AuthorsHeader({
               <span style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                 <span style={{ whiteSpace: 'nowrap' }}>Update App - {RELEASE_HASH}</span>
                 <span style={{ color: theme.textSecondary, fontSize: '11px' }}>only works when online</span>
-              </span>
-            </button>
-            <button
-              onClick={() => { setMenuOpen(false); void showOfflinePreparation(isDarkMode); }}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '8px', width: '100%',
-                padding: '8px 12px', background: 'none', border: 'none',
-                textAlign: 'left', cursor: 'pointer', color: theme.text, fontSize: '13px',
-              }}
-            >
-              <PiDownloadSimple size={16} />
-              <span style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                <span>Prep for offline use</span>
-                <span style={{ color: theme.textSecondary, fontSize: '11px' }}>save application files in this browser</span>
               </span>
             </button>
             <button

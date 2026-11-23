@@ -96,8 +96,8 @@ export default function AboutHelpContent({ page }: { page: 'authors' | 'library'
       </HelpSection>
 
       <HelpSection title='Work online or offline'>
-        <p>While online, choose Menu → Prep for offline use in either Authors or Library and wait for it to finish. Bookmark everythingebooks.org and use that bookmark in the same browser on the same device, online or offline. Nothing installs.</p>
-        <p>Menu → Update App is available in both places when you are online. It loads the latest app update.</p>
+        <p>While online, choose Menu → Update App in either Authors or Library. It loads the latest app version and prepares its files for offline use in one step. The progress popup shows the number of files saved and verified. Keep this tab open until it finishes and the updated app reopens. Save any unsaved writing before updating.</p>
+        <p>The number beside Update App identifies the version currently open. Other open EE tabs may need a reload after updating. Bookmark everythingebooks.org and use that bookmark in this same browser on this device, online or offline. Nothing installs.</p>
       </HelpSection>
     </div>
   );

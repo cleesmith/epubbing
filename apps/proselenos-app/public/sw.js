@@ -1,6 +1,6 @@
 // Auto-generated at build time - do not edit manually
-// Version: 1a203ab2695
-const CACHE_VERSION = '1a203ab2695';
+// Version: 1a20866d8c2
+const CACHE_VERSION = '1a20866d8c2';
 const APP_ROOT = new URL('./', self.location.href);
 const CACHE_PREFIX = 'epubbing-' + encodeURIComponent(APP_ROOT.pathname) + '-';
 const CACHE_NAME = CACHE_PREFIX + CACHE_VERSION;
@@ -22,7 +22,7 @@ self.addEventListener('install', (event) => {
       .then((cache) => {
         return Promise.all(
           PRECACHE_URLS.map((url) => {
-            return fetch(url)
+            return fetch(url, { cache: 'no-store' })
               .then((response) => {
                 if (response.ok) {
                   return cache.put(url, response);
@@ -36,6 +36,13 @@ self.addEventListener('install', (event) => {
       })
       .then(() => self.skipWaiting())
   );
+});
+
+// Identify the controlling release before its offline files are prepared.
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'EE_APP_VERSION') {
+    event.ports[0]?.postMessage({ version: CACHE_VERSION });
+  }
 });
 
 // Activate: clean old caches, take control
@@ -76,7 +83,7 @@ self.addEventListener('fetch', (event) => {
   // Navigation requests (HTML pages) - cache-first
   if (request.mode === 'navigate') {
     event.respondWith(
-      caches.match(request).then((cached) => {
+      caches.open(CACHE_NAME).then((cache) => cache.match(request)).then((cached) => {
         if (cached) return cached;
         return fetch(request).then((response) => {
           const clone = response.clone();
@@ -91,7 +98,7 @@ self.addEventListener('fetch', (event) => {
   // Static assets (/_next/static/*) - cache-first (hashed, safe to cache)
   if (url.pathname.startsWith(new URL('_next/static/', APP_ROOT).pathname)) {
     event.respondWith(
-      caches.match(request).then((cached) => {
+      caches.open(CACHE_NAME).then((cache) => cache.match(request)).then((cached) => {
         if (cached) return cached;
         return fetch(request).then((response) => {
           const clone = response.clone();
@@ -113,6 +120,6 @@ self.addEventListener('fetch', (event) => {
         }
         return response;
       })
-      .catch(() => caches.match(request))
+      .catch(() => caches.open(CACHE_NAME).then((cache) => cache.match(request)))
   );
 });

@@ -95,7 +95,7 @@ Paperback cover settings stay with the Authors EPUB. The generated PDFs are sepa
 
 In Ebook Plus, **Check EPUB** checks the Booksellers edition and shows errors and warnings. You can export a readable text report.
 
-The checker does not repair your book. Results are cleared when you close it. It works offline after **Prep for offline use** has finished.
+The checker does not repair your book. Results are cleared when you close it. It works offline after **Update App** has finished.
 
 Ebook Plus also has **X-ray** for looking inside the Authors EPUB: its chapters, images, and other files.
 
@@ -129,13 +129,15 @@ To explore an older draft without disturbing your current work, open EverythingE
 
 ## Write online or offline
 
-While online, choose **Menu → Prep for offline use** in either Authors or Library. Let it finish, then bookmark [everythingebooks.org](https://everythingebooks.org/).
+While online, choose **Menu → Update App** in either Authors or Library. This loads the latest app version and prepares its files for offline use in one step. The progress popup shows how many files have been saved and verified. Keep the tab open until it finishes; the updated app then reopens.
+
+Bookmark [everythingebooks.org](https://everythingebooks.org/) to return in this browser.
 
 Use that bookmark in the same browser on the same device, online or offline. Writing, reading, and creating your exports continue to work.
 
 **Nothing installs.** Your writing remains in your browser and available to export as an EPUB or ZIP backup.
 
-**Menu → Update App** is available in both Authors and Library when you are online. Use it to load the latest app update.
+**Menu → Update App - xxxx** shows the version currently open. Each update also refreshes the offline files. Save any unsaved writing in Authors before updating. Other open EE tabs may need a reload to show the new version.
 
 ## Free and open source
 

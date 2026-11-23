@@ -19,11 +19,11 @@ export interface OfflineProgress {
   total: number;
 }
 
-const updatedMessage = 'Epubbing changed during preparation. Reload the page and try again.';
+const updatedMessage = 'EverythingEbooks changed during the update. Choose Update App again.';
 
-function validateManifest(value: unknown, root: URL): OfflineManifest {
+function validateManifest(value: unknown, root: URL, version: string): OfflineManifest {
   const manifest = value as OfflineManifest | null;
-  if (manifest?.schema !== 1 || manifest.version !== RELEASE_HASH || !Array.isArray(manifest.files)) {
+  if (manifest?.schema !== 1 || manifest.version !== version || !Array.isArray(manifest.files)) {
     throw new Error('The offline file list is unavailable or belongs to another version. Reload while online and try again.');
   }
   const urls = new Set<string>();
@@ -79,14 +79,15 @@ async function download(url: URL, signal: AbortSignal): Promise<Response> {
 export async function prepareForOffline(
   onProgress: (progress: OfflineProgress) => void,
   signal: AbortSignal,
+  version = RELEASE_HASH,
 ): Promise<void> {
   if (!window.isSecureContext || !('serviceWorker' in navigator) || !('caches' in window) || !crypto.subtle) {
-    throw new Error('Offline preparation is not available in this browser. Open Epubbing over HTTPS in a supported browser.');
+    throw new Error('Offline preparation is not available in this browser. Open EverythingEbooks over HTTPS in a supported browser.');
   }
   const controller = navigator.serviceWorker.controller;
   const root = new URL(appPath('/'), window.location.origin);
   if (!controller || controller.scriptURL !== new URL('sw.js', root).href) {
-    throw new Error('Epubbing is still setting up. Reload the page while online, then try again.');
+    throw new Error('EverythingEbooks is still setting up. Reload the page while online, then try again.');
   }
   const operation = new AbortController();
   const cancel = () => operation.abort(signal.reason);
@@ -95,7 +96,7 @@ export async function prepareForOffline(
   signal.addEventListener('abort', cancel, { once: true });
   navigator.serviceWorker.addEventListener('controllerchange', changed);
 
-  const cacheName = `epubbing-${encodeURIComponent(root.pathname)}-${RELEASE_HASH}`;
+  const cacheName = `epubbing-${encodeURIComponent(root.pathname)}-${version}`;
   const checkCurrent = async () => {
     operation.signal.throwIfAborted();
     if (navigator.serviceWorker.controller !== controller || !(await caches.has(cacheName))) {
@@ -107,9 +108,9 @@ export async function prepareForOffline(
     onProgress({ phase: 'checking', completed: 0, total: 0 });
     await checkCurrent();
     const manifestUrl = new URL('offline-manifest.json', root);
-    manifestUrl.searchParams.set('offline-prep', RELEASE_HASH);
+    manifestUrl.searchParams.set('offline-prep', version);
     const response = await download(manifestUrl, operation.signal);
-    const manifest = validateManifest(await response.json(), root);
+    const manifest = validateManifest(await response.json(), root, version);
     await checkCurrent();
     const cache = await caches.open(cacheName);
     let completed = 0;
@@ -122,7 +123,7 @@ export async function prepareForOffline(
       if (!(await matchesFile(await cache.match(url.href), file))) {
         const freshUrl = new URL(url);
         // Bypass older HTML/public assets served by cache-first handlers.
-        freshUrl.searchParams.set('offline-prep', RELEASE_HASH);
+        freshUrl.searchParams.set('offline-prep', version);
         const fresh = await download(freshUrl, operation.signal);
         if (!(await matchesFile(fresh.clone(), file))) throw new Error(updatedMessage);
         await checkCurrent();
@@ -137,7 +138,7 @@ export async function prepareForOffline(
     for (const file of manifest.files) {
       await checkCurrent();
       if (!(await cache.match(new URL(file.url, root).href))?.ok) {
-        throw new Error('Some application files were not saved. Please run preparation again.');
+        throw new Error('Some application files were not saved. Please choose Update App again.');
       }
       completed += 1;
       onProgress({ phase: 'verifying', completed, total: manifest.files.length });

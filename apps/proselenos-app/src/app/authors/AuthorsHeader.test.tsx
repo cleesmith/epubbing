@@ -5,13 +5,11 @@ import AuthorsHeader from './AuthorsHeader';
 import { getTheme } from '../shared/theme';
 import { showAlert } from '../shared/alerts';
 import { updateApp } from '@/services/appUpdate';
-import { showOfflinePreparation } from '@/components/OfflinePreparation';
 
 vi.mock('@/components/TrafficLightIcon', () => ({ default: () => null }));
 vi.mock('@/generated/release', () => ({ RELEASE_HASH: 'abc123' }));
 vi.mock('../shared/alerts', () => ({ showAlert: vi.fn(), showConfirm: vi.fn() }));
 vi.mock('@/services/appUpdate', () => ({ updateApp: vi.fn(async () => {}) }));
-vi.mock('@/components/OfflinePreparation', () => ({ showOfflinePreparation: vi.fn(async () => {}) }));
 
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
@@ -41,10 +39,9 @@ it('keeps unsaved writing open instead of starting an update that would reload A
   expect(showAlert).toHaveBeenCalledWith('Save your changes before updating the app.', 'info', 'Update App', true);
 });
 
-it.each([true, false])('opens the existing offline preparation dialog with dark mode %s', isDark => {
-  openMenu(true, isDark);
-  fireEvent.click(screen.getByRole('button', { name: /Prep for offline use/ }));
-  expect(showOfflinePreparation).toHaveBeenCalledWith(isDark);
-  expect(updateApp).not.toHaveBeenCalled();
+it.each([true, false])('offers only the combined update action with dark mode %s', isDark => {
+  openMenu(false, isDark);
   expect(screen.queryByText('Prep for offline use')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: /Update App - abc123/ }));
+  expect(updateApp).toHaveBeenCalledWith(isDark);
 });

@@ -49,7 +49,7 @@ export function checkEpub(
     worker.onerror = (event) => {
       event.preventDefault();
       finish();
-      reject(new Error('The checker could not run. When online, use “Prep for offline use” and try again.'));
+      reject(new Error('The checker could not run. When online, use “Update App” and try again.'));
     };
     worker.onmessageerror = () => {
       finish();

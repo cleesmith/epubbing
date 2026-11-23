@@ -53,7 +53,7 @@ const topRowItems: HelpItem[] = [
   {
     icon: <MdOutlineFactCheck size={ICON_SIZE} className="fill-emerald-500" />,
     name: 'Check EPUB',
-    description: 'Check the Booksellers EPUB prepared from your book, review errors and warnings, and export a text report. Results are cleared when you close the checker. Works offline after Prep for offline use.',
+    description: 'Check the Booksellers EPUB prepared from your book, review errors and warnings, and export a text report. Results are cleared when you close the checker. Works offline after Update App.',
   },
   {
     icon: <GiBoxUnpacking size={ICON_SIZE} className="fill-purple-500" />,
