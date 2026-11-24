@@ -4,6 +4,24 @@ import type { OfflineProgress } from '@/services/offlinePreparation';
 let running = false;
 type PrepareUpdate = (onProgress: (progress: OfflineProgress) => void, signal: AbortSignal) => Promise<void>;
 
+// Real paragraphs keep each step readable; newlines in SweetAlert's text
+// option are collapsed by the browser. textContent also keeps errors as text.
+function messageLines(lines: string[], countLine = -1): string {
+  const content = document.createElement('div');
+  Object.assign(content.style, { display: 'grid', gap: '1rem', lineHeight: '1.5' });
+  lines.forEach((line, index) => {
+    const paragraph = document.createElement('p');
+    paragraph.style.margin = '0';
+    paragraph.textContent = line;
+    if (index === countLine) {
+      Object.assign(paragraph.style, { fontSize: '1.3em', fontWeight: '600', fontVariantNumeric: 'tabular-nums' });
+    }
+    content.appendChild(paragraph);
+  });
+  // SweetAlert replaces a string's markup on update; an HTMLElement is appended.
+  return content.outerHTML;
+}
+
 export async function showOfflinePreparation(
   isDark: boolean,
   prepare: PrepareUpdate,
@@ -20,7 +38,10 @@ export async function showOfflinePreparation(
     confirmButtonColor: '#3085d6',
     width: 'min(48rem, calc(100vw - 2rem))',
     title: setup ? 'Preparing EverythingEbooks' : 'Update App',
-    text: setup ? 'Getting the complete app ready in this browser…' : 'Loading the latest app version…',
+    html: messageLines([
+      setup ? 'Getting the complete app ready in this browser…' : 'Loading the latest app version…',
+      'Stay online and keep this tab open.',
+    ]),
     showConfirmButton: false,
     showCancelButton: true,
     cancelButtonText: 'Cancel',
@@ -36,19 +57,24 @@ export async function showOfflinePreparation(
     await prepare(({ phase, completed, total }) => {
       if (operation.signal.aborted) return;
       fileTotal = total;
-      const message = phase === 'checking'
-        ? 'Checking the application files…'
-        : `${phase === 'saving' ? 'Saving' : 'Verifying'} application files for offline use: ${completed} of ${total}`;
-      Swal.update({ text: `${message}\nStay online and keep this tab open until ${setup ? 'setup' : 'the update'} finishes.` });
+      const instruction = `Stay online and keep this tab open until ${setup ? 'setup' : 'the update'} finishes.`;
+      Swal.update({ html: phase === 'checking'
+        ? messageLines(['Checking the application files…', instruction])
+        : messageLines([
+          `${phase === 'saving' ? 'Saving' : 'Verifying'} application files for offline use`,
+          `${completed} of ${total} files`,
+          instruction,
+        ], 1),
+      });
     }, operation.signal);
     if (operation.signal.aborted) return false;
     Swal.update({
       title: setup ? 'Ready to write and read offline' : 'Updated and ready for offline use',
-      html: `<div style="display:grid;gap:0.8rem;line-height:1.5">
-        ${fileTotal > 0 ? `<p style="margin:0">${fileTotal} application files saved and verified.</p>` : ''}
-        <p style="margin:0">${setup ? 'EverythingEbooks is ready in this browser.' : 'The app and its offline files are ready.'}</p>
-        <p style="margin:0">${setup ? 'Bookmark everythingebooks.org to return to it, even offline.' : 'Choose OK to reopen the updated app.'}</p>
-      </div>`,
+      html: messageLines([
+        ...(fileTotal > 0 ? [`${fileTotal} application files saved and verified.`] : []),
+        setup ? 'EverythingEbooks is ready in this browser.' : 'The app and its offline files are ready.',
+        setup ? 'Bookmark everythingebooks.org to return to it, even offline.' : 'Choose OK to reopen the updated app.',
+      ]),
       icon: 'success',
       showCancelButton: false,
       showConfirmButton: true,
@@ -61,8 +87,10 @@ export async function showOfflinePreparation(
     if (operation.signal.aborted) return false;
     Swal.update({
       title: setup ? 'Setup incomplete' : 'Update incomplete',
-      text: (error instanceof Error ? error.message : 'Check your connection and available browser storage, then try again.')
-        + (setup ? '\nSetup will try again the next time you open EE online. You can also choose Update App.' : ''),
+      html: messageLines([
+        ...(error instanceof Error ? error.message : 'Check your connection and available browser storage, then try again.').split(/\r?\n/).filter(Boolean),
+        ...(setup ? ['Setup will try again the next time you open EE online.', 'You can also choose Update App.'] : []),
+      ]),
       icon: 'error',
       showConfirmButton: true,
       confirmButtonText: 'Close',

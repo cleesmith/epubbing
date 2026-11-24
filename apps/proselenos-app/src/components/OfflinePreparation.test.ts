@@ -30,8 +30,8 @@ it('starts immediately, displays counts, and waits for OK before completing the 
   expect(prepare).toHaveBeenCalledOnce();
   expect(Swal.fire).toHaveBeenCalledOnce();
   expect(Swal.fire).toHaveBeenCalledWith(expect.objectContaining({ title: 'Update App', showConfirmButton: false }));
-  expect(Swal.update).toHaveBeenCalledWith(expect.objectContaining({ text: expect.stringContaining('12 of 270') }));
-  expect(Swal.update).toHaveBeenCalledWith(expect.objectContaining({ text: expect.stringContaining('270 of 270') }));
+  expect(Swal.update).toHaveBeenCalledWith(expect.objectContaining({ html: expect.stringContaining('12 of 270 files') }));
+  expect(Swal.update).toHaveBeenCalledWith(expect.objectContaining({ html: expect.stringContaining('270 of 270 files') }));
   await vi.advanceTimersByTimeAsync(60_000);
   expect(completed).not.toHaveBeenCalled();
   expect(Swal.close).not.toHaveBeenCalled();
@@ -47,7 +47,7 @@ it('starts immediately, displays counts, and waits for OK before completing the 
 it('does not report readiness on a failed preparation', async () => {
   const result = showOfflinePreparation(false, async () => { throw new Error('Storage is full'); });
   await Promise.resolve();
-  expect(Swal.update).toHaveBeenCalledWith(expect.objectContaining({ title: 'Update incomplete', text: 'Storage is full' }));
+  expect(Swal.update).toHaveBeenCalledWith(expect.objectContaining({ title: 'Update incomplete', html: expect.stringContaining('Storage is full') }));
   dismiss();
   expect(await result).toBe(false);
 });
@@ -69,7 +69,7 @@ it('starts first setup without an Update click and keeps its completed total vis
   expect(Swal.fire).toHaveBeenCalledWith(expect.objectContaining({
     title: 'Preparing EverythingEbooks', showConfirmButton: false,
   }));
-  expect(Swal.update).toHaveBeenCalledWith(expect.objectContaining({ text: expect.stringContaining('1 of 270') }));
+  expect(Swal.update).toHaveBeenCalledWith(expect.objectContaining({ html: expect.stringContaining('1 of 270 files') }));
   await vi.advanceTimersByTimeAsync(60_000);
   expect(Swal.close).not.toHaveBeenCalled();
   expect(Swal.update).toHaveBeenLastCalledWith(expect.objectContaining({
@@ -99,7 +99,7 @@ it('explains that incomplete first setup will retry', async () => {
   const result = showOfflinePreparation(false, async () => { throw new Error('Connection lost'); }, 'setup');
   await Promise.resolve();
   expect(Swal.update).toHaveBeenCalledWith(expect.objectContaining({
-    title: 'Setup incomplete', text: expect.stringContaining('next time you open EE online'),
+    title: 'Setup incomplete', html: expect.stringContaining('next time you open EE online'),
   }));
   dismiss();
   expect(await result).toBe(false);
