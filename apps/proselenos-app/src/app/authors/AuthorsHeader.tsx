@@ -6,7 +6,7 @@ import { appPath } from '@/utils/app-path';
 import { findLibraryTab } from '@/utils/library-tab';
 
 import { useState, useEffect, useRef } from 'react';
-import { PiInfo, PiFileDoc, PiFileText, PiImage, PiArrowRight, PiArrowCircleUp } from 'react-icons/pi';
+import { PiInfo, PiFileDoc, PiFileText, PiImage, PiArrowCircleUp } from 'react-icons/pi';
 import { GiBoxUnpacking } from 'react-icons/gi';
 import { ThemeConfig } from '../shared/theme';
 import { showConfirm, showAlert } from '../shared/alerts';
@@ -127,7 +127,7 @@ export default function AuthorsHeader({
         flexShrink: 0,
       }}
     >
-      {/* Left section: Theme, backup reminder, Library, Open and Save & read in Library */}
+      {/* Left section: Theme, backup reminder, File and Save EPUB to Library */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
         {/* Theme toggle */}
         <button
@@ -151,12 +151,9 @@ export default function AuthorsHeader({
         />
         <div style={{ width: '8px' }} />
 
-        {/* Leave Authors for Library after checking for unsaved changes. */}
-        <StyledSmallButton onClick={handleExitClick} theme={theme} title="Leave Authors and return to Library">Library</StyledSmallButton>
-
-        {/* Open dropdown + Save & read in Library */}
+        {/* File dropdown + Save EPUB to Library */}
         <div style={{ display: 'flex', gap: '0px', alignItems: 'center' }}>
-          {/* Open dropdown */}
+          {/* File dropdown */}
           <div ref={openDropdownRef} style={{ position: 'relative' }}>
             <StyledSmallButton
               theme={theme}
@@ -174,9 +171,9 @@ export default function AuthorsHeader({
                 onSearchClose?.();
                 setOpenDropdownOpen(!openDropdownOpen);
               }}
-              title="Open to work on ebook"
+              title="File"
             >
-              Open ▾
+              File ▾
             </StyledSmallButton>
             {openDropdownOpen && (
               <div
@@ -190,7 +187,8 @@ export default function AuthorsHeader({
                   borderRadius: '4px',
                   boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
                   zIndex: 1000,
-                  minWidth: '220px',
+                  minWidth: '280px',
+                  maxWidth: 'calc(100vw - 16px)',
                 }}
               >
                 <button
@@ -207,7 +205,7 @@ export default function AuthorsHeader({
                     fontSize: '13px',
                   }}
                 >
-                  New
+                  New EPUB
                 </button>
                 <button
                   onClick={() => { onOpenClick(); setOpenDropdownOpen(false); }}
@@ -223,7 +221,7 @@ export default function AuthorsHeader({
                     fontSize: '13px',
                   }}
                 >
-                  Load EPUB
+                  Import EPUB from your device
                 </button>
                 <button
                   onClick={() => { onLoadFromLibraryClick(); setOpenDropdownOpen(false); }}
@@ -239,7 +237,7 @@ export default function AuthorsHeader({
                     fontSize: '13px',
                   }}
                 >
-                  Load from Library
+                  Edit EPUB from Library
                 </button>
                 <button
                   onClick={() => { onOpenDocxClick(); setOpenDropdownOpen(false); }}
@@ -255,7 +253,7 @@ export default function AuthorsHeader({
                     fontSize: '13px',
                   }}
                 >
-                  Load DOCX <PiArrowRight style={{ display: 'inline', verticalAlign: 'middle' }} /> EPUB
+                  Import DOCX as EPUB
                 </button>
                 <button
                   onClick={() => { onOpenPdfClick(); setOpenDropdownOpen(false); }}
@@ -271,7 +269,7 @@ export default function AuthorsHeader({
                     fontSize: '13px',
                   }}
                 >
-                  Load PDF <PiArrowRight style={{ display: 'inline', verticalAlign: 'middle' }} /> EPUB
+                  Import PDF as EPUB
                 </button>
                 <button
                   onClick={() => { onOpenManuscriptClick(); setOpenDropdownOpen(false); }}
@@ -288,7 +286,7 @@ export default function AuthorsHeader({
                     whiteSpace: 'nowrap',
                   }}
                 >
-                  Load manuscript.txt <PiArrowRight style={{ display: 'inline', verticalAlign: 'middle' }} /> EPUB
+                  Import manuscript.txt as EPUB
                 </button>
                 {/* <button
                   onClick={() => { onOpenFountainClick(); setOpenDropdownOpen(false); }}
@@ -314,10 +312,10 @@ export default function AuthorsHeader({
             onClick={onSaveClick}
             disabled={isProcessing}
             aria-busy={isProcessing}
-            title={isProcessing ? 'Processing...' : 'Save & read in Library'}
+            title={isProcessing ? 'Processing...' : 'Save EPUB to Library'}
             styleOverrides={isProcessing ? { color: '#fff', cursor: 'wait' } : undefined}
           >
-            {isProcessing ? 'Processing...' : 'Save & read in Library'}
+            {isProcessing ? 'Processing...' : 'Save EPUB to Library'}
           </StyledSmallButton>
         </div>
       </div>
@@ -360,6 +358,23 @@ export default function AuthorsHeader({
                 maxWidth: 'calc(100vw - 16px)',
               }}
             >
+            <button
+              onClick={() => { setMenuOpen(false); void handleExitClick(); }}
+              title="Leave Authors and return to Library"
+              style={{
+                display: 'block',
+                width: '100%',
+                padding: '8px 12px',
+                background: 'none',
+                border: 'none',
+                textAlign: 'left',
+                cursor: 'pointer',
+                color: theme.text,
+                fontSize: '13px',
+              }}
+            >
+              Library
+            </button>
             <button
               onClick={() => { onCoverClick?.(); setMenuOpen(false); }}
               style={{

@@ -12,24 +12,24 @@ The focus is your words and an ebook that is comfortable to read.
 
 ## Your book is an EPUB from the start
 
-Your ebook is your manuscript. Work on chapters and sections in **Authors**, save your changes, and use **Save & read in Library** whenever you want to read and review your latest draft.
+Your ebook is your manuscript. Work on chapters and sections in **Authors**, save your changes, and use **Save EPUB to Library** whenever you want to read and review your latest draft.
 
 When you are ready, export an EPUB for ebook stores or a PDF for a paperback. You decide where and when to publish it.
 
 ## Start with Authors
 
-EverythingEbooks opens in **Authors**. Use **Open** to choose how to begin:
+EverythingEbooks opens in **Authors**. Use **File** to choose how to begin:
 
-| Open option | What it does |
+| File option | What it does |
 | --- | --- |
-| **New** | Starts a new ebook. |
-| **Load EPUB** | Opens an `.epub` file from your device. |
-| **Load from Library** | Opens a book already in your EE Library for editing. |
-| **Load DOCX → EPUB** | Brings in a Word document. |
-| **Load PDF → EPUB** | Brings in text from a PDF. |
-| **Load manuscript.txt → EPUB** | Brings in a plain-text manuscript. |
+| **New EPUB** | Starts a new ebook. |
+| **Import EPUB from your device** | Opens an `.epub` file from your device. |
+| **Edit EPUB from Library** | Opens a book already in your EE Library for editing. |
+| **Import DOCX as EPUB** | Brings in a Word document. |
+| **Import PDF as EPUB** | Brings in text from a PDF. |
+| **Import manuscript.txt as EPUB** | Brings in a plain-text manuscript. |
 
-Books enter through Authors. **Save & read in Library** saves a fresh copy in Library and opens the Booksellers EPUB for reading.
+Books enter through Authors. **Save EPUB to Library** saves a fresh copy in Library and opens the Booksellers EPUB for reading.
 
 ## Write, organize, and save
 
@@ -41,7 +41,7 @@ Select the **Title Page** or a section in the sidebar to edit it. Add and arrang
 - Click the chapter title above the editor to change it. EE includes that heading in both EPUB editions, so you do not need to repeat it inside the chapter text.
 - **Scenecraft** adds presentation and audio for enhanced reading.
 
-Use the Authors menu for **Cover**, **TXT**, **DOCX**, and **X-Ray**. TXT and DOCX export your writing in those formats; X-Ray lets you look inside the EPUB.
+Use the Authors menu for **Library**, **Cover**, **TXT**, **DOCX**, and **X-Ray**. TXT and DOCX export your writing in those formats; X-Ray lets you look inside the EPUB.
 
 ## Keep your author notes with your book
 
@@ -53,13 +53,13 @@ Keep them while you work. Move material into a regular section whenever you want
 
 ## Save and read in your Library
 
-Click **Save & read in Library** in Authors to save your latest changes and put a fresh copy in your own EE Library. A brief confirmation appears, then the Booksellers EPUB opens at the chapter or section you were editing, even if that section is empty.
+Click **Save EPUB to Library** in Authors to save your latest changes and put a fresh copy in your own EE Library. A brief confirmation appears, then the Booksellers EPUB opens at the chapter or section you were editing, even if that section is empty.
 
 This saves your book in your own browser. It does not send it to Amazon, Kobo, or another bookseller. To publish for sale, export your finished EPUB or PDF from Library and submit it wherever you choose.
 
-**Save & read in Library** keeps Authors open and reuses an existing Library tab or opens one for reading. No Matter author notes are excluded from the Booksellers EPUB; if you were editing those notes, the book opens at its title page instead.
+**Save EPUB to Library** keeps Authors open and reuses an existing Library tab or opens one for reading. No Matter author notes are excluded from the Booksellers EPUB; if you were editing those notes, the book opens at its title page instead.
 
-The separate **Library** button leaves Authors without making a new Library copy. It closes the Authors tab when Library is already open, or takes the current tab to Library otherwise. Save any edits you want to keep before leaving.
+**Menu → Library** leaves Authors without making a new Library copy. It closes the Authors tab when Library is already open, or takes the current tab to Library otherwise. Save any edits you want to keep before leaving.
 
 | Library control | What it opens |
 | --- | --- |
@@ -68,7 +68,7 @@ The separate **Library** button leaves Authors without making a new Library copy
 | **Orange icon** | The enhanced reader, with Scenecraft presentation and audio where included. |
 | **Plus** | Ebook Plus, with exports and other book tools. Its Help button explains each icon. |
 
-Return to Authors to make changes, then click **Save & read in Library** again to review the updated book. If you switch to an older Library tab yourself, use its **reload arrow** to see the latest saved books.
+Return to Authors to make changes, then click **Save EPUB to Library** again to review the updated book. If you switch to an older Library tab yourself, use its **reload arrow** to see the latest saved books.
 
 Library's search finds books by their details. The three-dot view menu changes the shelf layout and sorting. **Menu → Settings** opens Library preferences.
 

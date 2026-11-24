@@ -138,7 +138,7 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
     return () => { pageMounted.current = false; };
   }, []);
 
-  // One request per explicit Save & read in Library navigation. No polling or background tab watcher.
+  // One request per explicit Save EPUB to Library navigation. No polling or background tab watcher.
   useEffect(() => {
     if (!libraryLoaded || !appService || reviewStarted.current) return;
     const request = readPublishedReview(window.location.hash);
@@ -644,7 +644,7 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
                 <h1 className='mb-5 text-5xl font-bold'>{_('Your Library')}</h1>
                 <p className='mb-5'>
                   {_(
-                    'Open or write your book in Authors, then click Save & read in Library to read, review, and export it here.',
+                    'Open or write your book in Authors, then click Save EPUB to Library to read, review, and export it here.',
                   )}
                 </p>
               </div>

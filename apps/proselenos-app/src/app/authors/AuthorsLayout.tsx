@@ -610,7 +610,7 @@ export default function AuthorsLayout({
           }
 
           // Save to IndexedDB with normalization (section-001, section-002, etc.)
-          // Filter out table-of-contents - it gets auto-generated on "Save & read in Library"
+          // Filter out table-of-contents - it gets auto-generated on "Save EPUB to Library"
           // XHTML-Native: Use xhtml field directly from parsed sections
           await saveFullWorkingCopy({
             title: parsed.title,
@@ -692,7 +692,7 @@ export default function AuthorsLayout({
           // Clear any existing working copy first
           await clearWorkingCopy();
           // Save to IndexedDB
-          // Filter out table-of-contents - it gets auto-generated on "Save & read in Library"
+          // Filter out table-of-contents - it gets auto-generated on "Save EPUB to Library"
           // XHTML-Native: Convert plain text content to XHTML paragraphs
           await saveFullWorkingCopy({
             title: parsed.title,
@@ -764,10 +764,10 @@ export default function AuthorsLayout({
         const parsed = await parseManuscriptFile(file);
         const chapterCount = parsed.sections.filter(section => section.type === 'chapter').length;
         const confirmed = await showConfirm(
-          `Load ${chapterCount} ${chapterCount === 1 ? 'chapter' : 'chapters'} from this manuscript? This replaces the current Authors working copy, including unsaved edits. Books already in your Library stay there.`,
+          `Import ${chapterCount} ${chapterCount === 1 ? 'chapter' : 'chapters'} from this manuscript? This replaces the current Authors working copy, including unsaved edits. Books already in your Library stay there.`,
           isDarkMode,
-          'Load manuscript.txt',
-          'Load manuscript',
+          'Import manuscript.txt as EPUB',
+          'Import manuscript',
         );
         if (!confirmed) return;
 

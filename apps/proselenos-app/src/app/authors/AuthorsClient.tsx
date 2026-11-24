@@ -124,11 +124,11 @@ export default function AuthorsClient() {
   const handleLoadFromLibrary = async (book: Book) => {
     // Show confirmation dialog
     const result = await Swal.fire({
-      title: 'Load from Library?',
+      title: 'Edit EPUB from Library?',
       text: 'Loading a new book will replace your current work. Continue?',
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonText: 'Load',
+      confirmButtonText: 'Edit EPUB',
       cancelButtonText: 'Cancel',
       confirmButtonColor: '#28a745',
       cancelButtonColor: '#6c757d',

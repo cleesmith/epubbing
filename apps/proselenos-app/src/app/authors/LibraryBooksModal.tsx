@@ -23,7 +23,7 @@ export default function LibraryBooksModal({
   onSelectBook,
   theme,
   isDarkMode,
-  title = 'Load from Library',
+  title = 'Edit EPUB from Library',
   emptyHint = 'Add books to your Library first, then you can load them here for editing.',
 }: LibraryBooksModalProps) {
   const [books, setBooks] = useState<Book[]>([]);

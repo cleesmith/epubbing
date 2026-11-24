@@ -18,14 +18,14 @@ export default function AboutHelpContent({ page }: { page: 'authors' | 'library'
         <>
           <HelpSection title='Start your book in Authors'>
             <p>Your ebook is your manuscript. EverythingEbooks opens in Authors, where you write, edit, and organize your book in EPUB form.</p>
-            <p>Use Open to choose:</p>
+            <p>Use File to choose:</p>
             <ul className='list-disc space-y-1 pl-5'>
-              <li><strong>New</strong> — start a new ebook.</li>
-              <li><strong>Load EPUB</strong> — open an .epub file from your device.</li>
-              <li><strong>Load from Library</strong> — work on a book already in your EE Library.</li>
-              <li><strong>Load DOCX → EPUB</strong> — bring in a Word document.</li>
-              <li><strong>Load PDF → EPUB</strong> — bring in text from a PDF.</li>
-              <li><strong>Load manuscript.txt → EPUB</strong> — bring in a plain-text manuscript.</li>
+              <li><strong>New EPUB</strong> — start a new ebook.</li>
+              <li><strong>Import EPUB from your device</strong> — open an .epub file from your device.</li>
+              <li><strong>Edit EPUB from Library</strong> — work on a book already in your EE Library.</li>
+              <li><strong>Import DOCX as EPUB</strong> — bring in a Word document.</li>
+              <li><strong>Import PDF as EPUB</strong> — bring in text from a PDF.</li>
+              <li><strong>Import manuscript.txt as EPUB</strong> — bring in a plain-text manuscript.</li>
             </ul>
           </HelpSection>
 
@@ -39,9 +39,9 @@ export default function AboutHelpContent({ page }: { page: 'authors' | 'library'
           </HelpSection>
 
           <HelpSection title='Save and read in your Library'>
-            <p>Click <strong>Save &amp; read in Library</strong> to save your latest edits and a fresh copy in your EE Library. After a brief confirmation, the Booksellers EPUB opens at the chapter or section you were editing, even if it is empty. No Matter author notes are excluded; from those notes, the book opens at its title page instead.</p>
+            <p>Click <strong>Save EPUB to Library</strong> to save your latest edits and a fresh copy in your EE Library. After a brief confirmation, the Booksellers EPUB opens at the chapter or section you were editing, even if it is empty. No Matter author notes are excluded; from those notes, the book opens at its title page instead.</p>
             <p>Authors stays open while you read. An existing Library tab is reused, or one opens if needed. This does not send your book to a bookseller.</p>
-            <p>The separate <strong>Library</strong> button leaves Authors without making a new Library copy. It closes the Authors tab when Library is already open, or takes this tab to Library otherwise. Save any edits you want to keep before leaving. If you switch to an older Library tab yourself, use its reload arrow to see the latest saved books.</p>
+            <p><strong>Menu → Library</strong> leaves Authors without making a new Library copy. It closes the Authors tab when Library is already open, or takes this tab to Library otherwise. Save any edits you want to keep before leaving. If you switch to an older Library tab yourself, use its reload arrow to see the latest saved books.</p>
             <p>In Library, Ebook Plus offers the Booksellers EPUB for uploading to a bookseller and the Authors EPUB for keeping an editable EE copy, along with paperback PDF tools.</p>
             <p>Authors Menu also offers Cover, TXT, DOCX, and X-Ray. TXT and DOCX export your writing in those formats; X-Ray lets you look inside the EPUB.</p>
           </HelpSection>
@@ -50,8 +50,8 @@ export default function AboutHelpContent({ page }: { page: 'authors' | 'library'
         <>
           <HelpSection title='From Authors to Library'>
             <p>Library is where you read, review, and export the books you save from Authors.</p>
-            <p>To start or load a book, click Authors and use Open. When you are ready to review your writing, click <strong>Save &amp; read in Library</strong>. It saves your latest edits and a fresh Library copy, then opens the Booksellers EPUB at your current section, including an empty one. No Matter author notes are excluded; from those notes, the book opens at its title page instead.</p>
-            <p>This keeps Authors open and reuses or opens a Library tab. The separate <strong>Library</strong> button leaves Authors without making a new Library copy. To publish for sale, export your EPUB or PDF from Ebook Plus and submit it to your chosen bookseller.</p>
+            <p>To start or load a book, click Authors and use File. When you are ready to review your writing, click <strong>Save EPUB to Library</strong>. It saves your latest edits and a fresh Library copy, then opens the Booksellers EPUB at your current section, including an empty one. No Matter author notes are excluded; from those notes, the book opens at its title page instead.</p>
+            <p>This keeps Authors open and reuses or opens a Library tab. <strong>Menu → Library</strong> leaves Authors without making a new Library copy. To publish for sale, export your EPUB or PDF from Ebook Plus and submit it to your chosen bookseller.</p>
             <p>If you switch to an older Library tab yourself and do not see the latest saved books, click the reload arrow.</p>
           </HelpSection>
 
