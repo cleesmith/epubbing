@@ -6,7 +6,6 @@ import {
   MdOutlineDelete,
   MdOutlineEdit,
   MdOutlineFileDownload,
-  MdOutlineHeadphones,
   MdOutlineLanguage,
   MdOutlinePictureAsPdf,
   MdOutlineAutoStories,
@@ -45,7 +44,6 @@ interface BookDetailViewProps {
   onDownloadPdfSquare?: () => void;
   onCheckEpub?: () => void;
   onXray?: () => void;
-  onAudiobook?: () => void;
   onReadEpub?: () => void;
   onHelp?: () => void;
 }
@@ -67,7 +65,6 @@ const BookDetailView: React.FC<BookDetailViewProps> = ({
   onDownloadPdfSquare,
   onCheckEpub,
   onXray,
-  onAudiobook,
   onHelp,
 }) => {
   const _ = useTranslation();
@@ -168,11 +165,6 @@ const BookDetailView: React.FC<BookDetailViewProps> = ({
                 {onDownloadPdfSquare && (
                   <button onClick={onDownloadPdfSquare} title={_('Export 8.5x8.5 inch PDF (KDP square)')}>
                     <MdPictureAsPdf className='fill-base-content hover:fill-red-700' />
-                  </button>
-                )}
-                {onAudiobook && (
-                  <button onClick={onAudiobook} title={_('Audiobook: Build and play')}>
-                    <MdOutlineHeadphones className='fill-base-content hover:fill-amber-500' />
                   </button>
                 )}
               </div>

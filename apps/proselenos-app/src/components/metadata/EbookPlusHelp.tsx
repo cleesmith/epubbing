@@ -4,7 +4,6 @@ import {
   MdOutlineEdit,
   MdOutlineDelete,
   MdOutlineFileDownload,
-  MdOutlineHeadphones,
   MdOutlineLanguage,
   MdOutlinePictureAsPdf,
   MdOutlineAutoStories,
@@ -90,11 +89,6 @@ const bottomRowItems: HelpItem[] = [
     name: 'Export 8.5x8.5 inch PDF (KDP square)',
     description: 'Generate an 8.5×8.5 inch square print PDF for Amazon KDP. Suited for illustrated works and photo books.',
   },
-  {
-    icon: <MdOutlineHeadphones size={ICON_SIZE} className="fill-amber-500" />,
-    name: 'Audiobook: Build and play',
-    description: "Play back your book's Scenecraft audio files if they exist in the EPUB.",
-  },
 ];
 
 const HelpSection: React.FC<{ label: string; items: HelpItem[] }> = ({ label, items }) => (
@@ -128,7 +122,7 @@ const EbookPlusHelp: React.FC<EbookPlusHelpProps> = ({ isOpen, onClose }) => {
       contentClassName="!px-4 !py-2"
     >
       <HelpSection label="Top row - EPUB related" items={topRowItems} />
-      <HelpSection label="Bottom row - Plus: web, pdf, audiobook" items={bottomRowItems} />
+      <HelpSection label="Bottom row - Plus: web and PDF" items={bottomRowItems} />
     </Dialog>
   );
 };

@@ -34,7 +34,7 @@ export default function AboutHelpContent({ page }: { page: 'authors' | 'library'
             <p>The full editor provides formatting and images. Writing mode gives you distraction-free writing for the current chapter or section; press Escape to return. Sections with attached audio use the full editor.</p>
             <p>Save turns red when there are unsaved changes, including on the Title Page. Click Save to keep those edits in this browser.</p>
             <p>Click the chapter title above the editor to change it. EE includes that heading in both EPUB editions, so you do not need to repeat it inside the chapter text.</p>
-            <p>Scenecraft adds presentation and audio for enhanced reading.</p>
+            <p>Scenecraft adds presentation and audio for the enhanced reader and web-ready export. Listen using the orange icon in Library or the exported web-ready book.</p>
             <p>No Matter sections are for your author notes. They remain in the Authors EPUB and enhanced reader, and are left out of the Booksellers EPUB and paperback PDFs.</p>
           </HelpSection>
 
@@ -67,7 +67,7 @@ export default function AboutHelpContent({ page }: { page: 'authors' | 'library'
           <HelpSection title='Export and check your book'>
             <p>In Ebook Plus, the green export arrow saves the Booksellers EPUB for uploading to a bookseller. The blue book icon exports the Authors EPUB, including author notes and saved paperback cover settings.</p>
             <p>Check EPUB checks the Booksellers edition and shows errors and warnings. You can export a readable text report. It does not repair your book or keep the results after you close the checker.</p>
-            <p>X-ray shows the files inside the Authors EPUB. The web export saves an enhanced-reading version as a ZIP.</p>
+            <p>X-ray shows the files inside the Authors EPUB. The web export saves an enhanced-reading version as a ZIP, including Scenecraft presentation and audio. Listen using the orange icon in Library or the exported web-ready book.</p>
             <p>The PDF tools create paperback interiors and a separate 6×9 cover PDF. The 6×9 interior offers a table of contents and chapter headings. Create the interior first so you have its page count for the cover.</p>
             <p>No Matter author notes are excluded from the Booksellers EPUB and paperback PDFs.</p>
           </HelpSection>

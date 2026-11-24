@@ -12,7 +12,7 @@ test('lists lazy assets and bookmark URLs without caching itself or changing the
     fs.writeFileSync(path.join(root, 'sw.js'), worker);
     for (const file of ['index.html', 'library/index.html', 'authors/index.html', 'reader/index.html',
       'reader/view/index.html', 'authors.txt', '_next/static/chunks/lazy.js', 'fonts/Book Font.ttf',
-      'ffmpeg/core.wasm', '_next/static/chunks/lazy.js.map']) {
+      'vendor/parser.wasm', '_next/static/chunks/lazy.js.map']) {
       fs.mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
       fs.writeFileSync(path.join(root, file), 'sample');
     }
@@ -23,7 +23,7 @@ test('lists lazy assets and bookmark URLs without caching itself or changing the
     assert.ok(urls.includes('authors.txt'));
     assert.ok(urls.includes('_next/static/chunks/lazy.js'));
     assert.ok(urls.includes('fonts/Book%20Font.ttf'));
-    assert.ok(urls.includes('ffmpeg/core.wasm'));
+    assert.ok(urls.includes('vendor/parser.wasm'));
     assert.ok(!urls.includes('sw.js'));
     assert.ok(!urls.includes('offline-manifest.json'));
     assert.ok(!urls.some((url) => url.endsWith('.map')));

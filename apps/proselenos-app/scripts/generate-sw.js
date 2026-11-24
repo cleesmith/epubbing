@@ -21,8 +21,6 @@ const PRECACHE_URLS = [
   'reader/',
   'authors/',
   'reader/view/',
-  'ffmpeg/ffmpeg-core.js',
-  'ffmpeg/ffmpeg-core.wasm',
 ].map((url) => new URL(url, APP_ROOT).href);
 
 // Install: pre-cache critical pages

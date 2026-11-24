@@ -141,7 +141,7 @@ Try your normal workflow:
 - Export an EPUB and open it to check the result.
 - Export a DOCX and check it.
 - Export each of the three print PDF sizes: 5 x 8, 6 x 9, and 8.5 x 8.5.
-- Test Scenecraft, audio, and audiobook generation if you use them.
+- Test Scenecraft audio in the enhanced reader and web-ready export if you use it.
 - Directly open and refresh these routes:
 
   http://127.0.0.1:4174/library/

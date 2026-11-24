@@ -1,6 +1,6 @@
 // Auto-generated at build time - do not edit manually
-// Version: 1a20da39ae5
-const CACHE_VERSION = '1a20da39ae5';
+// Version: 1a20e114abe
+const CACHE_VERSION = '1a20e114abe';
 const APP_ROOT = new URL('./', self.location.href);
 const CACHE_PREFIX = 'epubbing-' + encodeURIComponent(APP_ROOT.pathname) + '-';
 const CACHE_NAME = CACHE_PREFIX + CACHE_VERSION;
@@ -11,8 +11,6 @@ const PRECACHE_URLS = [
   'reader/',
   'authors/',
   'reader/view/',
-  'ffmpeg/ffmpeg-core.js',
-  'ffmpeg/ffmpeg-core.wasm',
 ].map((url) => new URL(url, APP_ROOT).href);
 
 // Install: pre-cache critical pages

@@ -18,7 +18,6 @@ import Spinner from '@/components/Spinner';
 import BookDetailView from './BookDetailView';
 import BookDetailEdit from './BookDetailEdit';
 import { XrayModal } from '@/components/xray';
-import { AudiobookModal } from '@/components/audiobook';
 import {
   PdfModal,
   Pdf5x8Modal,
@@ -67,7 +66,6 @@ const BookDetailModal: React.FC<BookDetailModalProps> = ({
   const [fileSize, setFileSize] = useState<number | null>(null);
   const [showXray, setShowXray] = useState(false);
   const [showEpubCheck, setShowEpubCheck] = useState(false);
-  const [showAudiobook, setShowAudiobook] = useState(false);
   const [showPdf5x8, setShowPdf5x8] = useState(false);
   const [showPdf, setShowPdf] = useState(false);
   const [showPaperbackCover, setShowPaperbackCover] = useState(false);
@@ -141,7 +139,6 @@ const BookDetailModal: React.FC<BookDetailModalProps> = ({
     setActiveDeleteAction(null);
     setShowXray(false);
     setShowEpubCheck(false);
-    setShowAudiobook(false);
     setShowPdf5x8(false);
     setShowPdf(false);
     setShowPdfSquare(false);
@@ -281,14 +278,6 @@ const BookDetailModal: React.FC<BookDetailModalProps> = ({
     setShowXray(false);
   };
 
-  const handleAudiobook = () => {
-    setShowAudiobook(true);
-  };
-
-  const handleCloseAudiobook = () => {
-    setShowAudiobook(false);
-  };
-
   const currentDeleteConfig = activeDeleteAction ? deleteConfigs[activeDeleteAction] : null;
 
   if (!bookMeta)
@@ -348,7 +337,6 @@ const BookDetailModal: React.FC<BookDetailModalProps> = ({
                 onDownloadPdfSquare={book.hash === '__bookseller_temp__' ? undefined : handlePdfSquare}
                 onCheckEpub={book.format === 'EPUB' && book.hash !== '__bookseller_temp__' ? () => setShowEpubCheck(true) : undefined}
                 onXray={book.hash === '__bookseller_temp__' ? undefined : handleXray}
-                onAudiobook={book.hash === '__bookseller_temp__' ? undefined : handleAudiobook}
                 onReadEpub={onReadEpub ? handleReadEpub : undefined}
                 onHelp={() => setShowHelp(true)}
               />
@@ -381,12 +369,6 @@ const BookDetailModal: React.FC<BookDetailModalProps> = ({
         book={book}
         isOpen={showXray}
         onClose={handleCloseXray}
-      />
-
-      <AudiobookModal
-        book={book}
-        isOpen={showAudiobook}
-        onClose={handleCloseAudiobook}
       />
 
       <PdfOptionsDialog

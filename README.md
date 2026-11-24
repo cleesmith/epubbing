@@ -39,7 +39,7 @@ Select the **Title Page** or a section in the sidebar to edit it. Add and arrang
 - **Writing mode** gives you distraction-free writing for the current chapter or section. Press **Escape** to return. Sections with attached audio use the full editor.
 - **Save** turns red when there are unsaved changes, including on the Title Page. Click it to keep your edits in this browser.
 - Click the chapter title above the editor to change it. EE includes that heading in both EPUB editions, so you do not need to repeat it inside the chapter text.
-- **Scenecraft** adds presentation and audio for enhanced reading.
+- **Scenecraft** adds presentation and audio for the enhanced reader and web-ready export. Listen using the orange icon in Library or the exported web-ready book.
 
 Use the Authors menu for **Library**, **Cover**, **TXT**, **DOCX**, and **X-Ray**. TXT and DOCX export your writing in those formats; X-Ray lets you look inside the EPUB.
 
