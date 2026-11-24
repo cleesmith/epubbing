@@ -38,9 +38,60 @@ beforeEach(() => {
   vi.stubGlobal('fetch', fetchMock);
 });
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe('offline preparation', () => {
+  it('retries a temporary 503 and then verifies the recovered file', async () => {
+    vi.useFakeTimers();
+    const original = fetchMock.getMockImplementation()!;
+    fetchMock.mockResolvedValueOnce(new Response('Unavailable', { status: 503 }));
+    fetchMock.mockImplementation(original);
+    const result = prepareForOffline(vi.fn(), new AbortController().signal);
+    await vi.advanceTimersByTimeAsync(500);
+    await result;
+    expect(fetchMock).toHaveBeenCalledTimes(routes.length + 2);
+    expect(await isOfflineReady()).toBe(true);
+  });
+
+  it('limits retries and reports the failed filename without marking setup complete', async () => {
+    fetchMock.mockImplementation(async (url: URL) => new Response(url.pathname.endsWith('.json')
+      ? JSON.stringify(manifest()) : 'Unavailable', { status: url.pathname.endsWith('.json') ? 200 : 503 }));
+    const result = expect(prepareForOffline(vi.fn(), new AbortController().signal))
+      .rejects.toThrow(/HTTP 503/);
+    await result;
+    expect(fetchMock).toHaveBeenCalledTimes(4); // Manifest plus three file attempts.
+    expect(saved.size).toBe(0);
+    expect(await isOfflineReady()).toBe(false);
+  });
+
+  it('does not retry a missing file', async () => {
+    fetchMock.mockResolvedValue(new Response('Not found', { status: 404 }));
+    await expect(prepareForOffline(vi.fn(), new AbortController().signal))
+      .rejects.toThrow('File: offline-manifest.json');
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('stops promptly when cancelled during a retry delay', async () => {
+    vi.useFakeTimers();
+    fetchMock.mockResolvedValue(new Response('Unavailable', { status: 503 }));
+    const operation = new AbortController();
+    const result = expect(prepareForOffline(vi.fn(), operation.signal)).rejects.toMatchObject({ name: 'AbortError' });
+    await vi.advanceTimersByTimeAsync(100);
+    operation.abort();
+    await result;
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(saved.size).toBe(0);
+  });
+
+  it('retries a failed network connection', async () => {
+    vi.useFakeTimers();
+    fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    const result = prepareForOffline(vi.fn(), new AbortController().signal);
+    await vi.advanceTimersByTimeAsync(500);
+    await result;
+    expect(await isOfflineReady()).toBe(true);
+  });
+
   it('saves canonical URLs under a base path, verifies them, and reuses checked files', async () => {
     const progress = vi.fn();
     await prepareForOffline(progress, new AbortController().signal);

@@ -70,21 +70,51 @@ async function matchesFile(response: Response | undefined, file: OfflineFile): P
   return hash === file.sha256;
 }
 
+function waitToRetry(signal: AbortSignal, milliseconds: number): Promise<void> {
+  signal.throwIfAborted();
+  return new Promise((resolve, reject) => {
+    const cancelled = () => {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', cancelled);
+      reject(signal.reason);
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', cancelled);
+      resolve();
+    }, milliseconds);
+    signal.addEventListener('abort', cancelled, { once: true });
+  });
+}
+
 async function download(url: URL, signal: AbortSignal): Promise<Response> {
   const request = new AbortController();
   const cancel = () => request.abort(signal.reason);
   signal.throwIfAborted();
   signal.addEventListener('abort', cancel, { once: true });
   const timeout = setTimeout(() => request.abort(new Error('The download timed out. Check your connection and try again.')), 120_000);
+  const filename = decodeURIComponent(url.pathname.split('/').pop() || url.pathname);
   try {
-    const response = await fetch(url, { signal: request.signal, cache: 'no-store' });
-    if (!response.ok) throw new Error('An application file could not be downloaded. Check your connection and try again.');
-    // Consume the body while timeout/cancellation are still active.
-    const blob = await response.blob();
-    return new Response(blob, { status: response.status, headers: response.headers });
-  } catch (error) {
-    if (request.signal.aborted) throw request.signal.reason;
-    throw error;
+    // Brief server/network failures get at most three attempts. Never retry a
+    // cancellation, a missing file, or a later checksum/version mismatch.
+    for (let attempt = 0; ; attempt += 1) {
+      let retryable = true;
+      try {
+        request.signal.throwIfAborted();
+        const response = await fetch(url, { signal: request.signal, cache: 'no-store' });
+        if (!response.ok) {
+          retryable = [408, 429, 500, 502, 503, 504].includes(response.status);
+          await response.body?.cancel();
+          throw new Error(`An application file could not be fetched (HTTP ${response.status}).\nFile: ${filename}\nTry Update App again while online.`);
+        }
+        // Consume the body while timeout/cancellation are still active.
+        const blob = await response.blob();
+        return new Response(blob, { status: response.status, headers: response.headers });
+      } catch (error) {
+        if (request.signal.aborted) throw request.signal.reason;
+        if (!retryable || attempt === 2) throw error;
+        await waitToRetry(request.signal, 500 * (attempt + 1));
+      }
+    }
   } finally {
     clearTimeout(timeout);
     signal.removeEventListener('abort', cancel);

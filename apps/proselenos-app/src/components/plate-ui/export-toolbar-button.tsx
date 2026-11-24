@@ -87,7 +87,6 @@ export function ExportToolbarButton(props: DropdownMenuProps) {
     });
 
     const tailwindCss = `<link rel="stylesheet" href="${siteUrl}/tailwind.css">`;
-    const katexCss = `<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.18/dist/katex.css" integrity="sha384-9PvLvaiSKCPkFKB1ZsEoTjgnJn+O3KvEwtsz37/XrkYft3DTk2gHdYvd9oWgW3tV" crossorigin="anonymous">`;
 
     const html = `<!DOCTYPE html>
     <html lang="en">
@@ -102,7 +101,6 @@ export function ExportToolbarButton(props: DropdownMenuProps) {
           rel="stylesheet"
         />
         ${tailwindCss}
-        ${katexCss}
         <style>
           :root {
             --font-sans: 'Inter', 'Inter Fallback';

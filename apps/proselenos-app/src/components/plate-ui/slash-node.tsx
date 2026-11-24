@@ -16,7 +16,6 @@ import {
   PenToolIcon,
   PilcrowIcon,
   Quote,
-  RadicalIcon,
   Square,
   Table,
   TableOfContentsIcon,
@@ -174,12 +173,6 @@ const groups: Group[] = [
         value: 'action_three_columns',
       },
       {
-        focusEditor: false,
-        icon: <RadicalIcon />,
-        label: 'Equation',
-        value: KEYS.equation,
-      },
-      {
         icon: <PenToolIcon />,
         keywords: ['excalidraw'],
         label: 'Excalidraw',
@@ -201,12 +194,6 @@ const groups: Group[] = [
         keywords: ['time'],
         label: 'Date',
         value: KEYS.date,
-      },
-      {
-        focusEditor: false,
-        icon: <RadicalIcon />,
-        label: 'Inline Equation',
-        value: KEYS.inlineEquation,
       },
     ].map((item) => ({
       ...item,

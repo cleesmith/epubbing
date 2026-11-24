@@ -49,7 +49,6 @@ const TYPE_TEXT_MAP: Record<string, (node?: TElement) => string> = {
   [KEYS.callout]: () => 'Callout',
   [KEYS.codeBlock]: () => 'Code Block',
   [KEYS.column]: () => 'Column',
-  [KEYS.equation]: () => 'Equation',
   [KEYS.file]: () => 'File',
   [KEYS.h1]: () => 'Heading 1',
   [KEYS.h2]: () => 'Heading 2',

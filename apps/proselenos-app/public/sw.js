@@ -1,6 +1,6 @@
 // Auto-generated at build time - do not edit manually
-// Version: 1a20d8f05e1
-const CACHE_VERSION = '1a20d8f05e1';
+// Version: 1a20da39ae5
+const CACHE_VERSION = '1a20da39ae5';
 const APP_ROOT = new URL('./', self.location.href);
 const CACHE_PREFIX = 'epubbing-' + encodeURIComponent(APP_ROOT.pathname) + '-';
 const CACHE_NAME = CACHE_PREFIX + CACHE_VERSION;
@@ -80,14 +80,23 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Preparation verifies the network bytes before saving canonical cache entries.
+  // Never serve or retain a stale/error response under its versioned query URL.
+  if (url.searchParams.has('offline-prep')) {
+    event.respondWith(fetch(request, { cache: 'no-store' }));
+    return;
+  }
+
   // Navigation requests (HTML pages) - cache-first
   if (request.mode === 'navigate') {
     event.respondWith(
       caches.open(CACHE_NAME).then((cache) => cache.match(request)).then((cached) => {
-        if (cached) return cached;
+        if (cached?.ok) return cached;
         return fetch(request).then((response) => {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          }
           return response;
         });
       })
@@ -99,10 +108,12 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname.startsWith(new URL('_next/static/', APP_ROOT).pathname)) {
     event.respondWith(
       caches.open(CACHE_NAME).then((cache) => cache.match(request)).then((cached) => {
-        if (cached) return cached;
+        if (cached?.ok) return cached;
         return fetch(request).then((response) => {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          }
           return response;
         });
       })
