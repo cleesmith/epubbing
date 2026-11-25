@@ -32,7 +32,8 @@ export default function AboutHelpContent({ page }: { page: 'authors' | 'library'
           <HelpSection title='Write, organize, and save'>
             <p>Select the Title Page or a section in the sidebar to edit it. Use the sidebar to add and arrange sections.</p>
             <p>The full editor provides formatting and images. Writing mode gives you distraction-free writing for the current chapter or section; press Escape to return. Sections with attached audio use the full editor.</p>
-            <p>Save turns red when there are unsaved changes, including on the Title Page. Click Save to keep those edits in this browser.</p>
+            <p>Edits save automatically in this browser as you type, in the full editor and Writing mode. Title Page fields and chapter or section headings save while you are still typing—no Return, Tab, or separate Save button needed.</p>
+            <p>If browser storage cannot save an edit, keep this tab open and use Retry saving when the problem is resolved. Automatic saving is local to this browser; export ZIP backups regularly.</p>
             <p>Click the chapter title above the editor to change it. EE includes that heading in both EPUB editions, so you do not need to repeat it inside the chapter text.</p>
             <p>Scenecraft adds presentation and audio for the enhanced reader and web-ready export. Listen using the orange icon in Library or the exported web-ready book.</p>
             <p>No Matter sections are for your author notes. They remain in the Authors EPUB and enhanced reader, and are left out of the Booksellers EPUB and paperback PDFs.</p>
@@ -41,7 +42,7 @@ export default function AboutHelpContent({ page }: { page: 'authors' | 'library'
           <HelpSection title='Save and read in your Library'>
             <p>Click <strong>Save EPUB to Library</strong> to save your latest edits and a fresh copy in your EE Library. After a brief confirmation, the Booksellers EPUB opens at the chapter or section you were editing, even if it is empty. No Matter author notes are excluded; from those notes, the book opens at its title page instead.</p>
             <p>Authors stays open while you read. An existing Library tab is reused, or one opens if needed. This does not send your book to a bookseller.</p>
-            <p><strong>Menu → Library</strong> leaves Authors without making a new Library copy. It closes the Authors tab when Library is already open, or takes this tab to Library otherwise. Save any edits you want to keep before leaving. If you switch to an older Library tab yourself, use its reload arrow to see the latest saved books.</p>
+            <p><strong>Menu → Library</strong> leaves Authors without making a new Library copy. It closes the Authors tab when Library is already open, or takes this tab to Library otherwise. Authors finishes pending automatic saves before leaving. If you switch to an older Library tab yourself, use its reload arrow to see the latest saved books.</p>
             <p>In Library, Ebook Plus offers the Booksellers EPUB for uploading to a bookseller and the Authors EPUB for keeping an editable EE copy, along with paperback PDF tools.</p>
             <p>Authors Menu also offers Cover, TXT, DOCX, and X-Ray. TXT and DOCX export your writing in those formats; X-Ray lets you look inside the EPUB.</p>
           </HelpSection>
@@ -85,20 +86,21 @@ export default function AboutHelpContent({ page }: { page: 'authors' | 'library'
       </HelpSection>
 
       <HelpSection title='Keep a ZIP backup'>
-        <p>Save your edits, then click the stoplight in either Authors or Library. You can also use Library Menu → Storage: Export &amp; Import. Export All Data exports a ZIP of your saved Authors work, Library, and settings.</p>
+        <p>Keep this tab open during export. Progress shows the files and data written, with an option to cancel. Your browser may ask where to save first or use its usual file export. The same ZIP works with Import Data in Chrome, Safari, Edge, and other Chromium browsers.</p>
+        <p>Click the stoplight in either Authors or Library. You can also use Library Menu → Storage: Export &amp; Import. Export All Data exports a ZIP of your saved Authors work, Library, and settings.</p>
         <ul className='list-disc space-y-1 pl-5'>
           <li><strong>Green</strong> — no changes waiting for a backup.</li>
           <li><strong>Yellow</strong> — changes need a new ZIP backup.</li>
           <li><strong>Red</strong> — changes still need a backup after two intervening calendar days. Changes after a Monday export stay yellow through Wednesday and turn red on Thursday. The last export date appears beside the light.</li>
         </ul>
         <p>If you have not exported a ZIP yet, the reminder counts from your first change. Reading alone does not turn the light yellow.</p>
-        <p>Import Data restores a ZIP backup. After checking the file and asking you to confirm, it resets Library &amp; Authors before restoring the backup. Export your current work first if you want to keep it.</p>
+        <p>Import Data asks you to confirm replacement immediately after you select a ZIP. It then shows two steps with file counts and sizes: checking the backup, then restoring it. Library &amp; Authors are reset only after the backup passes verification. When import finishes, choose OK to refresh the page and see your restored data. Export your current work first if you want to keep it.</p>
       </HelpSection>
 
       <HelpSection title='Work online or offline'>
         <p>Your first visit while online prepares the complete app in this browser automatically. The progress popup shows the number of files saved and verified. Keep this tab open until Ready to write and read offline appears. The completed file count stays visible until you choose OK. You do not need to choose Update App to finish setup.</p>
         <p>Successful setup is remembered in this browser. If interrupted, setup tries again the next time you open EE online or your connection returns. A different browser or cleared app cache needs its own setup.</p>
-        <p>Later, Menu → Update App in either Authors or Library checks for the latest version and prepares its offline files together. It reuses files that are already correct and shows progress. When finished, the completion message and file count stay visible until you choose OK to reopen the updated app. Stay online and save any unsaved writing before updating.</p>
+        <p>Later, Menu → Update App in either Authors or Library checks for the latest version and prepares its offline files together. It reuses files that are already correct and shows progress. When finished, the completion message and file count stay visible until you choose OK to reopen the updated app. Stay online; Authors finishes pending automatic saves before starting an update.</p>
         <p>The number beside Update App identifies the version currently open. Other open EE tabs may need a reload after updating. Bookmark everythingebooks.org and use that bookmark in this same browser on this device, online or offline. Nothing installs.</p>
       </HelpSection>
     </div>

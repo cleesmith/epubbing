@@ -37,6 +37,7 @@ interface AuthorsHeaderProps {
   onFountainExportClick?: () => void;
   onXrayClick?: () => void;
   hasUnsavedChanges?: boolean;
+  onBeforeLeave?: () => Promise<boolean>;
 }
 
 export default function AuthorsHeader({
@@ -61,6 +62,7 @@ export default function AuthorsHeader({
   onFountainExportClick: _onFountainExportClick,
   onXrayClick,
   hasUnsavedChanges = false,
+  onBeforeLeave,
 }: AuthorsHeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [openDropdownOpen, setOpenDropdownOpen] = useState(false);
@@ -85,7 +87,8 @@ export default function AuthorsHeader({
   }, [menuOpen, openDropdownOpen]);
 
   const handleExitClick = async () => {
-    if (hasUnsavedChanges) {
+    if (onBeforeLeave && !(await onBeforeLeave())) return;
+    if (!onBeforeLeave && hasUnsavedChanges) {
       const confirmed = await showConfirm(
         'You have unsaved changes that will be lost. Continue?',
         isDarkMode,
@@ -106,9 +109,10 @@ export default function AuthorsHeader({
     }
   };
 
-  const handleUpdateApp = () => {
+  const handleUpdateApp = async () => {
     setMenuOpen(false);
-    if (hasUnsavedChanges) {
+    if (onBeforeLeave && !(await onBeforeLeave())) return;
+    if (!onBeforeLeave && hasUnsavedChanges) {
       showAlert('Save your changes before updating the app.', 'info', 'Update App', isDarkMode);
       return;
     }
@@ -158,7 +162,8 @@ export default function AuthorsHeader({
             <StyledSmallButton
               theme={theme}
               onClick={async () => {
-                if (hasUnsavedChanges) {
+                if (onBeforeLeave && !(await onBeforeLeave())) return;
+                if (!onBeforeLeave && hasUnsavedChanges) {
                   const confirmed = await showConfirm(
                     'You have unsaved changes that will be lost. Continue?',
                     isDarkMode,

@@ -3,7 +3,12 @@
 import { useEffect, useState } from 'react';
 import StyledSmallButton from '@/components/StyledSmallButton';
 import { ThemeConfig } from '../app/shared/theme';
-import { exportAndDownload, pickAndValidateBackup, performImport } from '@/services/dataExportService';
+import { pickAndValidateBackup, performImport } from '@/services/dataExportService';
+import BackupExportProgress from './BackupExportProgress';
+import BackupImportProgress from './BackupImportProgress';
+import { showImportComplete } from './showImportComplete';
+import type { BackupImportProgress as ImportProgress } from '@/services/backupImportProgress';
+import { useBackupExport } from '@/hooks/useBackupExport';
 import { showAlert, showConfirm } from '@/app/shared/alerts';
 
 interface StorageModalProps {
@@ -36,29 +41,36 @@ export default function StorageModal({
   const [storage, setStorage] = useState<StorageEstimate | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPersisted, setIsPersisted] = useState<boolean | null>(null);
-  const [isExporting, setIsExporting] = useState(false);
+  const { isExporting, progress, startExport, cancelExport } = useBackupExport();
   const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
 
   const handleExport = async () => {
-    setIsExporting(true);
     try {
-      await exportAndDownload();
+      if (await startExport() === 'cancelled') return;
       showAlert('Your backup has been exported.', 'success', 'Export Complete', isDarkMode);
     } catch (err) {
       console.error('Export failed:', err);
-      showAlert('Export failed. Please try again.', 'error', undefined, isDarkMode);
-    } finally {
-      setIsExporting(false);
+      showAlert(err instanceof Error ? err.message : 'The backup could not be exported. Please try again.', 'error', 'Export incomplete', isDarkMode);
     }
   };
 
   const handleImport = async () => {
     setIsImporting(true);
     try {
-      // 1. Pick and validate the file
-      const result = await pickAndValidateBackup();
+      // Pick the file, confirm replacement, then verify before resetting any data.
+      const result = await pickAndValidateBackup(
+        () => showConfirm(
+          'This will reset Library & Authors, then restore your backup. Export your current data first if you want to keep it.',
+          isDarkMode,
+          'Import Backup?',
+          'Yes, Import',
+          'Cancel'
+        ),
+        setImportProgress
+      );
       if (!result) {
-        // User cancelled file picker
+        // User cancelled the file picker or replacement confirmation.
         setIsImporting(false);
         return;
       }
@@ -68,36 +80,24 @@ export default function StorageModal({
         return;
       }
 
-      // 2. Confirm with user
-      const confirmed = await showConfirm(
-        'This will reset Library & Authors, then restore your backup. Export your current data first if you want to keep it.',
-        isDarkMode,
-        'Import Backup?',
-        'Yes, Import',
-        'Cancel'
-      );
-      if (!confirmed) {
-        setIsImporting(false);
-        return;
-      }
-
-      // 3. Perform the import
+      // Restore the verified backup without another confirmation.
       const importResult = await performImport(result.zip, () => {
         showAlert('Close the other EverythingEbooks tabs so the reset can finish.', 'info');
-      });
+      }, setImportProgress);
       if (!importResult.success) {
         showAlert(importResult.error || 'Import failed', 'error', undefined, isDarkMode);
         setIsImporting(false);
         return;
       }
 
-      // 4. Success - show message and refresh
-      showAlert('Import complete! The page will refresh to load your restored data.', 'success', 'Success', isDarkMode);
-      setTimeout(() => window.location.reload(), 1500);
+      // Leave success visible until the user chooses OK, then refresh.
+      await showImportComplete(isDarkMode);
     } catch (err) {
       console.error('Import failed:', err);
       showAlert('Import failed. Please try again.', 'error', undefined, isDarkMode);
       setIsImporting(false);
+    } finally {
+      setImportProgress(null);
     }
   };
 
@@ -167,7 +167,7 @@ export default function StorageModal({
           }}>
             Storage: Export & Import
           </h2>
-          <StyledSmallButton onClick={onClose} theme={theme}>
+          <StyledSmallButton onClick={onClose} theme={theme} disabled={isExporting}>
             Close
           </StyledSmallButton>
         </div>
@@ -223,6 +223,8 @@ export default function StorageModal({
               >
                 {isExporting ? 'Exporting...' : 'Export All Data'}
               </button>
+              <BackupExportProgress progress={progress} onCancel={cancelExport} />
+              <BackupImportProgress progress={importProgress} />
               <button
                 onClick={handleImport}
                 disabled={isExporting || isImporting}

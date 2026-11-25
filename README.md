@@ -12,7 +12,7 @@ The focus is your words and an ebook that is comfortable to read.
 
 ## Your book is an EPUB from the start
 
-Your ebook is your manuscript. Work on chapters and sections in **Authors**, save your changes, and use **Save EPUB to Library** whenever you want to read and review your latest draft.
+Your ebook is your manuscript. Work on chapters and sections in **Authors**, where edits save automatically as you type, and use **Save EPUB to Library** whenever you want to read and review your latest draft.
 
 When you are ready, export an EPUB for ebook stores or a PDF for a paperback. You decide where and when to publish it.
 
@@ -37,9 +37,11 @@ Select the **Title Page** or a section in the sidebar to edit it. Add and arrang
 
 - The **full editor** provides formatting and images.
 - **Writing mode** gives you distraction-free writing for the current chapter or section. Press **Escape** to return. Sections with attached audio use the full editor.
-- **Save** turns red when there are unsaved changes, including on the Title Page. Click it to keep your edits in this browser.
+- Edits save automatically in this browser as you type, in both the full editor and Writing mode. Title Page fields and chapter/section headings also save while the cursor is still in the field—no Return, Tab, or separate Save button needed.
 - Click the chapter title above the editor to change it. EE includes that heading in both EPUB editions, so you do not need to repeat it inside the chapter text.
 - **Scenecraft** adds presentation and audio for the enhanced reader and web-ready export. Listen using the orange icon in Library or the exported web-ready book.
+
+If browser storage cannot save an edit, Authors keeps it pending and shows a message with **Retry saving**. Keep the tab open until the problem is resolved. Automatic saving is local to this browser; keep exporting ZIP backups of your writing.
 
 Use the Authors menu for **Library**, **Cover**, **TXT**, **DOCX**, and **X-Ray**. TXT and DOCX export your writing in those formats; X-Ray lets you look inside the EPUB.
 
@@ -59,7 +61,7 @@ This saves your book in your own browser. It does not send it to Amazon, Kobo, o
 
 **Save EPUB to Library** keeps Authors open and reuses an existing Library tab or opens one for reading. No Matter author notes are excluded from the Booksellers EPUB; if you were editing those notes, the book opens at its title page instead.
 
-**Menu → Library** leaves Authors without making a new Library copy. It closes the Authors tab when Library is already open, or takes the current tab to Library otherwise. Save any edits you want to keep before leaving.
+**Menu → Library** leaves Authors without making a new Library copy. It closes the Authors tab when Library is already open, or takes the current tab to Library otherwise. Authors finishes pending automatic saves before leaving.
 
 | Library control | What it opens |
 | --- | --- |
@@ -107,9 +109,11 @@ Export an **Authors EPUB** to keep or move an editable copy of one book. Use a *
 
 ### Make a ZIP backup
 
-Save your edits, then click the **stoplight** in either Authors or Library. You can also use **Library Menu → Storage: Export & Import**.
+Click the **stoplight** in either Authors or Library. You can also use **Library Menu → Storage: Export & Import**.
 
 Choose **Export All Data** to export a ZIP backup. Keep these dated files somewhere you can find them.
+
+Keep the tab open while exporting. Progress shows the files and data written, and you can cancel. Browsers with a file-save picker ask where to save first; Safari and other browsers use their usual file export. The ZIP can be imported in another supported browser. EPUBs, images, and audio are stored without being compressed again, so backups may be larger but take less work to create.
 
 | Stoplight | Meaning |
 | --- | --- |
@@ -121,7 +125,7 @@ For example, changes after a Monday export stay yellow through Wednesday and tur
 
 ### Restore or revisit a backup
 
-**Import Data** checks the ZIP and asks you to confirm before resetting Library & Authors and restoring the backup. Export your current work first if you want to keep it.
+**Import Data** asks you to confirm replacement immediately after you select a ZIP. It then shows two steps with file counts and sizes: checking the backup, then restoring it. Library & Authors are reset only after the backup passes verification. When import finishes, choose OK to refresh the page and see your restored data. Export your current work first if you want to keep it.
 
 A successful restore starts with a green stoplight. New changes need a new backup.
 
@@ -139,7 +143,7 @@ Use that bookmark in the same browser on the same device, online or offline. Wri
 
 **Nothing installs.** Your writing remains in your browser and available to export as an EPUB or ZIP backup.
 
-Later, **Menu → Update App - xxxx** in either Authors or Library checks for the latest version and prepares its offline files in one step. It shows file-count progress and reuses files that are already correct. When finished, the completion message and file count stay visible until you choose **OK** to reopen the updated app. The number beside Update App shows the version currently open. Stay online and save any unsaved writing in Authors before updating. Other open EE tabs may need a reload to show the new version.
+Later, **Menu → Update App - xxxx** in either Authors or Library checks for the latest version and prepares its offline files in one step. It shows file-count progress and reuses files that are already correct. When finished, the completion message and file count stay visible until you choose **OK** to reopen the updated app. The number beside Update App shows the version currently open. Stay online; Authors finishes pending automatic saves before starting an update. Other open EE tabs may need a reload to show the new version.
 
 ## Free and open source
 

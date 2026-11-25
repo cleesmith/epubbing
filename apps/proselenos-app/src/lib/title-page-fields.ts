@@ -7,7 +7,7 @@ export interface TitlePageFields {
 
 const escape = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-/** The author's explicit Save replaces the title page with EE's four fields. */
+/** Build the readable title page from the author's four fields. */
 export function createSavedTitlePage(fields: TitlePageFields): string {
   const subtitle = fields.subtitle ? `\n  <p class="book-subtitle">${escape(fields.subtitle)}</p>` : '';
   return `<section xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" class="title-page" epub:type="titlepage">

@@ -3,7 +3,12 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from '@/hooks/useTranslation';
 import Dialog from './Dialog';
-import { exportAndDownload, pickAndValidateBackup, performImport } from '@/services/dataExportService';
+import { pickAndValidateBackup, performImport } from '@/services/dataExportService';
+import BackupExportProgress from './BackupExportProgress';
+import BackupImportProgress from './BackupImportProgress';
+import { showImportComplete } from './showImportComplete';
+import type { BackupImportProgress as ImportProgress } from '@/services/backupImportProgress';
+import { useBackupExport } from '@/hooks/useBackupExport';
 import { showAlert, showConfirm } from '@/app/shared/alerts';
 
 export const setStorageDialogVisible = (visible: boolean) => {
@@ -36,8 +41,9 @@ export const StorageWindow = () => {
   const [storage, setStorage] = useState<StorageEstimate | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPersisted, setIsPersisted] = useState<boolean | null>(null);
-  const [isExporting, setIsExporting] = useState(false);
+  const { isExporting, progress, startExport, cancelExport } = useBackupExport();
   const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
 
   useEffect(() => {
     const handleCustomEvent = (event: CustomEvent) => {
@@ -82,6 +88,7 @@ export const StorageWindow = () => {
   }, [isOpen, _]);
 
   const handleClose = () => {
+    cancelExport();
     // Blur any focused element before closing to avoid aria-hidden warning
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
@@ -90,25 +97,31 @@ export const StorageWindow = () => {
   };
 
   const handleExport = async () => {
-    setIsExporting(true);
     try {
-      await exportAndDownload();
+      if (await startExport() === 'cancelled') return;
       showAlert(_('Your backup has been exported.'), 'success', _('Export Complete'));
     } catch (err) {
       console.error('Export failed:', err);
-      showAlert(_('Export failed. Please try again.'), 'error');
-    } finally {
-      setIsExporting(false);
+      showAlert(err instanceof Error ? err.message : _('The backup could not be exported. Please try again.'), 'error', _('Export incomplete'));
     }
   };
 
   const handleImport = async () => {
     setIsImporting(true);
     try {
-      // 1. Pick and validate the file
-      const result = await pickAndValidateBackup();
+      // Pick the file, confirm replacement, then verify before resetting any data.
+      const result = await pickAndValidateBackup(
+        () => showConfirm(
+          _('This will reset Library & Authors, then restore your backup. Export your current data first if you want to keep it.'),
+          true,
+          _('Import Backup?'),
+          _('Yes, Import'),
+          _('Cancel')
+        ),
+        setImportProgress
+      );
       if (!result) {
-        // User cancelled file picker
+        // User cancelled the file picker or replacement confirmation.
         setIsImporting(false);
         return;
       }
@@ -118,36 +131,24 @@ export const StorageWindow = () => {
         return;
       }
 
-      // 2. Confirm with user
-      const confirmed = await showConfirm(
-        _('This will reset Library & Authors, then restore your backup. Export your current data first if you want to keep it.'),
-        true,
-        _('Import Backup?'),
-        _('Yes, Import'),
-        _('Cancel')
-      );
-      if (!confirmed) {
-        setIsImporting(false);
-        return;
-      }
-
-      // 3. Perform the import
+      // Restore the verified backup without another confirmation.
       const importResult = await performImport(result.zip, () => {
         showAlert('Close the other EverythingEbooks tabs so the reset can finish.', 'info');
-      });
+      }, setImportProgress);
       if (!importResult.success) {
         showAlert(_(importResult.error || 'Import failed'), 'error');
         setIsImporting(false);
         return;
       }
 
-      // 4. Success - show message and refresh
-      showAlert(_('Import complete! The page will refresh to load your restored data.'), 'success', _('Success'));
-      setTimeout(() => window.location.reload(), 1500);
+      // Leave success visible until the user chooses OK, then refresh.
+      await showImportComplete();
     } catch (err) {
       console.error('Import failed:', err);
       showAlert(_('Import failed. Please try again.'), 'error');
       setIsImporting(false);
+    } finally {
+      setImportProgress(null);
     }
   };
 
@@ -193,6 +194,8 @@ export const StorageWindow = () => {
               >
                 {isExporting ? _('Exporting...') : _('Export All Data')}
               </button>
+              <BackupExportProgress progress={progress} onCancel={cancelExport} />
+              <BackupImportProgress progress={importProgress} />
               <button
                 onClick={handleImport}
                 disabled={isExporting || isImporting}

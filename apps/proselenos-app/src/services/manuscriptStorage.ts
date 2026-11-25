@@ -671,45 +671,102 @@ function escapeHtmlForStorage(text: string): string {
     .replace(/>/g, '&gt;');
 }
 
-// Save section - saves to XHTML format and updates meta
+// Commit text and heading together; patch current metadata rather than replacing
+// a stale snapshot that could erase a newer heading or Scenecraft settings.
+export async function saveSectionEdits(
+  id: string,
+  fields: Partial<Pick<WorkingCopySection, 'title' | 'xhtml' | 'type' | 'sceneCraftConfig'>>,
+  create = false,
+): Promise<void> {
+  const db = await openDB();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORES.MANUSCRIPT, 'readwrite');
+      const store = tx.objectStore(STORES.MANUSCRIPT);
+      const request = store.get('meta.json');
+      let failure: unknown;
+      let changed = false;
+      request.onsuccess = () => {
+        try {
+          const meta = request.result?.value as ManuscriptMeta | undefined;
+          if (!meta) throw new Error('The working manuscript could not be read.');
+          const index = meta.sections.findIndex(section => section.id === id);
+          if (index < 0 && !create) throw new Error('This section is no longer in the working manuscript.');
+          const { xhtml, ...metadata } = fields;
+          if (index < 0 || Object.keys(metadata).length) {
+            const next = index < 0
+              ? { id, title: '', type: 'section' as ElementType, ...metadata }
+              : { ...meta.sections[index]!, ...metadata };
+            if (index < 0) meta.sections.push(next);
+            else meta.sections[index] = next;
+            store.put({ key: 'meta.json', value: meta });
+            changed = true;
+          }
+          if (xhtml !== undefined) {
+            store.put({ key: `${id}.xhtml`, value: xhtml });
+            changed = true;
+          }
+        } catch (error) { failure = error; tx.abort(); }
+      };
+      tx.oncomplete = () => { if (changed) markBackupChanged(); resolve(); };
+      tx.onabort = () => reject(failure || tx.error || new Error('Could not save this section.'));
+    });
+  } finally { db.close(); }
+}
+
 export async function saveSection(section: WorkingCopySection): Promise<void> {
-  // Save XHTML content
-  await saveSectionXhtml(section.id, section.xhtml);
+  await saveSectionEdits(section.id, { title: section.title, xhtml: section.xhtml, type: section.type }, true);
+}
 
-  // Update meta with section info
-  let meta = await loadManuscriptMeta();
-  if (meta) {
-    const existingIdx = meta.sections.findIndex(s => s.id === section.id);
-    const sectionMeta: SectionMeta = {
-      id: section.id,
-      title: section.title,
-      type: section.type,
-    };
-
-    if (existingIdx >= 0) {
-      // Preserve fields managed outside saveSection (e.g. sceneCraftConfig)
-      const existing = meta.sections[existingIdx];
-      meta.sections[existingIdx] = { ...existing, ...sectionMeta };
-    } else {
-      meta.sections.push(sectionMeta);
-    }
-    await saveManuscriptMeta(meta);
-  }
+/** Reorder existing records without overwriting headings saved during the move. */
+export async function saveSectionOrder(ids: string[]): Promise<void> {
+  const db = await openDB();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORES.MANUSCRIPT, 'readwrite');
+      const store = tx.objectStore(STORES.MANUSCRIPT);
+      const working = store.get('working_copy_meta.json');
+      working.onsuccess = () => {
+        if (working.result) store.put({ key: 'working_copy_meta.json', value: { ...working.result.value, sectionIds: ids } });
+      };
+      const manuscript = store.get('meta.json');
+      manuscript.onsuccess = () => {
+        const meta = manuscript.result?.value as ManuscriptMeta | undefined;
+        if (!meta) { tx.abort(); return; }
+        const byId = new Map(meta.sections.map(section => [section.id, section]));
+        if (ids.some(id => !byId.has(id)) || ids.length !== byId.size || new Set(ids).size !== ids.length) { tx.abort(); return; }
+        store.put({ key: 'meta.json', value: { ...meta, sections: ids.map(id => byId.get(id)!) } });
+      };
+      tx.oncomplete = () => { markBackupChanged(); resolve(); };
+      tx.onabort = () => reject(tx.error || new Error('Could not save the chapter order.'));
+    });
+  } finally { db.close(); }
 }
 
 export async function deleteSection(id: string): Promise<void> {
-  // Delete XHTML file
-  await deleteSectionXhtml(id);
-
-  // Also delete legacy JSON if exists
-  await deleteValue(STORES.MANUSCRIPT, `${id}.json`);
-
-  // Update meta
-  const meta = await loadManuscriptMeta();
-  if (meta) {
-    meta.sections = meta.sections.filter(s => s.id !== id);
-    await saveManuscriptMeta(meta);
-  }
+  const db = await openDB();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORES.MANUSCRIPT, 'readwrite');
+      const store = tx.objectStore(STORES.MANUSCRIPT);
+      store.delete(`${id}.xhtml`);
+      store.delete(`${id}.json`);
+      // Read and patch inside the same transaction so another chapter's
+      // autosaved heading cannot be replaced by an earlier metadata snapshot.
+      const manuscript = store.get('meta.json');
+      manuscript.onsuccess = () => {
+        const meta = manuscript.result?.value as ManuscriptMeta | undefined;
+        if (meta) store.put({ key: 'meta.json', value: { ...meta, sections: meta.sections.filter(section => section.id !== id) } });
+      };
+      const working = store.get('working_copy_meta.json');
+      working.onsuccess = () => {
+        const meta = working.result?.value as WorkingCopyMeta | undefined;
+        if (meta) store.put({ key: 'working_copy_meta.json', value: { ...meta, sectionIds: meta.sectionIds.filter(sectionId => sectionId !== id) } });
+      };
+      tx.oncomplete = () => { markBackupChanged(); resolve(); };
+      tx.onabort = () => reject(tx.error || new Error('Could not remove this section.'));
+    });
+  } finally { db.close(); }
 }
 
 // Cover image functions

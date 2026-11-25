@@ -2,7 +2,7 @@
 
 'use client';
 
-import { useState, useRef, useEffect, useCallback, useImperativeHandle, forwardRef, useMemo, useId } from 'react';
+import { useState, useRef, useEffect, useCallback, useImperativeHandle, forwardRef, useId } from 'react';
 import { ThemeConfig } from '../shared/theme';
 import StyledSmallButton from '@/components/StyledSmallButton';
 import SearchResultsPanel, { SearchResult } from './SearchResultsPanel';
@@ -44,7 +44,6 @@ interface EditorPanelProps {
   theme: ThemeConfig;
   isDarkMode: boolean;
   onToggleSidebar: () => void;
-  onSave?: () => Promise<void>;
   // Section content - XHTML-Native: Single source of truth
   sectionId?: string;
   sectionTitle: string;
@@ -52,7 +51,7 @@ interface EditorPanelProps {
   sectionType?: string;
   sectionWordCount: number;
   // XHTML-Native: Passes XHTML directly
-  onContentChange?: (hasChanges: boolean, xhtml: string) => void;
+  onContentChange?: (xhtml: string) => void;
   onTitleChange?: (newTitle: string) => void;
   // Section navigation
   onPrevSection?: () => void;
@@ -95,7 +94,6 @@ const EditorPanel = forwardRef<EditorPanelRef, EditorPanelProps>(function Editor
   theme,
   isDarkMode,
   onToggleSidebar,
-  onSave,
   sectionId,
   sectionTitle,
   sectionXhtml,
@@ -134,11 +132,6 @@ const EditorPanel = forwardRef<EditorPanelRef, EditorPanelProps>(function Editor
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editedTitle, setEditedTitle] = useState('');
 
-  // XHTML-Native: Track the original XHTML for comparison (to detect changes)
-  const [originalXhtml, setOriginalXhtml] = useState(sectionXhtml);
-
-  // Track if editor is initialized
-  const [isEditorReady, setIsEditorReady] = useState(false);
 
   // Update local title when section changes
   useEffect(() => {
@@ -157,22 +150,21 @@ const EditorPanel = forwardRef<EditorPanelRef, EditorPanelProps>(function Editor
   // SceneCraft modal state
   const [showSceneCraft, setShowSceneCraft] = useState(false);
 
-  // Save button state
-  const [isSaving, setIsSaving] = useState(false);
-  const [hasChanges, setHasChanges] = useState(false);
   const [hasEmbeddedAudio, setHasEmbeddedAudio] = useState(() => hasAudioMarkup(sectionXhtml));
-  const [saveError, setSaveError] = useState('');
 
-  // Create initial value - use plateValue if available, otherwise create empty
-  const initialValue = useMemo(() => {
-    return createEmptyValue();
-  }, []);
-
-  // Create the Plate editor
-  const editor = usePlateEditor({
-    plugins: EditorKit,
-    value: initialValue,
+  // AuthorsLayout keys this panel by workspace/section. Initialize once; echoing
+  // autosaved XHTML must never reset the live editor, its selection, or undo stack.
+  const [initialValue] = useState<Value>(() => {
+    let value = sectionXhtml?.trim() ? xhtmlToPlate(sectionXhtml) : createEmptyValue();
+    const first = value[0] as { type?: string; children?: { text?: string }[] } | undefined;
+    if (!(first?.type === 'p' && first.children?.length === 1 && first.children[0]?.text === '')) {
+      value = [{ type: 'p', children: [{ text: '' }] }, { type: 'p', children: [{ text: '' }] }, ...value] as Value;
+    }
+    return value;
   });
+  const editor = usePlateEditor({ plugins: EditorKit, value: initialValue });
+  const lastXhtml = useRef<string | null>(null);
+  if (lastXhtml.current === null) lastXhtml.current = plateToXhtml(editor.children as Value);
 
   const writingModeReasonId = useId();
   const writingBlockedReason = !sectionId
@@ -219,47 +211,6 @@ const EditorPanel = forwardRef<EditorPanelRef, EditorPanelProps>(function Editor
     return () => window.removeEventListener('keydown', handleEscape, true);
   }, [writingMode, changeWritingMode]);
 
-  // XHTML-Native: Update editor content when section changes
-  // Convert XHTML to PlateJS on load
-  useEffect(() => {
-    if (!editor) return;
-
-    // Convert XHTML to PlateJS value
-    let value: Value;
-    if (sectionXhtml && sectionXhtml.trim()) {
-      value = xhtmlToPlate(sectionXhtml);
-    } else {
-      value = createEmptyValue();
-    }
-
-    // Prepend 2 empty paragraphs so the user can always click above the first block element.
-    // Skip if the content already starts with an empty paragraph.
-    const firstNode = value[0] as { type?: string; children?: { text?: string }[] } | undefined;
-    const isFirstEmpty = firstNode?.type === 'p'
-      && firstNode.children?.length === 1
-      && firstNode.children[0]?.text === '';
-    if (!isFirstEmpty) {
-      value = [
-        { type: 'p', children: [{ text: '' }] },
-        { type: 'p', children: [{ text: '' }] },
-        ...value,
-      ] as Value;
-    }
-
-    // Reset editor with new value
-    editor.tf.reset();
-    editor.tf.setValue(value);
-
-    // Use the editor's normalized XHTML as the baseline for change detection.
-    // This avoids false positives from round-trip differences (whitespace, attribute order, etc.)
-    // between the raw sectionXhtml prop and what plateToXhtml(editor.children) produces.
-    setOriginalXhtml(plateToXhtml(editor.children as Value));
-    setHasChanges(false);  // Reset unsaved indicator when section changes
-    setHasEmbeddedAudio(hasAudioMarkup(sectionXhtml) || hasAudioNodes(editor.children));
-    setSaveError('');
-    setIsEditorReady(true);
-  }, [sectionXhtml, editor]);
-
   // Set/clear find-replace highlighting based on active search
   useEffect(() => {
     if (!editor) return;
@@ -270,47 +221,15 @@ const EditorPanel = forwardRef<EditorPanelRef, EditorPanelProps>(function Editor
     }
   }, [editor, searchActive, searchQuery, writingMode]);
 
-  // XHTML-Native: Handle editor changes
-  // Convert PlateJS to XHTML on change
+  // Value changes only: moving the cursor or selecting words does not save.
   const handleEditorChange = useCallback(() => {
-    if (!editor || !isEditorReady) return;
-
-    // Get the current PlateJS value
-    const plateValue = editor.children as Value;
-    // A pasted/inserted audio block also makes the current chapter ineligible.
-    setHasEmbeddedAudio(hasAudioNodes(plateValue));
-
-    // Convert to XHTML (single source of truth)
-    const xhtml = plateToXhtml(plateValue);
-
-    // Check if content has changed by comparing XHTML
-    const hasChanged = xhtml !== originalXhtml;
-    setHasChanges(hasChanged);  // Update Save button indicator
-
-    // Notify parent with XHTML
-    onContentChange?.(hasChanged, xhtml);
-  }, [editor, isEditorReady, originalXhtml, onContentChange]);
-
-  // Handle manual save with visual feedback
-  const handleSaveClick = useCallback(async () => {
-    if (!onSave || isSaving) return;
-    setIsSaving(true);
-    setSaveError('');
-    try {
-      await onSave();
-      // Sync originalXhtml to what the editor actually contains,
-      // so the change-detection comparison stays accurate after save.
-      const plateValue = editor.children as Value;
-      setOriginalXhtml(plateToXhtml(plateValue));
-      setHasChanges(false);  // Reset unsaved indicator after successful save
-    } catch (error) {
-      console.error('Unable to save chapter:', error);
-      setSaveError('Could not save this chapter. Your edits are still open; please try Save again.');
-    } finally {
-      // Brief delay to show "Saved" state
-      setTimeout(() => setIsSaving(false), 500);
-    }
-  }, [onSave, isSaving, editor]);
+    const value = editor.children as Value;
+    setHasEmbeddedAudio(hasAudioNodes(value));
+    const xhtml = plateToXhtml(value);
+    if (xhtml === lastXhtml.current) return;
+    lastXhtml.current = xhtml;
+    onContentChange?.(xhtml);
+  }, [editor, onContentChange]);
 
   // Handle image insertion from picker
   // XHTML-Native: Inserts as proper Plate image element node, or calls pending callback
@@ -337,10 +256,8 @@ const EditorPanel = forwardRef<EditorPanelRef, EditorPanelProps>(function Editor
     setShowImagePicker(false);
 
     // Update parent with new XHTML
-    const plateValue = editor.children as Value;
-    const xhtml = plateToXhtml(plateValue);
-    onContentChange?.(xhtml !== originalXhtml, xhtml);
-  }, [editor, originalXhtml, onContentChange]);
+    handleEditorChange();
+  }, [editor, handleEditorChange]);
 
   // Handle audio insertion from picker
   const handleAudioInsert = useCallback((filename: string, _label: string, _mediaType: string) => {
@@ -355,10 +272,8 @@ const EditorPanel = forwardRef<EditorPanelRef, EditorPanelProps>(function Editor
     setShowAudioPicker(false);
 
     // Update parent with new XHTML
-    const plateValue = editor.children as Value;
-    const xhtml = plateToXhtml(plateValue);
-    onContentChange?.(xhtml !== originalXhtml, xhtml);
-  }, [editor, originalXhtml, onContentChange]);
+    handleEditorChange();
+  }, [editor, handleEditorChange]);
 
   // Scroll to and highlight a passage in the editor
   // FindReplacePlugin handles highlighting all matches automatically
@@ -449,28 +364,17 @@ const EditorPanel = forwardRef<EditorPanelRef, EditorPanelProps>(function Editor
     setIsEditingTitle(true);
   };
 
-  const handleTitleSave = () => {
-    if (editedTitle.trim()) {
-      const newTitle = editedTitle.trim();
-      setChapterTitle(newTitle);
-      // Notify parent of title change for persistence
-      onTitleChange?.(newTitle);
-    }
-    setIsEditingTitle(false);
+  const handleTitleChange = (value: string) => {
+    setEditedTitle(value);
+    setChapterTitle(value);
+    onTitleChange?.(value); // Keep spaces and empty headings exactly as edited.
   };
 
-  const handleTitleCancel = () => {
-    setIsEditingTitle(false);
-    setEditedTitle('');
-  };
-
-  const handleTitleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      handleTitleSave();
-    } else if (e.key === 'Escape') {
-      e.preventDefault();
-      handleTitleCancel();
+  const handleTitleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.nativeEvent.isComposing) return;
+    if (event.key === 'Enter' || event.key === 'Escape') {
+      event.preventDefault();
+      setIsEditingTitle(false); // Ends editing; saving never depends on Return.
     }
   };
 
@@ -506,18 +410,11 @@ const EditorPanel = forwardRef<EditorPanelRef, EditorPanelProps>(function Editor
     >
       {writingMode && (
         <div className={writingStyles.modeBar} aria-label="Writing mode controls">
-          <span className={writingStyles.saveStatus} aria-live="polite">
-            {isSaving ? 'Saving…' : hasChanges ? 'Unsaved changes' : 'Saved'}
-          </span>
-          <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={handleSaveClick} disabled={isSaving}>
-            Save
-          </button>
           <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => changeWritingMode(false)} title="Return to the full editor (Esc)">
             Full editor (Esc)
           </button>
         </div>
       )}
-      {saveError && <div className={writingStyles.saveError} role="alert">{saveError}</div>}
       {/* Chapter header */}
       <div
         className={writingStyles.normalControls}
@@ -535,9 +432,10 @@ const EditorPanel = forwardRef<EditorPanelRef, EditorPanelProps>(function Editor
               ref={titleInputRef}
               type="text"
               value={editedTitle}
-              onChange={(e) => setEditedTitle(e.target.value)}
+              onChange={(e) => handleTitleChange(e.target.value)}
               onKeyDown={handleTitleKeyDown}
-              onBlur={handleTitleSave}
+              onBlur={() => setIsEditingTitle(false)}
+              aria-label="Chapter heading"
               style={{
                 fontSize: '16px',
                 fontWeight: 600,
@@ -567,7 +465,7 @@ const EditorPanel = forwardRef<EditorPanelRef, EditorPanelProps>(function Editor
                 textAlign: 'left',
               }}
             >
-              {chapterTitle}
+              {chapterTitle || 'Untitled section'}
             </button>
           )}
         </div>
@@ -603,20 +501,6 @@ const EditorPanel = forwardRef<EditorPanelRef, EditorPanelProps>(function Editor
           </svg>
         </StyledSmallButton>
 
-        {/* Manual Save button - turns red when unsaved changes exist */}
-        <StyledSmallButton
-          theme={theme}
-          onClick={handleSaveClick}
-          title={hasChanges ? "Unsaved changes - click to save (Ctrl+S)" : "Save current section (Ctrl+S)"}
-          disabled={isSaving}
-          styleOverrides={{
-            backgroundColor: isSaving ? '#28a745' : hasChanges ? '#dc3545' : undefined,
-            color: (isSaving || hasChanges) ? 'white' : undefined,
-          }}
-        >
-          {isSaving ? 'Saved' : 'Save'}
-        </StyledSmallButton>
-
         <span
           title={writingBlockedReason || 'distraction free writing, ESC to exit'}
           style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}
@@ -625,7 +509,7 @@ const EditorPanel = forwardRef<EditorPanelRef, EditorPanelProps>(function Editor
             theme={theme}
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => changeWritingMode(true)}
-            disabled={!!writingBlockedReason || !isEditorReady}
+            disabled={!!writingBlockedReason}
             aria-describedby={writingBlockedReason ? writingModeReasonId : undefined}
             styleOverrides={writingBlockedReason ? { pointerEvents: 'none' } : undefined}
             title={writingBlockedReason || 'distraction free writing, ESC to exit'}
@@ -665,7 +549,7 @@ const EditorPanel = forwardRef<EditorPanelRef, EditorPanelProps>(function Editor
       >
         <Plate
           editor={editor}
-          onChange={handleEditorChange}
+          onValueChange={handleEditorChange}
         >
           <EditorContainer
             className={cn(

@@ -1,7 +1,11 @@
 // src/services/dataExportService.ts
 // Exports and imports ALL browser storage for this app
 
-import JSZip from 'jszip';
+import { openBackupArchive, isVerifiedBackup, backupEntryText, backupEntryBlob, type BackupArchive } from './backupArchive';
+import { BlobWriter } from '@zip.js/zip.js';
+import { importProgress, type ImportProgressCallback } from './backupImportProgress';
+import { writeBackupZip, type BackupEntry, type BackupExportOptions } from './backupZip';
+export type { BackupProgress, BackupExportOptions } from './backupZip';
 import { backupRevision, backupStateForZip, isBackupKey, markBackupChanged, recordZip, restoreZip } from './backupReminder';
 
 // ============================================
@@ -78,195 +82,195 @@ function openForExport(name: string): Promise<IDBDatabase | null> {
   });
 }
 
-async function readBackupStore<T>(name: string, store: string): Promise<T[]> {
-  const db = await openForExport(name);
-  if (!db) return [];
-  try {
-    if (!db.objectStoreNames.contains(store)) return [];
-    return await new Promise<T[]>((resolve, reject) => {
-      const tx = db.transaction(store, 'readonly');
-      const request = tx.objectStore(store).getAll();
-      tx.oncomplete = () => resolve(request.result);
-      tx.onabort = () => reject(tx.error || new Error('Could not read ' + store + ' for the ZIP.'));
-    });
-  } finally {
-    db.close();
-  }
-}
-
-type FileContent = string | ArrayBuffer | Blob;
-
-// Authors consumes its cover and inline images as Blobs, not text or buffers.
-function authorsImageType(filename: string): string | undefined {
+// Authors consumes covers, inline images and Scenecraft audio as Blobs.
+function authorsMediaType(filename: string): string | undefined {
   const types: Record<string, string> = {
     jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
     gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml',
     avif: 'image/avif', bmp: 'image/bmp',
+    mp3: 'audio/mpeg', m4a: 'audio/mp4', mp4: 'audio/mp4', wav: 'audio/wav',
+    ogg: 'audio/ogg', opus: 'audio/ogg', flac: 'audio/flac', aac: 'audio/aac', webm: 'audio/webm',
   };
   return types[filename.split('.').pop()?.toLowerCase() || ''];
 }
 
-// ============================================
-// Convert content to appropriate format for ZIP
-// ============================================
+type BackupSource = { db: IDBDatabase; store: string; key: string; name: string };
 
-async function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
-  return blob.arrayBuffer();
-}
-
-// ============================================
-// Main Export Function
-// ============================================
-
-export async function exportAllData(
-  revision = backupRevision(),
-  exportedAt = new Date().toISOString(),
-): Promise<Blob> {
-  const zip = new JSZip();
-
-  // 1. Add manifest
-  const manifest = {
-    version: 1,
-    app: 'EverythingEbooks',
-    exportDate: exportedAt,
-    contents: {
-      hasLocalStorage: true,
-      hasEreader: false,
-      hasAuthors: false,
-    },
-  };
-
-  // 2. Export localStorage
-  const localStorageData = { ...exportLocalStorage(), ...backupStateForZip(revision, exportedAt) };
-  zip.file('localStorage.json', JSON.stringify(localStorageData, null, 2));
-
-  // 3. Export E-Reader data
-  const ereaderFiles = await readBackupStore<{ path: string; content: FileContent }>(EREADER_DB_NAME, 'files');
-  if (ereaderFiles.length > 0) {
-    manifest.contents.hasEreader = true;
-    const ereaderFolder = zip.folder('ereader');
-    if (ereaderFolder) {
-      for (const file of ereaderFiles) {
-        const { path, content } = file;
-        // Keep original path exactly as stored in IndexedDB
-        const cleanPath = path;
-
-        if (content instanceof Blob) {
-          const arrayBuffer = await blobToArrayBuffer(content);
-          ereaderFolder.file(cleanPath, new Uint8Array(arrayBuffer));
-        } else if (content instanceof ArrayBuffer) {
-          ereaderFolder.file(cleanPath, new Uint8Array(content));
-        } else if (typeof content === 'string') {
-          ereaderFolder.file(cleanPath, content);
-        } else {
-          // JSON serialize anything else
-          ereaderFolder.file(cleanPath, JSON.stringify(content, null, 2));
-        }
-      }
-    }
-  }
-
-  // 3b. Export E-Reader manuscript store
-  const ereaderManuscript = await readBackupStore<{ key: string; value: FileContent }>(EREADER_DB_NAME, 'manuscript');
-  if (ereaderManuscript.length > 0) {
-    const manuscriptFolder = zip.folder('ereader-manuscript');
-    if (manuscriptFolder) {
-      for (const entry of ereaderManuscript) {
-        const { key, value } = entry;
-        const filename = key.endsWith('.json') || key.endsWith('.xhtml') ||
-          key.endsWith('.png') || key.endsWith('.jpg') || key.endsWith('.jpeg')
-          ? key
-          : `${key}.bin`;
-
-        if (value instanceof Blob) {
-          const arrayBuffer = await blobToArrayBuffer(value);
-          manuscriptFolder.file(filename, new Uint8Array(arrayBuffer));
-        } else if (value instanceof ArrayBuffer) {
-          manuscriptFolder.file(filename, new Uint8Array(value));
-        } else if (typeof value === 'string') {
-          manuscriptFolder.file(filename, value);
-        } else {
-          manuscriptFolder.file(filename, JSON.stringify(value, null, 2));
-        }
-      }
-    }
-  }
-
-  // 4. Export Authors data
-  const authorsData = await Promise.all(AUTHORS_STORES.map(async storeName => ({
-    storeName, entries: await readBackupStore<{ key: string; value: unknown }>(AUTHORS_DB_NAME, storeName),
-  })));
-  if (authorsData.some(s => s.entries.length > 0)) {
-    manifest.contents.hasAuthors = true;
-    const authorsFolder = zip.folder('authors');
-    if (authorsFolder) {
-      for (const storeData of authorsData) {
-        const { storeName, entries } = storeData;
-        if (entries.length === 0) continue;
-
-        const storeFolder = authorsFolder.folder(storeName);
-        if (!storeFolder) continue;
-
-        for (const entry of entries) {
-          const { key, value } = entry;
-          // Keep image names identical to the references in Authors metadata/XHTML.
-          const filename = key.endsWith('.json') || key.endsWith('.txt') || key.endsWith('.epub') || key.endsWith('.docx') || key.endsWith('.xhtml') || authorsImageType(key)
-            ? key
-            : `${key}.json`;
-
-          if (value instanceof Blob) {
-            const arrayBuffer = await blobToArrayBuffer(value);
-            storeFolder.file(filename, new Uint8Array(arrayBuffer));
-          } else if (value instanceof ArrayBuffer) {
-            storeFolder.file(filename, new Uint8Array(value));
-          } else if (typeof value === 'string') {
-            storeFolder.file(filename, value);
-          } else {
-            // JSON serialize objects
-            storeFolder.file(filename, JSON.stringify(value, null, 2));
-          }
-        }
-      }
-    }
-  }
-
-  // 5. Add manifest (now with accurate content flags)
-  zip.file('manifest.json', JSON.stringify(manifest, null, 2));
-
-  // 6. Generate ZIP
-  return zip.generateAsync({
-    type: 'blob',
-    compression: 'DEFLATE',
-    compressionOptions: { level: 6 },
+async function backupKeys(db: IDBDatabase, store: string): Promise<string[]> {
+  if (!db.objectStoreNames.contains(store)) return [];
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, 'readonly');
+    const request = tx.objectStore(store).getAllKeys();
+    tx.oncomplete = () => {
+      if (request.result.some(key => typeof key !== 'string')) reject(new Error('A backup record has an invalid name.'));
+      else resolve(request.result as string[]);
+    };
+    tx.onabort = () => reject(tx.error || new Error('Could not list files for the backup.'));
   });
 }
 
-// ============================================
-// Download Helper
-// ============================================
+async function backupValue(source: BackupSource): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    const tx = source.db.transaction(source.store, 'readonly');
+    const request = tx.objectStore(source.store).get(source.key);
+    tx.oncomplete = () => {
+      if (!request.result) reject(new Error('A file changed or was removed during export. Please try exporting again.'));
+      else resolve(source.store === 'files' ? request.result.content : request.result.value);
+    };
+    tx.onabort = () => reject(tx.error || new Error('Could not read a file for the backup.'));
+  });
+}
+
+function zipData(value: unknown): BackupEntry['data'] {
+  if (value instanceof Blob || typeof value === 'string') return value;
+  if (value instanceof ArrayBuffer) return new Uint8Array(value);
+  if (ArrayBuffer.isView(value)) return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+  const json = JSON.stringify(value, null, 2);
+  if (json === undefined) throw new Error('A stored record could not be exported.');
+  return json;
+}
+
+/** Enumerate only keys first, then read/write ONE record at a time. In
+ * particular, never call getAll() on a store containing multi-GB EPUB data.
+ */
+export async function writeDataBackup(
+  destination: WritableStream<Uint8Array>,
+  revision = backupRevision(),
+  exportedAt = new Date().toISOString(),
+  options: BackupExportOptions = {},
+): Promise<void> {
+  const databases: IDBDatabase[] = [];
+  try {
+    options.signal?.throwIfAborted();
+    options.onProgress?.({ phase: 'preparing', filesDone: 0, filesTotal: 0, bytesWritten: 0 });
+    const preferences = { ...exportLocalStorage(), ...backupStateForZip(revision, exportedAt) };
+    const sources: BackupSource[] = [];
+    const manifest = {
+      version: 1, app: 'EverythingEbooks', exportDate: exportedAt,
+      contents: { hasLocalStorage: true, hasEreader: false, hasAuthors: false },
+    };
+    for (const name of [EREADER_DB_NAME, AUTHORS_DB_NAME]) {
+      options.signal?.throwIfAborted();
+      const db = await openForExport(name);
+      if (!db) continue;
+      databases.push(db);
+      const stores = name === EREADER_DB_NAME ? ['files', 'manuscript'] : AUTHORS_STORES;
+      for (const store of stores) {
+        const keys = await backupKeys(db, store);
+        for (const key of keys) {
+          let filename: string;
+          if (name === EREADER_DB_NAME && store === 'files') {
+            manifest.contents.hasEreader = true;
+            filename = 'ereader/' + key;
+          } else if (name === EREADER_DB_NAME) {
+            filename = 'ereader-manuscript/' + (/\.(json|xhtml)$/.test(key) || authorsMediaType(key) ? key : key + '.bin');
+          } else {
+            manifest.contents.hasAuthors = true;
+            filename = 'authors/' + store + '/' + (/\.(json|txt|epub|docx|xhtml)$/.test(key) || authorsMediaType(key) ? key : key + '.json');
+          }
+          sources.push({ db, store, key, name: filename });
+        }
+      }
+    }
+    async function* entries(): AsyncGenerator<BackupEntry> {
+      yield { name: 'localStorage.json', data: JSON.stringify(preferences, null, 2) };
+      for (const source of sources) {
+        options.signal?.throwIfAborted();
+        yield { name: source.name, data: zipData(await backupValue(source)) };
+      }
+      yield { name: 'manifest.json', data: JSON.stringify(manifest, null, 2) };
+    }
+    await writeBackupZip(entries(), destination, sources.length + 2, options);
+  } catch (error) {
+    // Also handles failures before the ZIP writer acquired the stream.
+    if (!destination.locked) {
+      try { await destination.abort(error); } catch { /* Already aborted/closed. */ }
+    }
+    throw error;
+  } finally {
+    databases.forEach(db => db.close());
+  }
+}
+
+// Compatibility fallback for browsers without a direct file-save picker.
+// Response/BlobWriter receives chunks, avoiding JSZip's giant concatenation.
+export async function exportAllData(
+  revision = backupRevision(),
+  exportedAt = new Date().toISOString(),
+  options: BackupExportOptions = {},
+): Promise<Blob> {
+  const writer = new BlobWriter('application/zip');
+  const result = writer.getData();
+  // A canceled/failed stream also rejects its Blob promise.
+  void result.catch(() => {});
+  await writeDataBackup(writer.writable, revision, exportedAt, options);
+  return result;
+}
 
 export function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  try {
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+  } finally {
+    a.remove();
+    // Do not revoke the URL before the browser has started reading a large ZIP.
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  }
 }
 
-// ============================================
-// One-click Export & Download
-// ============================================
+type BackupSavePicker = {
+  showSaveFilePicker?: (options: {
+    suggestedName: string;
+    types: { description: string; accept: Record<string, string[]> }[];
+  }) => Promise<{ createWritable(): Promise<WritableStream<Uint8Array>> }>;
+};
+let exporting = false;
 
-export async function exportAndDownload(): Promise<void> {
-  const revision = backupRevision();
-  const exportedAt = new Date().toISOString();
-  const blob = await exportAllData(revision, exportedAt);
-  const date = exportedAt.split('T')[0]; // YYYY-MM-DD
-  downloadBlob(blob, `everythingebooks_backup_${date}.zip`);
-  recordZip(revision, exportedAt);
+export async function exportAndDownload(options: BackupExportOptions = {}): Promise<'saved' | 'cancelled'> {
+  if (exporting) throw new Error('A backup export is already running.');
+  exporting = true;
+  try {
+    const revision = backupRevision();
+    const exportedAt = new Date().toISOString();
+    const filename = `everythingebooks_backup_${exportedAt.split('T')[0]}.zip`;
+    options.signal?.throwIfAborted();
+    const picker = (window as Window & BackupSavePicker).showSaveFilePicker;
+    let handle: Awaited<ReturnType<NonNullable<BackupSavePicker['showSaveFilePicker']>>> | undefined;
+    if (picker) {
+      // Must be invoked during the click, BEFORE any asynchronous data reads.
+      try {
+        handle = await picker.call(window, {
+          suggestedName: filename,
+          types: [{ description: 'EverythingEbooks ZIP backup', accept: { 'application/zip': ['.zip'] } }],
+        });
+      } catch (error) {
+        // Some Chromium configurations expose the API but do not support its
+        // picker here. Use the ordinary browser export, as Safari does.
+        if (!(error instanceof Error) || !['SecurityError', 'NotSupportedError'].includes(error.name)) throw error;
+      }
+    }
+    if (handle) {
+      options.signal?.throwIfAborted();
+      const destination = await handle.createWritable();
+      await writeDataBackup(destination, revision, exportedAt, options);
+    } else {
+      const blob = await exportAllData(revision, exportedAt, options);
+      options.signal?.throwIfAborted();
+      downloadBlob(blob, filename);
+    }
+    // A failed or canceled write must NEVER mark the backup reminder green.
+    recordZip(revision, exportedAt);
+    return 'saved';
+  } catch (error) {
+    if (options.signal?.aborted || (error instanceof Error && error.name === 'AbortError')) return 'cancelled';
+    throw error;
+  } finally {
+    exporting = false;
+  }
 }
 
 // ============================================
@@ -288,33 +292,6 @@ function selectZipFile(): Promise<File | null> {
   });
 }
 
-// Validate all archived bytes and required metadata before resetting storage.
-const verifiedBackups = new WeakSet<JSZip>();
-
-async function validateBackupZip(zip: JSZip): Promise<boolean> {
-  if (verifiedBackups.has(zip)) return true;
-  try {
-    const manifestFile = zip.file('manifest.json');
-    const preferencesFile = zip.file('localStorage.json');
-    if (!manifestFile || !preferencesFile) return false;
-    const manifest = JSON.parse(await manifestFile.async('string'));
-    if (manifest?.app !== 'EverythingEbooks' || manifest.version !== 1) return false;
-    const preferences = JSON.parse(await preferencesFile.async('string'));
-    if (!preferences || typeof preferences !== 'object' || Array.isArray(preferences)) return false;
-    if (Object.values(preferences).some(value => typeof value !== 'string')) return false;
-    const files = Object.values(zip.files).filter(file => !file.dir);
-    if (manifest.contents?.hasEreader && !files.some(file => file.name.startsWith('ereader/'))) return false;
-    if (manifest.contents?.hasAuthors && !files.some(file => file.name.startsWith('authors/'))) return false;
-    for (const file of files) {
-      await file.async('uint8array');
-    }
-    verifiedBackups.add(zip);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 // Shared by Import Data and the Library's Reset Library & Authors action.
 export async function resetLibraryAndAuthors(onBlocked?: () => void): Promise<void> {
   localStorage.clear();
@@ -330,219 +307,104 @@ export async function resetLibraryAndAuthors(onBlocked?: () => void): Promise<vo
   }
 }
 
-// Import localStorage from ZIP
-async function importLocalStorage(zip: JSZip): Promise<void> {
-  const file = zip.file('localStorage.json');
-  if (!file) return;
-
-  try {
-    const content = await file.async('string');
-    const data = JSON.parse(content) as Record<string, string>;
-    for (const [key, value] of Object.entries(data)) {
-      if (!isBackupKey(key)) localStorage.setItem(key, value);
-    }
-  } catch (err) {
-    console.error('Failed to import localStorage:', err);
-    throw err;
-  }
-}
-
-// Import E-Reader data from ZIP
-async function importEreaderData(zip: JSZip): Promise<void> {
-  const ereaderFolder = zip.folder('ereader');
-  if (!ereaderFolder) return;
-
-  const db = await openDB(EREADER_DB_NAME, EREADER_DB_VERSION);
-  try {
-    // Import each file
-    const files: Array<{ relativePath: string; file: JSZip.JSZipObject }> = [];
-    ereaderFolder.forEach((relativePath, file) => {
-      if (!file.dir) {
-        files.push({ relativePath, file });
-      }
-    });
-
-    for (const { relativePath, file } of files) {
-      // Use path exactly as stored in ZIP (matches original IndexedDB path)
-      const fullPath = relativePath;
-
-      // Determine content type and read accordingly
-      let content: string | ArrayBuffer;
-      if (relativePath.endsWith('.json') || relativePath.endsWith('.txt')) {
-        content = await file.async('string');
-      } else {
-        // Binary file (epub, png, etc.)
-        content = await file.async('arraybuffer');
-      }
-
-      // Write to IndexedDB
-      await new Promise<void>((resolve, reject) => {
-        const tx = db.transaction('files', 'readwrite');
-        const store = tx.objectStore('files');
-        store.put({ path: fullPath, content });
-        tx.oncomplete = () => resolve();
-        tx.onerror = () => reject(tx.error);
-        tx.onabort = () => reject(tx.error || new Error('Could not restore storage.'));
-      });
-    }
-  } catch (err) {
-    console.error('Failed to import E-Reader data:', err);
-    throw err;
-  } finally {
-    db.close();
-  }
-}
-
-// Import E-Reader manuscript store from ZIP
-async function importEreaderManuscript(zip: JSZip): Promise<void> {
-  const manuscriptFolder = zip.folder('ereader-manuscript');
-  if (!manuscriptFolder) return;
-
-  const db = await openDB(EREADER_DB_NAME, EREADER_DB_VERSION);
-  try {
-    if (!db.objectStoreNames.contains('manuscript')) throw new Error('Missing manuscript store.');
-
-    const files: Array<{ relativePath: string; file: JSZip.JSZipObject }> = [];
-    manuscriptFolder.forEach((relativePath, file) => {
-      if (!file.dir) {
-        files.push({ relativePath, file });
-      }
-    });
-
-    for (const { relativePath, file } of files) {
-      const key = relativePath;
-
-      let value: string | ArrayBuffer;
-      if (relativePath.endsWith('.xhtml') || relativePath.endsWith('.json')) {
-        value = await file.async('string');
-      } else {
-        value = await file.async('arraybuffer');
-      }
-
-      await new Promise<void>((resolve, reject) => {
-        const tx = db.transaction('manuscript', 'readwrite');
-        const store = tx.objectStore('manuscript');
-        store.put({ key, value });
-        tx.oncomplete = () => resolve();
-        tx.onerror = () => reject(tx.error);
-        tx.onabort = () => reject(tx.error || new Error('Could not restore storage.'));
-      });
-    }
-  } catch (err) {
-    console.error('Failed to import E-Reader manuscript data:', err);
-    throw err;
-  } finally {
-    db.close();
-  }
-}
-
-// Import Authors data from ZIP
-async function importAuthorsData(zip: JSZip): Promise<void> {
-  const authorsFolder = zip.folder('authors');
-  if (!authorsFolder) return;
-
-  const db = await openDB(AUTHORS_DB_NAME, AUTHORS_DB_VERSION);
-  try {
-    // Import each store
-    for (const storeName of AUTHORS_STORES) {
-      const storeFolder = authorsFolder.folder(storeName);
-      if (!storeFolder) continue;
-
-      const files: Array<{ relativePath: string; file: JSZip.JSZipObject }> = [];
-      storeFolder.forEach((relativePath, file) => {
-        if (!file.dir) {
-          files.push({ relativePath, file });
-        }
-      });
-
-      for (const { relativePath, file } of files) {
-        // Older backups appended .json to chapters AND binary images. Read image
-        // bytes directly from those ZIP entries before any text decoding can damage them.
-        const originalName = relativePath.endsWith('.json') ? relativePath.slice(0, -5) : relativePath;
-        const key = originalName.endsWith('.xhtml') || authorsImageType(originalName) ? originalName : relativePath;
-        const imageType = authorsImageType(key);
-
-        // Determine content type and read accordingly
-        let value: unknown;
-        if (imageType) {
-          value = new Blob([await file.async('arraybuffer')], { type: imageType });
-        } else if (key.endsWith('.epub') || key.endsWith('.docx')) {
-          // Binary file
-          value = await file.async('arraybuffer');
-        } else if (relativePath.endsWith('.txt')) {
-          // Plain text
-          value = await file.async('string');
-        } else {
-          // JSON file - parse it
-          const content = await file.async('string');
-          try {
-            value = JSON.parse(content);
-          } catch {
-            value = content; // If not valid JSON, store as string
-          }
-        }
-
-        // Write to IndexedDB
-        await new Promise<void>((resolve, reject) => {
-          const tx = db.transaction(storeName, 'readwrite');
-          const store = tx.objectStore(storeName);
-          store.put({ key, value });
-          tx.oncomplete = () => resolve();
-          tx.onerror = () => reject(tx.error);
-          tx.onabort = () => reject(tx.error || new Error('Could not restore storage.'));
-        });
-      }
-    }
-  } catch (err) {
-    console.error('Failed to import Authors data:', err);
-    throw err;
-  } finally {
-    db.close();
-  }
-}
-
-// Pick and validate a backup file (returns the zip if valid, null if cancelled/invalid)
-export async function pickAndValidateBackup(): Promise<{ zip: JSZip; file: File } | { error: string } | null> {
+// Keep the picker in the click gesture; confirm before reading the ZIP.
+// Verification must still finish before performImport can reset any data.
+export async function pickAndValidateBackup(
+  confirmImport: () => Promise<boolean>,
+  onProgress?: ImportProgressCallback
+): Promise<{ zip: BackupArchive; file: File } | { error: string } | null> {
   const file = await selectZipFile();
-  if (!file) {
-    return null; // User cancelled
-  }
-
+  if (!file || !await confirmImport()) return null;
   try {
-    const zip = await JSZip.loadAsync(file, { checkCRC32: true });
-    const isValid = await validateBackupZip(zip);
-    if (!isValid) {
-      return { error: 'Invalid backup file. Please select a valid EverythingEbooks backup.' };
-    }
-    return { zip, file };
+    return { zip: await openBackupArchive(file, onProgress), file };
   } catch {
-    return { error: 'Could not read the backup file. It may be corrupted.' };
+    return { error: 'Could not verify this EverythingEbooks backup. No data has been reset.' };
   }
 }
 
-// Perform the actual import (call after user confirms)
-export async function performImport(zip: JSZip, onBlocked?: () => void): Promise<{ success: boolean; error?: string }> {
+async function restoreEntry(db: IDBDatabase, storeName: string, record: object): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readwrite');
+    tx.objectStore(storeName).put(record);
+    tx.oncomplete = () => resolve();
+    tx.onabort = () => reject(tx.error || new Error('Could not restore a backup file.'));
+  });
+}
+
+// Restore one entry at a time; keep the archive itself on disk/in the File.
+export async function performImport(zip: BackupArchive, onBlocked?: () => void, onProgress?: ImportProgressCallback): Promise<{ success: boolean; error?: string }> {
   let resetStarted = false;
+  const databases = new Map<string, IDBDatabase>();
+  const database = async (name: string) => {
+    let db = databases.get(name);
+    if (!db) {
+      db = await openDB(name, name === EREADER_DB_NAME ? EREADER_DB_VERSION : AUTHORS_DB_VERSION);
+      databases.set(name, db);
+    }
+    return db;
+  };
   try {
-    if (!await validateBackupZip(zip)) throw new Error('Invalid backup file.');
-    const manifest = JSON.parse(await zip.file('manifest.json')!.async('string'));
+    if (!isVerifiedBackup(zip)) throw new Error('The backup has not been verified.');
+    const files = zip.files.filter(entry => entry.filename === 'localStorage.json' ||
+      entry.filename.startsWith('ereader/') || entry.filename.startsWith('ereader-manuscript/') ||
+      AUTHORS_STORES.some(store => entry.filename.startsWith(`authors/${store}/`)));
+    const progress = importProgress('preparing', files, onProgress);
     resetStarted = true;
     await resetLibraryAndAuthors(onBlocked);
-    // An interrupted import remains pending until every part has been restored.
+    progress.restoring();
     markBackupChanged();
-
-    // Import from ZIP
-    await importLocalStorage(zip);
-    await importEreaderData(zip);
-    await importEreaderManuscript(zip);
-    await importAuthorsData(zip);
-
-    restoreZip(manifest.exportDate);
-
+    for (const [key, value] of Object.entries(zip.preferences)) {
+      if (!isBackupKey(key)) localStorage.setItem(key, value);
+    }
+    const preferencesEntry = files.find(entry => entry.filename === 'localStorage.json');
+    if (preferencesEntry) progress.completed(preferencesEntry);
+    for (const entry of files) {
+      const name = entry.filename;
+      if (name === 'localStorage.json') continue;
+      if (name.startsWith('ereader/')) {
+        const path = name.slice('ereader/'.length);
+        const content = /\.(json|txt)$/.test(path) ? await backupEntryText(entry, progress.reading) : await backupEntryBlob(entry, undefined, progress.reading);
+        await restoreEntry(await database(EREADER_DB_NAME), 'files', { path, content });
+      } else if (name.startsWith('ereader-manuscript/')) {
+        const relativePath = name.slice('ereader-manuscript/'.length);
+        const originalName = relativePath.endsWith('.bin') ? relativePath.slice(0, -4) : relativePath;
+        const key = authorsMediaType(originalName) ? originalName : relativePath;
+        const value = /\.(xhtml|json)$/.test(key) ? await backupEntryText(entry, progress.reading) : await backupEntryBlob(entry, authorsMediaType(key), progress.reading);
+        await restoreEntry(await database(EREADER_DB_NAME), 'manuscript', { key, value });
+      } else if (name.startsWith('authors/')) {
+        const path = name.slice('authors/'.length);
+        const separator = path.indexOf('/');
+        const store = path.slice(0, separator);
+        if (!(AUTHORS_STORES as readonly string[]).includes(store)) continue;
+        const relativePath = path.slice(separator + 1);
+        // Older ZIPs appended .json even to media and XHTML; retain their real names.
+        const originalName = relativePath.endsWith('.json') ? relativePath.slice(0, -5) : relativePath;
+        const key = originalName.endsWith('.xhtml') || authorsMediaType(originalName) ? originalName : relativePath;
+        const mediaType = authorsMediaType(key);
+        let value: unknown;
+        if (mediaType) value = await backupEntryBlob(entry, mediaType, progress.reading);
+        // These two Authors APIs return ArrayBuffer, unlike image/audio APIs.
+        else if (/\.(epub|docx)$/.test(key)) value = await (await backupEntryBlob(entry, undefined, progress.reading)).arrayBuffer();
+        else {
+          const text = await backupEntryText(entry, progress.reading);
+          if (relativePath.endsWith('.txt')) value = text;
+          else {
+            try { value = JSON.parse(text); } catch { value = text; }
+          }
+        }
+        await restoreEntry(await database(AUTHORS_DB_NAME), store, { key, value });
+      }
+      // Count the file only after its IndexedDB transaction has committed.
+      progress.completed(entry);
+    }
+    restoreZip(zip.manifest.exportDate);
     return { success: true };
-  } catch (err) {
+  } catch (error) {
     if (resetStarted) markBackupChanged();
-    console.error('Import failed:', err);
-    return { success: false, error: 'Import failed. The backup file may be corrupted.' };
+    console.error('Import failed:', error);
+    return { success: false, error: 'Import could not finish. Keep your backup ZIP and try again.' };
+  } finally {
+    databases.forEach(db => db.close());
+    await zip.close();
   }
 }

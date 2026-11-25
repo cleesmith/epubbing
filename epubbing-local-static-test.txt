@@ -136,8 +136,13 @@ so an initially empty library is expected.
 Try your normal workflow:
 
 - Import an EPUB and read it.
-- Open Authors, edit something, and save.
-- Reload and confirm the saved changes are present.
+- Open Authors and type in a chapter in both the full editor and Writing mode.
+  No separate Save button is needed.
+- Edit a chapter heading and each Title Page field. Leave the cursor in the
+  field without pressing Return or Tab, then reload to check the saved value.
+- Type and immediately choose another chapter; return to confirm the words.
+- Type and immediately click Save EPUB to Library; check the last words in it.
+- Confirm the cursor and undo history remain usable while typing.
 - Export an EPUB and open it to check the result.
 - Export a DOCX and check it.
 - Export each of the three print PDF sizes: 5 x 8, 6 x 9, and 8.5 x 8.5.

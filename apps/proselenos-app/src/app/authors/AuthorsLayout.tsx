@@ -3,6 +3,8 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useAuthorsAutosave } from './useAuthorsAutosave';
+import { createSavedTitlePage } from '@/lib/title-page-fields';
 import { ThemeConfig } from '../shared/theme';
 import { showAlert, showConfirm } from '../shared/alerts';
 import AuthorsHeader from './AuthorsHeader';
@@ -57,7 +59,8 @@ import {
   replaceTextWorkingCopy,
   deleteSection,
   saveWorkingCopyMeta,
-  saveTitlePageMetadata,
+  saveSectionEdits,
+  saveSectionOrder,
   updateWorkingCopyImageIds,
   loadWorkingCopyMeta,
   clearWorkingCopy,
@@ -123,7 +126,19 @@ export default function AuthorsLayout({
   refreshKey,
 }: AuthorsLayoutProps) {
   // Epub state
-  const [epub, setEpub] = useState<ParsedEpub | null>(null);
+  const [epub, updateEpub] = useState<ParsedEpub | null>(null);
+  const epubRef = useRef<ParsedEpub | null>(null);
+  const setEpub = useCallback((next: ParsedEpub | null | ((current: ParsedEpub | null) => ParsedEpub | null)) => {
+    epubRef.current = typeof next === 'function' ? next(epubRef.current) : next;
+    updateEpub(epubRef.current);
+  }, []);
+  const [editorGeneration, setEditorGeneration] = useState(0);
+  const replaceEpub = useCallback(async (next: ParsedEpub) => {
+    const metadata = await loadWorkingCopyMeta();
+    setBookMeta(metadata);
+    setEpub(next);
+    setEditorGeneration(generation => generation + 1);
+  }, [setEpub]);
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
   const [bookMeta, setBookMeta] = useState<WorkingCopyMeta | null>(null);
   const publishingRef = useRef(false);
@@ -136,13 +151,21 @@ export default function AuthorsLayout({
     setWritingMode(false);
   }, [selectedSectionId, refreshKey]);
 
-  // Unsaved changes tracking
-  // XHTML-Native: Now tracks pendingXhtml instead of content/plateValue
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const [pendingXhtml, setPendingXhtml] = useState<string | null>(null);
-  const [pendingTitle, setPendingTitle] = useState<string>('');
-  // Removed: pendingSectionSwitch and showUnsavedDialog - now auto-saves on section switch
-
+  const { autosave, pending: hasUnsavedChanges, error: autosaveError } = useAuthorsAutosave();
+  const ensureSaved = useCallback(async () => {
+    try { await autosave.flush(); return true; }
+    catch { return false; } // Keep the editor open; the persistent inline message explains why.
+  }, [autosave]);
+  const afterSaved = useCallback(async (action: () => void) => {
+    if (await ensureSaved()) action();
+  }, [ensureSaved]);
+  const selectionRequest = useRef(0);
+  const handleSelectSection = useCallback(async (sectionId: string) => {
+    const request = ++selectionRequest.current;
+    if (!(await ensureSaved()) || request !== selectionRequest.current) return false;
+    setSelectedSectionId(sectionId);
+    return true;
+  }, [ensureSaved]);
 
   // Editor panel ref (used by full-text search to scroll to matches)
   const editorPanelRef = useRef<EditorPanelRef>(null);
@@ -166,11 +189,16 @@ export default function AuthorsLayout({
   // Computed values
   // XHTML-Native: Extract plain text from XHTML for word counts
   const selectedSection = epub?.sections.find((s) => s.id === selectedSectionId);
-  const totalWordCount = epub?.sections.reduce((sum, s) => {
-    const plainText = xhtmlToPlainText(s.xhtml || '');
-    return sum + countWords(plainText);
-  }, 0) ?? 0;
-  const sectionWordCount = countWords(xhtmlToPlainText(selectedSection?.xhtml ?? ''));
+  const wordCounts = useRef(new Map<string, { xhtml: string; words: number }>());
+  const sectionCounts = (epub?.sections ?? []).map(section => {
+    const cached = wordCounts.current.get(section.id);
+    if (cached?.xhtml === section.xhtml) return cached.words;
+    const words = countWords(xhtmlToPlainText(section.xhtml || ''));
+    wordCounts.current.set(section.id, { xhtml: section.xhtml, words });
+    return words;
+  });
+  const totalWordCount = sectionCounts.reduce((sum, words) => sum + words, 0);
+  const sectionWordCount = selectedSectionId ? wordCounts.current.get(selectedSectionId)?.words ?? 0 : 0;
 
   // Navigation computed values
   const currentSectionIndex = epub?.sections.findIndex((s) => s.id === selectedSectionId) ?? -1;
@@ -178,8 +206,7 @@ export default function AuthorsLayout({
   const hasNextSection = epub ? currentSectionIndex < epub.sections.length - 1 : false;
 
   // Check if current section is Title Page
-  const isTitlePage = selectedSection?.id === 'title-page' ||
-    selectedSection?.title?.toLowerCase() === 'title page';
+  const isTitlePage = selectedSection?.type === 'title-page' || selectedSection?.id === 'title-page';
 
   // Full-text search: perform search across all sections
   // XHTML-Native: Search in plain text extracted from XHTML
@@ -269,9 +296,9 @@ export default function AuthorsLayout({
     }
   }, [currentSearchIndex, searchResults.length]);
 
-  const handleSearchNavigate = useCallback((result: typeof searchResults[0], index: number) => {
+  const handleSearchNavigate = useCallback(async (result: typeof searchResults[0], index: number) => {
     setCurrentSearchIndex(index);
-    setSelectedSectionId(result.sectionId);
+    if (!(await handleSelectSection(result.sectionId))) return;
 
     // Use longer delay for section changes, retry if needed
     const attemptScroll = (attempt: number) => {
@@ -288,14 +315,14 @@ export default function AuthorsLayout({
     };
 
     attemptScroll(1);
-  }, []);
+  }, [handleSelectSection]);
 
   // Auto-navigate to search result when search is performed or index changes
   useEffect(() => {
     if (searchActive && searchResults.length > 0) {
       const result = searchResults[currentSearchIndex];
       if (result) {
-        setSelectedSectionId(result.sectionId);
+        void handleSelectSection(result.sectionId);
 
         // Use longer delay for section changes, retry if needed
         const attemptScroll = (attempt: number) => {
@@ -314,7 +341,7 @@ export default function AuthorsLayout({
         attemptScroll(1);
       }
     }
-  }, [searchActive, searchResults, currentSearchIndex]);
+  }, [searchActive, searchResults, currentSearchIndex, handleSelectSection]);
 
   // Auto-load working copy from IndexedDB on mount
   // XHTML-Native: Sections now contain xhtml instead of content/plateValue
@@ -345,12 +372,14 @@ export default function AuthorsLayout({
               }))
           ),
         };
-        setEpub(epub);
+        await replaceEpub(epub);
         setSelectedSectionId(epub.sections[0]?.id ?? null);
       } else {
         // No existing book - auto-create a new blank manuscript
         // First 2 sections (Title Page, Copyright) are protected - cannot be deleted or moved
         // Note: Cover is handled via Menu > Cover, not as a section
+        setEpub(null);
+        setBookMeta(null);
         await clearWorkingCopy();
         const year = new Date().getFullYear();
         // XHTML-Native: Use xhtml for content
@@ -385,23 +414,17 @@ export default function AuthorsLayout({
               sceneCraftConfig: s.sceneCraftConfig,
             })),
           };
-          setEpub(newEpub);
+          await replaceEpub(newEpub);
           setSelectedSectionId(newEpub.sections[0]?.id ?? null);
         }
-        const newMeta = await loadWorkingCopyMeta();
-        if (newMeta) {
-          setBookMeta(newMeta);
-        }
+
         return;
       }
       // Also load full metadata for Title Page form
-      const meta = await loadWorkingCopyMeta();
-      if (meta) {
-        setBookMeta(meta);
-      }
+
     };
     loadData();
-  }, []);
+  }, [replaceEpub, setEpub]);
 
   // Reload Working Copy when refreshKey changes (e.g., after Chapter Writer adds a chapter)
   // XHTML-Native: Use xhtml field
@@ -409,6 +432,9 @@ export default function AuthorsLayout({
     if (refreshKey === undefined || refreshKey === 0) return;
 
     const reloadData = async () => {
+      if (!(await ensureSaved())) return;
+      setEpub(null);
+      setBookMeta(null);
       const saved = await loadFullWorkingCopy();
       if (saved) {
         // Filter out cover sections - cover is handled via Menu > Cover, not as a section
@@ -432,18 +458,15 @@ export default function AuthorsLayout({
               }))
           ),
         };
-        setEpub(newEpub);
+        await replaceEpub(newEpub);
       }
       // Also reload metadata
-      const meta = await loadWorkingCopyMeta();
-      if (meta) {
-        setBookMeta(meta);
-      }
+
     };
     reloadData();
-  }, [refreshKey]);
+  }, [refreshKey, ensureSaved, replaceEpub, setEpub]);
 
-  // Load manuscript images on mount and when bookMeta changes
+  // Reload media only for a newly opened workspace, never while typing metadata.
   useEffect(() => {
     const loadImages = async () => {
       const images = await getAllManuscriptImages();
@@ -459,16 +482,16 @@ export default function AuthorsLayout({
     };
     loadImages();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bookMeta]);
+  }, [editorGeneration]);
 
-  // Load audio files on mount and when bookMeta changes
+  // Audio uploads update their own list; text edits do not reload audio blobs.
   useEffect(() => {
     const loadAudios = async () => {
       const audios = await getAllManuscriptAudios();
       setManuscriptAudios(audios);
     };
     loadAudios();
-  }, [bookMeta]);
+  }, [editorGeneration]);
 
   // Cleanup object URLs on unmount
   useEffect(() => {
@@ -497,7 +520,8 @@ export default function AuthorsLayout({
     await saveManuscriptImage(filename, file);
 
     await updateWorkingCopyImageIds(filename);
-    setBookMeta(await loadWorkingCopyMeta());
+    const savedMeta = await loadWorkingCopyMeta();
+    setBookMeta(current => current && savedMeta ? { ...current, imageIds: savedMeta.imageIds, libraryBookHash: savedMeta.libraryBookHash } : current);
 
     // Reload images to update UI
     const images = await getAllManuscriptImages();
@@ -516,7 +540,8 @@ export default function AuthorsLayout({
     await deleteManuscriptImage(filename);
 
     await updateWorkingCopyImageIds(filename, true);
-    setBookMeta(await loadWorkingCopyMeta());
+    const savedMeta = await loadWorkingCopyMeta();
+    setBookMeta(current => current && savedMeta ? { ...current, imageIds: savedMeta.imageIds, libraryBookHash: savedMeta.libraryBookHash } : current);
 
     // Reload images
     const images = await getAllManuscriptImages();
@@ -557,25 +582,12 @@ export default function AuthorsLayout({
   }, [imageUrls]);
 
   const handleSceneCraftConfigChange = useCallback(async (config: SceneCraftConfig) => {
-    if (!epub || !selectedSectionId) return;
-    // Update in-memory epub sections
-    const updatedSections = epub.sections.map(s =>
-      s.id === selectedSectionId ? { ...s, sceneCraftConfig: config } : s
-    );
-    setEpub({ ...epub, sections: updatedSections });
-    // Persist to meta.json
-    const meta = await loadManuscriptMeta();
-    if (meta) {
-      const idx = meta.sections.findIndex(s => s.id === selectedSectionId);
-      if (idx >= 0) {
-        const existing = meta.sections[idx];
-        if (existing) {
-          meta.sections[idx] = { ...existing, sceneCraftConfig: config };
-          await saveManuscriptMeta(meta);
-        }
-      }
-    }
-  }, [epub, selectedSectionId]);
+    if (!selectedSectionId || !(await ensureSaved())) return;
+    await saveSectionEdits(selectedSectionId, { sceneCraftConfig: config });
+    setEpub(current => current ? { ...current, sections: current.sections.map(section =>
+      section.id === selectedSectionId ? { ...section, sceneCraftConfig: config } : section
+    ) } : current);
+  }, [selectedSectionId, ensureSaved, setEpub]);
 
   // (wallpaper handler removed — SceneCraft handles immersive backgrounds)
 
@@ -591,6 +603,9 @@ export default function AuthorsLayout({
         try {
           const parsed = await parseEpub(file);
           // Clear any existing working copy first
+          if (!(await ensureSaved())) return;
+          setEpub(null);
+          setBookMeta(null);
           await clearWorkingCopy();
 
           // Save extracted inline images to IndexedDB
@@ -661,14 +676,11 @@ export default function AuthorsLayout({
                 })),
               images: parsed.images, // Pass through for immediate access
             };
-            setEpub(epub);
+            await replaceEpub(epub);
             setSelectedSectionId(epub.sections[0]?.id ?? null);
           }
           // Load metadata for Title Page form
-          const meta = await loadWorkingCopyMeta();
-          if (meta) {
-            setBookMeta(meta);
-          }
+
         } catch (error) {
           console.error('Error parsing epub:', error);
           alert('Error parsing epub file. Please try a different file.');
@@ -690,6 +702,9 @@ export default function AuthorsLayout({
         try {
           const parsed = await parseDocx(file);
           // Clear any existing working copy first
+          if (!(await ensureSaved())) return;
+          setEpub(null);
+          setBookMeta(null);
           await clearWorkingCopy();
           // Save to IndexedDB
           // Filter out table-of-contents - it gets auto-generated on "Save EPUB to Library"
@@ -734,14 +749,11 @@ export default function AuthorsLayout({
                   sceneCraftConfig: s.sceneCraftConfig,
                 })),
             };
-            setEpub(loadedEpub);
+            await replaceEpub(loadedEpub);
             setSelectedSectionId(loadedEpub.sections[0]?.id ?? null);
           }
           // Load metadata for Title Page form
-          const meta = await loadWorkingCopyMeta();
-          if (meta) {
-            setBookMeta(meta);
-          }
+
           showAlert(`Loaded "${parsed.title}" with ${parsed.sections.length} sections`, 'success', undefined, isDarkMode);
         } catch (error) {
           console.error('Error parsing docx:', error);
@@ -772,13 +784,16 @@ export default function AuthorsLayout({
         if (!confirmed) return;
 
         // Commit all chapters together; a storage failure leaves the old copy intact.
+        if (!(await ensureSaved())) return;
+        setEpub(null);
+        setBookMeta(null);
         const saved = await replaceTextWorkingCopy({
           title: parsed.title,
           author: parsed.author,
           language: parsed.language,
           sections: parsed.sections.map(section => ({ ...section, type: section.type || 'chapter' })),
         });
-        setEpub({
+        await replaceEpub({
           ...saved,
           sections: saved.sections.map(section => ({ ...section, href: `${section.id}.xhtml` })),
         });
@@ -789,9 +804,6 @@ export default function AuthorsLayout({
           coverImageId: null,
           sectionIds: saved.sections.map(section => section.id),
         });
-        setHasUnsavedChanges(false);
-        setPendingXhtml(null);
-        setPendingTitle('');
         setWritingMode(false);
         handleSearchClose();
         setSelectedSectionId(saved.sections[0]?.id ?? null);
@@ -813,6 +825,9 @@ export default function AuthorsLayout({
       if (file) {
         try {
           const parsed = await parsePdf(file);
+          if (!(await ensureSaved())) return;
+          setEpub(null);
+          setBookMeta(null);
           await clearWorkingCopy();
           await saveFullWorkingCopy({
             title: parsed.title,
@@ -849,13 +864,10 @@ export default function AuthorsLayout({
                   sceneCraftConfig: s.sceneCraftConfig,
                 })),
             };
-            setEpub(loadedEpub);
+            await replaceEpub(loadedEpub);
             setSelectedSectionId(loadedEpub.sections[0]?.id ?? null);
           }
-          const meta = await loadWorkingCopyMeta();
-          if (meta) {
-            setBookMeta(meta);
-          }
+
           showAlert(`Loaded "${parsed.title}" with ${parsed.sections.length} sections`, 'success', undefined, isDarkMode);
         } catch (error) {
           console.error('Error parsing pdf:', error);
@@ -1078,6 +1090,9 @@ export default function AuthorsLayout({
           ];
 
           // Clear and save
+          if (!(await ensureSaved())) return;
+          setEpub(null);
+          setBookMeta(null);
           await clearWorkingCopy();
           await saveFullWorkingCopy({
             title,
@@ -1117,15 +1132,12 @@ export default function AuthorsLayout({
                   sceneCraftConfig: s.sceneCraftConfig,
                 })),
             };
-            setEpub(loadedEpub);
+            await replaceEpub(loadedEpub);
             setSelectedSectionId(loadedEpub.sections[0]?.id ?? null);
           }
 
           // Load metadata for Title Page form
-          const meta = await loadWorkingCopyMeta();
-          if (meta) {
-            setBookMeta(meta);
-          }
+
 
           showAlert(`Loaded "${title}" with ${chapters.length} scenes from Fountain screenplay`, 'success', undefined, isDarkMode);
         } catch (error) {
@@ -1137,8 +1149,21 @@ export default function AuthorsLayout({
     input.click();
   };
 
+  const applySectionStructure = (sections: ParsedEpub['sections']) => {
+    setEpub(current => {
+      if (!current) return current;
+      const latest = new Map(current.sections.map(section => [section.id, section]));
+      return { ...current, sections: sections.map(section => {
+        const live = latest.get(section.id);
+        return live ? { ...section, title: live.title, xhtml: live.xhtml } : section;
+      }) };
+    });
+  };
+
   // Handle removing a section/chapter
   const handleRemoveSection = async (sectionId: string) => {
+    if (!(await ensureSaved())) return;
+    const epub = epubRef.current;
     if (!epub) return;
     // Don't allow deletion of protected sections (Cover, Title Page, Copyright)
     if ((PROTECTED_SECTION_IDS as readonly string[]).includes(sectionId)) return;
@@ -1150,8 +1175,9 @@ export default function AuthorsLayout({
     const idx = epub.sections.findIndex((s) => s.id === sectionId);
     const newSections = epub.sections.filter((s) => s.id !== sectionId);
 
-    const updatedEpub = { ...epub, sections: newSections };
-    setEpub(updatedEpub);
+    await deleteSection(sectionId);
+    await saveSectionOrder(newSections.map(section => section.id));
+    applySectionStructure(newSections);
     // Select next section, or previous, but never a protected section
     if (newSections.length > PROTECTED_SECTION_COUNT) {
       // There are still non-protected sections — select the next one at same index,
@@ -1164,20 +1190,16 @@ export default function AuthorsLayout({
       // Only protected sections remain — select nothing
       setSelectedSectionId(null);
     }
-    // Delete section from IndexedDB
-    await deleteSection(sectionId);
-    // Update meta with new section order
-    const meta = await loadWorkingCopyMeta();
-    if (meta) {
-      meta.sectionIds = meta.sectionIds.filter((id) => id !== sectionId);
-      await saveWorkingCopyMeta(meta);
-    }
+
   };
 
   // Handle creating a new blank manuscript
   // XHTML-Native: Use xhtml for content
   const handleNew = async () => {
+    if (!(await ensureSaved())) return;
     // Clear existing working copy
+    setEpub(null);
+    setBookMeta(null);
     await clearWorkingCopy();
     const year = new Date().getFullYear();
     // Create blank manuscript with typed sections
@@ -1215,14 +1237,11 @@ export default function AuthorsLayout({
           sceneCraftConfig: s.sceneCraftConfig,
         })),
       };
-      setEpub(newEpub);
+      await replaceEpub(newEpub);
       setSelectedSectionId(newEpub.sections[0]?.id ?? null);
     }
     // Load metadata for Title Page form
-    const meta = await loadWorkingCopyMeta();
-    if (meta) {
-      setBookMeta(meta);
-    }
+
   };
 
   // Helper to find the correct insertion index for a section type
@@ -1252,6 +1271,8 @@ export default function AuthorsLayout({
 
   // Handle adding a new element (smart insertion based on element type)
   const handleAddElement = async (elementType: ElementType) => {
+    if (!(await ensureSaved())) return;
+    const epub = epubRef.current;
     if (!epub) return;
 
     const meta = await loadWorkingCopyMeta();
@@ -1314,44 +1335,19 @@ export default function AuthorsLayout({
     // XHTML-Native: Use xhtml for content
     await saveSection({ id: newId, title: newSection.title, xhtml: '<p></p>', type: actualType });
 
-    // Insert into sectionIds at correct position
-    meta.sectionIds.splice(insertIndex, 0, newId);
-    await saveWorkingCopyMeta(meta);
-
-    // Update UI state - insert at correct position then reorder to match visual grouping
-    const newSections = [...epub.sections];
+    const newSections = [...epubRef.current!.sections];
     newSections.splice(insertIndex, 0, newSection);
     const reorderedSections = reorderSectionsByVisualGroup(newSections);
-
-    // Update meta.sectionIds to match reordered sections
-    meta.sectionIds = reorderedSections.map(s => s.id);
-    await saveWorkingCopyMeta(meta);
-
-    // Sync ManuscriptMeta.sections order to persist across reloads
-    const manuscriptMeta = await loadManuscriptMeta();
-    if (manuscriptMeta) {
-      manuscriptMeta.sections = reorderedSections.map(s => ({
-        id: s.id,
-        sourceHref: s.sourceHref,
-        title: s.title,
-        type: (s.type || 'chapter') as ElementType,
-
-        sceneCraftConfig: s.sceneCraftConfig,
-      }));
-      await saveManuscriptMeta(manuscriptMeta);
-    }
-
-    setEpub({
-      ...epub,
-      sections: reorderedSections,
-    });
+    await saveSectionOrder(reorderedSections.map(section => section.id));
+    applySectionStructure(reorderedSections);
+    if (!(await ensureSaved())) return;
     setSelectedSectionId(newId);
-    setHasUnsavedChanges(false);
-    setPendingXhtml(null);
   };
 
   // Handle moving a section up (swap with previous)
   const handleMoveUp = async (sectionId: string) => {
+    if (!(await ensureSaved())) return;
+    const epub = epubRef.current;
     if (!epub) return;
     const idx = epub.sections.findIndex(s => s.id === sectionId);
     if (idx <= 0) return; // Can't move up if first or not found
@@ -1383,38 +1379,14 @@ export default function AuthorsLayout({
     if (!removed) return;
     newSections.splice(idx - 1, 0, removed);
 
-    // Update UI state
-    setEpub({ ...epub, sections: newSections });
-
-    // Persist to IndexedDB (working_copy_meta.json)
-    const meta = await loadWorkingCopyMeta();
-    if (meta) {
-      const metaIdx = meta.sectionIds.indexOf(sectionId);
-      if (metaIdx > 0) {
-        const removedId = meta.sectionIds.splice(metaIdx, 1)[0];
-        if (removedId) {
-          meta.sectionIds.splice(metaIdx - 1, 0, removedId);
-          await saveWorkingCopyMeta(meta);
-        }
-      }
-    }
-
-    // Also sync ManuscriptMeta.sections order (meta.json) so loadFullWorkingCopy() gets correct order
-    const manuscriptMeta = await loadManuscriptMeta();
-    if (manuscriptMeta) {
-      const mIdx = manuscriptMeta.sections.findIndex(s => s.id === sectionId);
-      if (mIdx > 0) {
-        const removedMeta = manuscriptMeta.sections.splice(mIdx, 1)[0];
-        if (removedMeta) {
-          manuscriptMeta.sections.splice(mIdx - 1, 0, removedMeta);
-          await saveManuscriptMeta(manuscriptMeta);
-        }
-      }
-    }
+    await saveSectionOrder(newSections.map(section => section.id));
+    applySectionStructure(newSections);
   };
 
   // Handle moving a section down (swap with next)
   const handleMoveDown = async (sectionId: string) => {
+    if (!(await ensureSaved())) return;
+    const epub = epubRef.current;
     if (!epub) return;
     const idx = epub.sections.findIndex(s => s.id === sectionId);
     if (idx < 0 || idx >= epub.sections.length - 1) return; // Can't move down if last or not found
@@ -1443,38 +1415,14 @@ export default function AuthorsLayout({
     if (!removed) return;
     newSections.splice(idx + 1, 0, removed);
 
-    // Update UI state
-    setEpub({ ...epub, sections: newSections });
-
-    // Persist to IndexedDB (working_copy_meta.json)
-    const meta = await loadWorkingCopyMeta();
-    if (meta) {
-      const metaIdx = meta.sectionIds.indexOf(sectionId);
-      if (metaIdx >= 0 && metaIdx < meta.sectionIds.length - 1) {
-        const removedId = meta.sectionIds.splice(metaIdx, 1)[0];
-        if (removedId) {
-          meta.sectionIds.splice(metaIdx + 1, 0, removedId);
-          await saveWorkingCopyMeta(meta);
-        }
-      }
-    }
-
-    // Also sync ManuscriptMeta.sections order (meta.json) so loadFullWorkingCopy() gets correct order
-    const manuscriptMeta = await loadManuscriptMeta();
-    if (manuscriptMeta) {
-      const mIdx = manuscriptMeta.sections.findIndex(s => s.id === sectionId);
-      if (mIdx >= 0 && mIdx < manuscriptMeta.sections.length - 1) {
-        const removedMeta = manuscriptMeta.sections.splice(mIdx, 1)[0];
-        if (removedMeta) {
-          manuscriptMeta.sections.splice(mIdx + 1, 0, removedMeta);
-          await saveManuscriptMeta(manuscriptMeta);
-        }
-      }
-    }
+    await saveSectionOrder(newSections.map(section => section.id));
+    applySectionStructure(newSections);
   };
 
   // Handle moving a section to a different area (Front Matter, Introductory, Chapters, Back Matter)
   const handleMoveToArea = async (sectionId: string, area: number) => {
+    if (!(await ensureSaved())) return;
+    const epub = epubRef.current;
     if (!epub) return;
     const idx = epub.sections.findIndex(s => s.id === sectionId);
     if (idx < 0) return;
@@ -1503,36 +1451,9 @@ export default function AuthorsLayout({
     const newSections = [...epub.sections];
     newSections[idx] = updatedSection;
     const reorderedSections = reorderSectionsByVisualGroup(newSections);
-    setEpub({ ...epub, sections: reorderedSections });
-
-    // Persist section type to IndexedDB (preserve xhtml)
-    await saveSection({
-      id: sectionId,
-      title: updatedSection.title,
-      xhtml: updatedSection.xhtml || '<p></p>',
-      type: newType,
-    });
-
-    // Update meta.sectionIds to match reordered sections
-    const meta = await loadWorkingCopyMeta();
-    if (meta) {
-      meta.sectionIds = reorderedSections.map(s => s.id);
-      await saveWorkingCopyMeta(meta);
-    }
-
-    // Sync ManuscriptMeta.sections order to persist across reloads
-    const manuscriptMeta = await loadManuscriptMeta();
-    if (manuscriptMeta) {
-      manuscriptMeta.sections = reorderedSections.map(s => ({
-        id: s.id,
-        sourceHref: s.sourceHref,
-        title: s.title,
-        type: (s.type || 'chapter') as ElementType,
-
-        sceneCraftConfig: s.sceneCraftConfig,
-      }));
-      await saveManuscriptMeta(manuscriptMeta);
-    }
+    await saveSectionEdits(sectionId, { type: newType });
+    await saveSectionOrder(reorderedSections.map(section => section.id));
+    applySectionStructure(reorderedSections);
   };
 
   // Preview and check a selected cover before the author saves it.
@@ -1546,30 +1467,24 @@ export default function AuthorsLayout({
     setEpub(current => current ? { ...current, coverImage: file } : current);
   };
 
-  // Handle content changes from EditorPanel
-  // XHTML-Native: Now receives XHTML directly
-  const handleContentChange = (hasChanges: boolean, xhtml: string) => {
-    setHasUnsavedChanges(hasChanges || (!!pendingTitle && pendingTitle !== selectedSection?.title));
-    setPendingXhtml(hasChanges ? xhtml : null);
+  const editSection = (fields: { title?: string; xhtml?: string }) => {
+    if (!selectedSectionId || !epubRef.current) return;
+    autosave.enqueue({ kind: 'section', id: selectedSectionId, fields });
+    setEpub(current => current ? { ...current, sections: current.sections.map(section =>
+      section.id === selectedSectionId ? { ...section, ...fields } : section
+    ) } : current);
   };
+  const handleContentChange = (xhtml: string) => editSection({ xhtml });
+  const handleTitleChange = (title: string) => editSection({ title });
 
-  // Handle title changes from EditorPanel
-  const handleTitleChange = (newTitle: string) => {
-    setPendingTitle(newTitle);
-    setHasUnsavedChanges(true);
-  };
-
-  // Handle book metadata save from TitlePagePanel
-  const handleSaveBookMetadata = async (metadata: BookMetadata) => {
-    if (!epub || !selectedSectionId) throw new Error('No title page is open.');
-    const sectionId = selectedSectionId;
-    const saved = await saveTitlePageMetadata(sectionId, metadata);
-    setBookMeta(saved.meta);
-    setEpub(current => current ? {
-      ...current,
-      ...metadata,
-      sections: current.sections.map(section => section.id === sectionId ? { ...section, xhtml: saved.xhtml } : section),
-    } : current);
+  const handleBookMetadataChange = (metadata: BookMetadata) => {
+    if (!epubRef.current || !selectedSectionId) return;
+    autosave.enqueue({ kind: 'title-page', id: selectedSectionId, fields: metadata });
+    setBookMeta(current => current ? { ...current, ...metadata } : current);
+    const xhtml = createSavedTitlePage(metadata);
+    setEpub(current => current ? { ...current, ...metadata, sections: current.sections.map(section =>
+      section.id === selectedSectionId ? { ...section, xhtml } : section
+    ) } : current);
   };
 
   // Handle Save button - generate EPUB and add to library
@@ -1585,9 +1500,7 @@ export default function AuthorsLayout({
       // Reserve synchronously, while the browser still allows this click to open a tab.
       review = reserveLibraryReview(isDarkMode);
       // 1. Save any pending editor changes first
-      if (hasUnsavedChanges && selectedSection && selectedSectionId) {
-        await saveCurrentSection();
-      }
+      await autosave.flush();
 
       // 2. Load full working copy (now includes any just-saved changes)
       const workingCopy = await loadFullWorkingCopy();
@@ -1608,7 +1521,7 @@ export default function AuthorsLayout({
 
       // 5. Use in-memory epub.sections order (the sidebar order) to reorder loaded sections
       // This ensures EPUB matches exactly what the user sees, regardless of meta.json order
-      const sectionOrder = epub!.sections.map(s => s.id);
+      const sectionOrder = epubRef.current!.sections.map(s => s.id);
       const orderedSections = sectionOrder
         .map(id => {
           const section = workingCopy.sections.find(s => s.id === id);
@@ -1639,7 +1552,8 @@ export default function AuthorsLayout({
       const appService = await environmentConfig.getAppService();
       const book = await publishManuscript(appService, file, meta.libraryBookHash);
       if (book) {
-        setBookMeta(await loadWorkingCopyMeta());
+        const savedMeta = await loadWorkingCopyMeta();
+        setBookMeta(current => current && savedMeta ? { ...current, imageIds: savedMeta.imageIds, libraryBookHash: savedMeta.libraryBookHash } : current);
 
         // Tell Library tab to reload (if open)
         const channel = new BroadcastChannel('everythingebooks-library');
@@ -1665,9 +1579,7 @@ export default function AuthorsLayout({
 
   const handleTxtExport = async () => {
     try {
-      if (hasUnsavedChanges && selectedSection && selectedSectionId) {
-        await saveCurrentSection();
-      }
+      await autosave.flush();
       const workingCopy = await loadFullWorkingCopy();
       if (!workingCopy || !epub) throw new Error('No manuscript is loaded.');
       const savedById = new Map(workingCopy.sections.map(section => [section.id, section]));
@@ -1699,9 +1611,7 @@ export default function AuthorsLayout({
   // Handle DOCX export - download manuscript for Vellum/Atticus import
   const handleDocxExport = async () => {
     // Save pending changes first
-    if (hasUnsavedChanges && selectedSection && selectedSectionId) {
-      await saveCurrentSection();
-    }
+    if (!(await ensureSaved())) return;
 
     try {
       const blob = await exportWorkspaceToDocx();
@@ -1723,9 +1633,7 @@ export default function AuthorsLayout({
   // Handle Fountain export - download screenplay format
   const handleFountainExport = async () => {
     // Save pending changes first
-    if (hasUnsavedChanges && selectedSection && selectedSectionId) {
-      await saveCurrentSection();
-    }
+    if (!(await ensureSaved())) return;
 
     try {
       const blob = await exportWorkspaceToFountain();
@@ -1744,17 +1652,6 @@ export default function AuthorsLayout({
     }
   };
 
-  // Handle section selection - user must explicitly Save before switching
-  const handleSelectSection = async (sectionId: string) => {
-    if (sectionId === selectedSectionId) return; // Same section, no action needed
-
-    // Reset state for new section
-    setHasUnsavedChanges(false);
-    setPendingXhtml(null);
-    setPendingTitle('');
-    setSelectedSectionId(sectionId);
-  };
-
   // Navigate to previous section (reuses handleSelectSection for unsaved changes check)
   const handlePrevSection = () => {
     if (!epub || currentSectionIndex <= 0) return;
@@ -1769,39 +1666,6 @@ export default function AuthorsLayout({
     if (nextSection) handleSelectSection(nextSection.id);
   };
 
-  // Save current section to IndexedDB
-  // XHTML-Native: Now saves xhtml directly
-  const saveCurrentSection = async () => {
-    if (!selectedSection || !selectedSectionId) return;
-
-    // Use pending title if changed, otherwise original
-    const titleToSave = pendingTitle || selectedSection.title;
-    // XHTML-Native: Use pending xhtml if set, otherwise original
-    const xhtmlToSave = pendingXhtml ?? selectedSection.xhtml;
-
-    // Save to IndexedDB (XHTML is single source of truth)
-    await saveSection({
-      id: selectedSectionId,
-      title: titleToSave,
-      xhtml: xhtmlToSave,
-      type: selectedSection.type || 'section',
-    });
-
-    // Update in-memory epub state so sidebar and subsequent comparisons work
-    if (epub) {
-      const updatedSections = epub.sections.map((s) =>
-        s.id === selectedSectionId
-          ? { ...s, title: titleToSave, xhtml: xhtmlToSave }
-          : s
-      );
-      setEpub({ ...epub, sections: updatedSections });
-    }
-
-    // Reset unsaved state
-    setHasUnsavedChanges(false);
-    setPendingXhtml(null);
-    setPendingTitle('');
-  };
 
   return (
     <div
@@ -1827,24 +1691,32 @@ export default function AuthorsLayout({
         isDarkMode={isDarkMode}
         onThemeToggle={onThemeToggle}
         onAboutClick={onAboutClick}
-        onStorageClick={onStorageClick}
+        onStorageClick={() => { void afterSaved(onStorageClick); }}
         onNewClick={handleNew}
         onOpenClick={handleOpenEpub}
         onOpenDocxClick={handleOpenDocx}
         onOpenPdfClick={handleOpenPdf}
         onOpenManuscriptClick={handleOpenManuscript}
         onOpenFountainClick={handleOpenFountain}
-        onLoadFromLibraryClick={onLoadFromLibraryClick}
+        onLoadFromLibraryClick={() => { void afterSaved(onLoadFromLibraryClick); }}
         onSaveClick={handleSave}
         isProcessing={isProcessing}
         onSearchClose={handleSearchClose}
-        onCoverClick={onCoverClick}
+        onCoverClick={() => { void afterSaved(onCoverClick); }}
         onDocxExportClick={handleDocxExport}
         onTxtExportClick={handleTxtExport}
         onFountainExportClick={handleFountainExport}
-        onXrayClick={onXrayClick}
+        onXrayClick={() => { if (onXrayClick) void afterSaved(onXrayClick); }}
         hasUnsavedChanges={hasUnsavedChanges}
+        onBeforeLeave={ensureSaved}
       />}
+
+      {autosaveError && (
+        <div role="alert" style={{ padding: '8px 12px', background: '#7f1d1d', color: '#fff', flexShrink: 0 }}>
+          Your latest changes have not been saved. Keep this tab open. {autosaveError}{' '}
+          <button type="button" onClick={() => { void ensureSaved(); }} style={{ textDecoration: 'underline' }}>Retry saving</button>
+        </div>
+      )}
 
       {/* Main content: 2-panel layout */}
       <div
@@ -1896,28 +1768,31 @@ export default function AuthorsLayout({
         )}
 
         {/* Right panel - Editor or Title Page Form */}
-        {isTitlePage ? (
+        {!epub ? (
+          <main aria-busy="true" style={{ padding: '16px', color: theme.text }}>Opening manuscript…</main>
+        ) : isTitlePage ? (
           <TitlePagePanel
+            key={`${editorGeneration}:${selectedSectionId}`}
             theme={theme}
             isDarkMode={isDarkMode}
             onToggleSidebar={onToggleSidebar}
-            initialMetadata={{
+            metadata={{
               title: bookMeta?.title ?? epub?.title ?? '',
               subtitle: bookMeta?.subtitle ?? '',
               author: bookMeta?.author ?? epub?.author ?? '',
               publisher: bookMeta?.publisher ?? '',
             }}
-            onSave={handleSaveBookMetadata}
+            onChange={handleBookMetadataChange}
           />
         ) : (
           <EditorPanel
+            key={`${editorGeneration}:${selectedSectionId}`}
             ref={editorPanelRef}
             writingMode={writingMode}
             onWritingModeChange={setWritingMode}
             theme={theme}
             isDarkMode={isDarkMode}
             onToggleSidebar={onToggleSidebar}
-            onSave={saveCurrentSection}
             sectionId={selectedSectionId || undefined}
             sectionTitle={selectedSection?.title ?? ''}
             sectionXhtml={selectedSection?.xhtml ?? '<p></p>'}
