@@ -14,6 +14,9 @@ const CACHE_VERSION = '${gitHash}';
 const APP_ROOT = new URL('./', self.location.href);
 const CACHE_PREFIX = 'epubbing-' + encodeURIComponent(APP_ROOT.pathname) + '-';
 const CACHE_NAME = CACHE_PREFIX + CACHE_VERSION;
+const CONTROL_CACHE = CACHE_PREFIX + 'control';
+const INSTALLED_VERSION = new URL('.ee-installed-version', APP_ROOT).href;
+const UPDATE_REQUEST = new URL('.ee-update-request', APP_ROOT).href;
 
 const PRECACHE_URLS = [
   './',
@@ -23,10 +26,25 @@ const PRECACHE_URLS = [
   'reader/view/',
 ].map((url) => new URL(url, APP_ROOT).href);
 
+// Once this update policy is installed, automatic browser checks must never
+// replace the chosen release. Reject an unrequested installation before any
+// application files are fetched. The first legacy transition has no marker.
+async function requireUpdateRequest() {
+  const control = await caches.open(CONTROL_CACHE);
+  const installed = await control.match(INSTALLED_VERSION);
+  if (!self.registration.active || !installed) return;
+  if (await installed.text() === CACHE_VERSION) return;
+  const request = await control.match(UPDATE_REQUEST);
+  const approval = request && await request.json();
+  if (approval?.version !== CACHE_VERSION || !Number.isFinite(approval.expires) || approval.expires <= Date.now()) {
+    throw new Error('EE keeps the installed release until Update App is chosen.');
+  }
+}
+
 // Install: pre-cache critical pages
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME)
+    requireUpdateRequest().then(() => caches.open(CACHE_NAME))
       .then((cache) => {
         return Promise.all(
           PRECACHE_URLS.map((url) => {
@@ -56,11 +74,14 @@ self.addEventListener('message', (event) => {
 // Activate: clean old caches, take control
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys()
+    caches.open(CONTROL_CACHE).then(async (control) => {
+      await control.put(INSTALLED_VERSION, new Response(CACHE_VERSION));
+      await control.delete(UPDATE_REQUEST);
+    }).then(() => caches.keys())
       .then((cacheNames) => {
         return Promise.all(
           cacheNames
-            .filter((name) => name.startsWith(CACHE_PREFIX) && name !== CACHE_NAME)
+            .filter((name) => name.startsWith(CACHE_PREFIX) && name !== CACHE_NAME && name !== CONTROL_CACHE)
             .map((name) => caches.delete(name))
         );
       })

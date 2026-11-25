@@ -66,8 +66,8 @@ it('replaces progress with readable error paragraphs and treats error text safel
   expect(paragraphs()).toEqual([
     'Missing <script>file</script>.',
     'Try again.',
-    'Setup will try again the next time you open EE online.',
-    'You can also choose Update App.',
+    'You can continue writing while online.',
+    'You can choose Update App later.',
   ]);
   expect(Swal.getHtmlContainer()!.querySelector('script')).toBeNull();
   expect(Swal.getConfirmButton()!.textContent).toBe('Close');

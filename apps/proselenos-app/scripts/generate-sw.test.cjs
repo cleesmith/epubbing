@@ -76,3 +76,67 @@ test('a navigation error is not saved as an offline page', async () => {
   await w.request(url, 'navigate');w.status=200;
   assert.equal((await w.request(url, 'navigate')).status, 200);
 });
+
+// Exercise the generated install/activate handlers, not source-text matching.
+function lifecycle({ active = true, installed = 'old123', approved, expires } = {}) {
+  const version = generated.match(/const CACHE_VERSION = '([a-f0-9]+)'/)[1];
+  const prefix = 'epubbing-%2Fee%2F-';
+  const controlName = prefix + 'control';
+  const installedKey = 'https://example.test/ee/.ee-installed-version';
+  const requestKey = 'https://example.test/ee/.ee-update-request';
+  const stores = new Map([[prefix + 'old123', new Map([['old-page', new Response('old app')]])]]);
+  const control = new Map(); stores.set(controlName, control);
+  if (installed) control.set(installedKey, new Response(installed));
+  if (approved) control.set(requestKey, new Response(JSON.stringify({ version: approved === 'current' ? version : approved, expires })));
+  const handlers = {}; let fetches = 0, skipped = 0;
+  vm.runInNewContext(generated, {
+    URL, Response, console,
+    self: {
+      location: new URL('https://example.test/ee/sw.js'), registration: { active: active ? {} : null },
+      addEventListener(name, fn) { handlers[name] = fn; },
+      async skipWaiting() { skipped++; }, clients: { async claim() {} },
+    },
+    caches: {
+      async open(name) {
+        if (!stores.has(name)) stores.set(name, new Map()); const data = stores.get(name);
+        return { async match(key) { return data.get(key)?.clone(); },
+          async put(key, response) { data.set(key, response.clone()); }, async delete(key) { return data.delete(key); } };
+      },
+      async keys() { return [...stores.keys()]; }, async delete(name) { return stores.delete(name); },
+    },
+    async fetch() { fetches++; return new Response('new app'); },
+  });
+  return { version, stores, control, prefix, controlName, installedKey, requestKey,
+    get fetches() { return fetches; }, get skipped() { return skipped; },
+    async run(name) { let done; handlers[name]({ waitUntil(p) { done = p; } }); return done; },
+  };
+}
+test('automatic browser checks cannot install or fetch a newer app after the policy is installed', async () => {
+  const w = lifecycle(); await assert.rejects(w.run('install'), /until Update App/);
+  assert.equal(w.fetches, 0); assert.equal(w.skipped, 0);
+  assert.equal(await w.stores.get(w.prefix + 'old123').get('old-page').text(), 'old app');
+});
+test('a deliberate update installs the exact approved version and keeps policy state', async () => {
+  const w = lifecycle({ approved: 'current', expires: Date.now() + 120_000 });
+  await w.run('install'); await w.run('activate');
+  assert.equal(w.fetches, 5); assert.equal(w.skipped, 1);
+  assert.equal(await w.control.get(w.installedKey).text(), w.version);
+  assert.equal(w.control.has(w.requestKey), false);
+  assert.equal(w.stores.has(w.controlName), true);
+  assert.equal(w.stores.has(w.prefix + 'old123'), false);
+});
+for (const approval of [
+  { approved: 'wrong123', expires: Date.now() + 120_000 },
+  { approved: 'current', expires: Date.now() - 1 },
+  { approved: 'current' },
+]) test('missing, wrong, or expired approval cannot install a new release: ' + JSON.stringify(approval), async () => {
+  const w = lifecycle(approval); await assert.rejects(w.run('install'), /until Update App/); assert.equal(w.fetches, 0);
+});
+test('a genuinely new browser can install without having a version already', async () => {
+  const w = lifecycle({ active: false, installed: null }); await w.run('install'); await w.run('activate');
+  assert.equal(w.skipped, 1); assert.equal(await w.control.get(w.installedKey).text(), w.version);
+});
+test('the one-time transition from legacy releases installs the manual update policy', async () => {
+  const w = lifecycle({ active: true, installed: null }); await w.run('install'); await w.run('activate');
+  assert.equal(await w.control.get(w.installedKey).text(), w.version);
+});

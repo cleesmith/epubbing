@@ -89,7 +89,7 @@ export async function showOfflinePreparation(
       title: setup ? 'Setup incomplete' : 'Update incomplete',
       html: messageLines([
         ...(error instanceof Error ? error.message : 'Check your connection and available browser storage, then try again.').split(/\r?\n/).filter(Boolean),
-        ...(setup ? ['Setup will try again the next time you open EE online.', 'You can also choose Update App.'] : []),
+        ...(setup ? ['You can continue writing while online.', 'You can choose Update App later.'] : []),
       ]),
       icon: 'error',
       showConfirmButton: true,

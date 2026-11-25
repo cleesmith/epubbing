@@ -133,9 +133,9 @@ To explore an older draft without disturbing your current work, open EverythingE
 
 ## Write online or offline
 
-On your first visit while online, EverythingEbooks prepares the complete app in this browser automatically. The progress popup shows how many files have been saved and verified. Keep the tab open until **Ready to write and read offline** appears. The completed file count stays visible until you choose **OK**. You do not need to choose Update App to finish setup.
+On your first visit while online, EverythingEbooks makes one attempt to prepare the app in this browser. The progress popup shows the files saved and verified. Its completion message stays visible until you choose **OK**. If preparation is interrupted, you can continue writing online; EE does not restart preparation on later visits.
 
-Successful setup is remembered in this browser. If setup is interrupted, it tries again the next time you open EE online or your connection returns. A different browser or cleared app cache needs its own setup.
+The initial setup attempt is remembered in this browser. A different browser or cleared app storage needs its own initial setup.
 
 Bookmark [everythingebooks.org](https://everythingebooks.org/) to return in this browser.
 
@@ -143,7 +143,9 @@ Use that bookmark in the same browser on the same device, online or offline. Wri
 
 **Nothing installs.** Your writing remains in your browser and available to export as an EPUB or ZIP backup.
 
-Later, **Menu → Update App - xxxx** in either Authors or Library checks for the latest version and prepares its offline files in one step. It shows file-count progress and reuses files that are already correct. When finished, the completion message and file count stay visible until you choose **OK** to reopen the updated app. The number beside Update App shows the version currently open. Stay online; Authors finishes pending automatic saves before starting an update. Other open EE tabs may need a reload to show the new version.
+**Menu → Update App - xxxx** in Authors or Library checks the published version only when you choose it. If you already have the newest version, **You’re up-to-date!** stays visible until you choose **OK**, without processing the application files again. If a different version is available, EE updates the app and prepares its offline files as usual. Choose **OK** on completion to reopen the updated app. A connection problem simply reports that the check could not finish; you can keep using EE and try later.
+
+Once EE is set up in this browser, opening a bookmark or reconnecting does not run Update App or repeat preparation. Updates are your choice; you may keep using your installed release. The number beside Update App identifies the version currently open. Other EE tabs may need a reload after an update you choose.
 
 ## Free and open source
 

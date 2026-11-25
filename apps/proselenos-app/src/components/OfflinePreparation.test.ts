@@ -95,11 +95,11 @@ it('does not continue to a reload if another dialog replaces the completion mess
   expect(await result).toBe(false);
 });
 
-it('explains that incomplete first setup will retry', async () => {
+it('leaves writing available after incomplete setup without promising an automatic retry', async () => {
   const result = showOfflinePreparation(false, async () => { throw new Error('Connection lost'); }, 'setup');
   await Promise.resolve();
   expect(Swal.update).toHaveBeenCalledWith(expect.objectContaining({
-    title: 'Setup incomplete', html: expect.stringContaining('next time you open EE online'),
+    title: 'Setup incomplete', html: expect.stringContaining('You can continue writing while online.'),
   }));
   dismiss();
   expect(await result).toBe(false);
