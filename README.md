@@ -36,6 +36,7 @@ Books enter through Authors. **Save EPUB to Library** saves a fresh copy in Libr
 Select the **Title Page** or a section in the sidebar to edit it. Add and arrange chapters, front matter, and back matter as your book takes shape.
 
 - The **full editor** provides formatting and images.
+- Reopen Authors to return to the top of the last chapter or section you selected in your working copy.
 - **Writing mode** gives you distraction-free writing for the current chapter or section. Press **Escape** to return. Sections with attached audio use the full editor.
 - Edits save automatically in this browser as you type, in both the full editor and Writing mode. Title Page fields and chapter/section headings also save while the cursor is still in the field—no Return, Tab, or separate Save button needed.
 - Click the chapter title above the editor to change it. EE includes that heading in both EPUB editions, so you do not need to repeat it inside the chapter text.

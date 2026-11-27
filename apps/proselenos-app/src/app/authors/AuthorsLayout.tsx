@@ -55,6 +55,8 @@ import { parsePdf } from '@/lib/pdfToPages';
 import { countWords } from '@/services/htmlExtractor';
 import {
   loadFullWorkingCopy,
+  rememberWorkingSection,
+  startingWorkingSection,
   saveFullWorkingCopy,
   replaceTextWorkingCopy,
   deleteSection,
@@ -137,9 +139,14 @@ export default function AuthorsLayout({
     const metadata = await loadWorkingCopyMeta();
     setBookMeta(metadata);
     setEpub(next);
+    setSelectedSectionId(startingWorkingSection(next.sections));
     setEditorGeneration(generation => generation + 1);
   }, [setEpub]);
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
+  const selectWorkingSection = useCallback((sectionId: string | null) => {
+    setSelectedSectionId(sectionId);
+    rememberWorkingSection(sectionId);
+  }, []);
   const [bookMeta, setBookMeta] = useState<WorkingCopyMeta | null>(null);
   const publishingRef = useRef(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -163,9 +170,9 @@ export default function AuthorsLayout({
   const handleSelectSection = useCallback(async (sectionId: string) => {
     const request = ++selectionRequest.current;
     if (!(await ensureSaved()) || request !== selectionRequest.current) return false;
-    setSelectedSectionId(sectionId);
+    selectWorkingSection(sectionId);
     return true;
-  }, [ensureSaved]);
+  }, [ensureSaved, selectWorkingSection]);
 
   // Editor panel ref (used by full-text search to scroll to matches)
   const editorPanelRef = useRef<EditorPanelRef>(null);
@@ -373,7 +380,6 @@ export default function AuthorsLayout({
           ),
         };
         await replaceEpub(epub);
-        setSelectedSectionId(epub.sections[0]?.id ?? null);
       } else {
         // No existing book - auto-create a new blank manuscript
         // First 2 sections (Title Page, Copyright) are protected - cannot be deleted or moved
@@ -415,7 +421,6 @@ export default function AuthorsLayout({
             })),
           };
           await replaceEpub(newEpub);
-          setSelectedSectionId(newEpub.sections[0]?.id ?? null);
         }
 
         return;
@@ -677,7 +682,6 @@ export default function AuthorsLayout({
               images: parsed.images, // Pass through for immediate access
             };
             await replaceEpub(epub);
-            setSelectedSectionId(epub.sections[0]?.id ?? null);
           }
           // Load metadata for Title Page form
 
@@ -750,7 +754,6 @@ export default function AuthorsLayout({
                 })),
             };
             await replaceEpub(loadedEpub);
-            setSelectedSectionId(loadedEpub.sections[0]?.id ?? null);
           }
           // Load metadata for Title Page form
 
@@ -806,7 +809,6 @@ export default function AuthorsLayout({
         });
         setWritingMode(false);
         handleSearchClose();
-        setSelectedSectionId(saved.sections[0]?.id ?? null);
         showAlert(`Loaded ${chapterCount} ${chapterCount === 1 ? 'chapter' : 'chapters'} from the manuscript.`, 'success', undefined, isDarkMode);
       } catch (error) {
         console.error('Error loading manuscript:', error);
@@ -865,7 +867,6 @@ export default function AuthorsLayout({
                 })),
             };
             await replaceEpub(loadedEpub);
-            setSelectedSectionId(loadedEpub.sections[0]?.id ?? null);
           }
 
           showAlert(`Loaded "${parsed.title}" with ${parsed.sections.length} sections`, 'success', undefined, isDarkMode);
@@ -1133,7 +1134,6 @@ export default function AuthorsLayout({
                 })),
             };
             await replaceEpub(loadedEpub);
-            setSelectedSectionId(loadedEpub.sections[0]?.id ?? null);
           }
 
           // Load metadata for Title Page form
@@ -1185,10 +1185,10 @@ export default function AuthorsLayout({
       const newIdx = Math.min(idx, newSections.length - 1);
       const clampedIdx = Math.max(newIdx, PROTECTED_SECTION_COUNT);
       const nextSection = newSections[clampedIdx];
-      setSelectedSectionId(nextSection?.id ?? null);
+      selectWorkingSection(nextSection?.id ?? null);
     } else {
       // Only protected sections remain — select nothing
-      setSelectedSectionId(null);
+      selectWorkingSection(null);
     }
 
   };
@@ -1238,7 +1238,6 @@ export default function AuthorsLayout({
         })),
       };
       await replaceEpub(newEpub);
-      setSelectedSectionId(newEpub.sections[0]?.id ?? null);
     }
     // Load metadata for Title Page form
 
@@ -1341,7 +1340,7 @@ export default function AuthorsLayout({
     await saveSectionOrder(reorderedSections.map(section => section.id));
     applySectionStructure(reorderedSections);
     if (!(await ensureSaved())) return;
-    setSelectedSectionId(newId);
+    selectWorkingSection(newId);
   };
 
   // Handle moving a section up (swap with previous)

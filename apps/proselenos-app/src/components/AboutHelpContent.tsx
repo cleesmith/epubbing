@@ -32,6 +32,7 @@ export default function AboutHelpContent({ page }: { page: 'authors' | 'library'
           <HelpSection title='Write, organize, and save'>
             <p>Select the Title Page or a section in the sidebar to edit it. Use the sidebar to add and arrange sections.</p>
             <p>The full editor provides formatting and images. Writing mode gives you distraction-free writing for the current chapter or section; press Escape to return. Sections with attached audio use the full editor.</p>
+            <p>Reopen Authors to return to the top of the last chapter or section you selected in your working copy.</p>
             <p>Edits save automatically in this browser as you type, in the full editor and Writing mode. Title Page fields and chapter or section headings save while you are still typing—no Return, Tab, or separate Save button needed.</p>
             <p>If browser storage cannot save an edit, keep this tab open and use Retry saving when the problem is resolved. Automatic saving is local to this browser; export ZIP backups regularly.</p>
             <p>Click the chapter title above the editor to change it. EE includes that heading in both EPUB editions, so you do not need to repeat it inside the chapter text.</p>

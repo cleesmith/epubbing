@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import AuthorsLayout from './AuthorsLayout';
 import { getTheme } from '../shared/theme';
-import { saveFullWorkingCopy, loadFullWorkingCopy, saveSectionEdits } from '@/services/manuscriptStorage';
+import { saveFullWorkingCopy, loadFullWorkingCopy, saveSectionEdits, deleteSection, replaceTextWorkingCopy } from '@/services/manuscriptStorage';
 import { generateEpubFromWorkingCopy } from '@/lib/epub-generator';
 import { reserveLibraryReview } from '@/utils/library-tab';
 
@@ -57,11 +57,11 @@ beforeEach(async () => {
 });
 afterEach(async () => { releaseWrite?.(); releaseWrite = undefined; cleanup(); vi.restoreAllMocks(); });
 
-async function openAuthors(onStorageClick = vi.fn()) {
+async function openAuthors(onStorageClick = vi.fn(), expectedField = 'Title') {
   const result = render(<AuthorsLayout theme={getTheme(true)} isDarkMode onThemeToggle={vi.fn()}
     onAboutClick={vi.fn()} onStorageClick={onStorageClick} sidebarVisible onToggleSidebar={vi.fn()}
     onCoverClick={vi.fn()} onLoadFromLibraryClick={vi.fn()} />);
-  await screen.findByLabelText('Title');
+  await screen.findByLabelText(expectedField);
   return result;
 }
 async function openChapter() {
@@ -191,4 +191,29 @@ it('finishes pending edits before refreshing the workspace and restores the late
   await act(async () => { releaseWrite!(); });
   await waitFor(async () => expect((await loadFullWorkingCopy())?.sections[2]?.xhtml).toBe('<p>Last edit during pending save</p>'));
   await waitFor(() => expect(screen.getByLabelText('Words')).toHaveProperty('value', '<p>Last edit during pending save</p>'));
+});
+
+
+it('reopens the last chapter and falls back to the first section if that chapter is gone', async () => {
+  await openChapter();
+  fireEvent.click(screen.getByRole('button', { name: 'Chapter B' }));
+  await waitFor(() => expect(screen.getByLabelText('Heading')).toHaveProperty('value', 'Chapter B'));
+  cleanup();
+  await openAuthors(vi.fn(), 'Words');
+  expect(screen.getByLabelText('Heading')).toHaveProperty('value', 'Chapter B');
+  cleanup();
+  await deleteSection('section-004');
+  await openAuthors();
+  expect(screen.getByLabelText('Title')).toHaveProperty('value', 'Book');
+});
+
+it.each(['EPUB', 'text'])('starts a replacement %s on its Title Page despite reused chapter IDs', async format => {
+  await openChapter();
+  cleanup();
+  const next = (await loadFullWorkingCopy())!;
+  next.title = 'Another book';
+  if (format === 'text') await replaceTextWorkingCopy(next);
+  else await saveFullWorkingCopy(next);
+  await openAuthors();
+  expect(screen.getByLabelText('Title')).toHaveProperty('value', 'Another book');
 });

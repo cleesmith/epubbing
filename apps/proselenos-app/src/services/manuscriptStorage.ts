@@ -33,6 +33,22 @@ export interface AppSettings {
   hideAboutModal?: boolean;
 }
 
+const LAST_SECTION = 'ee_authors_last_section';
+
+// The working copy has one place marker. Navigation never marks the manuscript as edited.
+export function rememberWorkingSection(id: string | null): void {
+  try {
+    if (id === null) localStorage.removeItem(LAST_SECTION);
+    else localStorage.setItem(LAST_SECTION, id);
+  } catch { /* The editor also works when browser preferences are unavailable. */ }
+}
+
+export function startingWorkingSection(sections: ReadonlyArray<{ id: string }>): string | null {
+  let remembered: string | null = null;
+  try { remembered = localStorage.getItem(LAST_SECTION); } catch { /* Use the first section. */ }
+  return sections.find(section => section.id === remembered)?.id ?? sections[0]?.id ?? null;
+}
+
 const DB_NAME = 'ProselenosLocal';
 const DB_VERSION = 1;
 
@@ -1226,6 +1242,7 @@ export async function saveFullWorkingCopy(epub: {
     libraryBookHash: epub.libraryBookHash,
   };
   await write('working_copy_meta.json', oldMeta);
+  rememberWorkingSection(null);
 }
 
 /** Replace a text import in one transaction, preserving the old book on failure. */
@@ -1288,6 +1305,7 @@ export async function replaceTextWorkingCopy(
   } finally {
     db.close();
   }
+  rememberWorkingSection(null);
   return { ...manuscript, sections, coverImage: null };
 }
 
